@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+.svelte-kit/
+build/
+
+# SQLite
+*.db
+*.db-journal
+*.db-wal
+
+# Project-specific
+logs/
+!logs/.gitkeep
+frontend/tests/scratch/
+backend/tests/scratch/
+tools/
+data/
+!data/.gitkeep
+
+# Editor
+.vscode/
+!.vscode/settings.json
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
