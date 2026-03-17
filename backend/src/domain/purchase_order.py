@@ -49,6 +49,8 @@ class PurchaseOrder:
         po_number: str,
         status: POStatus,
         vendor_id: str,
+        buyer_name: str,
+        buyer_country: str,
         ship_to_address: str,
         payment_terms: str,
         currency: str,
@@ -65,10 +67,12 @@ class PurchaseOrder:
         created_at: datetime,
         updated_at: datetime,
     ) -> None:
-        self.id = id
-        self.po_number = po_number
+        self._id = id
+        self._po_number = po_number
         self.status = status
         self.vendor_id = vendor_id
+        self.buyer_name = buyer_name
+        self.buyer_country = buyer_country
         self.ship_to_address = ship_to_address
         self.payment_terms = payment_terms
         self.currency = currency
@@ -82,8 +86,20 @@ class PurchaseOrder:
         self.country_of_destination = country_of_destination
         self.line_items = line_items
         self.rejection_history = rejection_history
-        self.created_at = created_at
+        self._created_at = created_at
         self.updated_at = updated_at
+
+    @property
+    def id(self) -> str:
+        return self._id
+
+    @property
+    def po_number(self) -> str:
+        return self._po_number
+
+    @property
+    def created_at(self) -> datetime:
+        return self._created_at
 
     @property
     def total_value(self) -> Decimal:
@@ -98,6 +114,8 @@ class PurchaseOrder:
         *,
         po_number: str,
         vendor_id: str,
+        buyer_name: str,
+        buyer_country: str,
         ship_to_address: str,
         payment_terms: str,
         currency: str,
@@ -119,6 +137,8 @@ class PurchaseOrder:
             po_number=po_number,
             status=POStatus.DRAFT,
             vendor_id=vendor_id,
+            buyer_name=buyer_name,
+            buyer_country=buyer_country,
             ship_to_address=ship_to_address,
             payment_terms=payment_terms,
             currency=currency,
@@ -172,6 +192,8 @@ class PurchaseOrder:
         self,
         *,
         vendor_id: str,
+        buyer_name: str,
+        buyer_country: str,
         ship_to_address: str,
         payment_terms: str,
         currency: str,
@@ -193,6 +215,8 @@ class PurchaseOrder:
         if not line_items:
             raise ValueError("at least one line item is required")
         self.vendor_id = vendor_id
+        self.buyer_name = buyer_name
+        self.buyer_country = buyer_country
         self.ship_to_address = ship_to_address
         self.payment_terms = payment_terms
         self.currency = currency

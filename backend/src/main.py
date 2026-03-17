@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.db import get_db
-from src.routers import purchase_order
+from src.routers import purchase_order, vendor
 from src.schema import init_db
 
 
@@ -29,6 +29,7 @@ app.add_middleware(
 )
 
 app.include_router(purchase_order.router)
+app.include_router(vendor.router)
 
 
 @app.get("/health")

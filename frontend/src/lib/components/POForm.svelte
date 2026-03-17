@@ -1,9 +1,17 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import type { LineItemInput, PurchaseOrderInput } from '$lib/types';
+	import type { VendorListItem } from '$lib/types';
+	import { listVendors } from '$lib/api';
+
+	const DEFAULT_BUYER_NAME = 'TurboTonic Ltd';
+	const DEFAULT_BUYER_COUNTRY = 'US';
 
 	interface InitialData {
 		vendor_id?: string;
+		buyer_name?: string;
+		buyer_country?: string;
 		ship_to_address?: string;
 		payment_terms?: string;
 		currency?: string;
@@ -43,7 +51,10 @@
 		return iso.split('T')[0];
 	}
 
+	let vendors: VendorListItem[] = $state([]);
 	let vendor_id: string = $state(initialData.vendor_id ?? '');
+	let buyer_name: string = $state(initialData.buyer_name ?? DEFAULT_BUYER_NAME);
+	let buyer_country: string = $state(initialData.buyer_country ?? DEFAULT_BUYER_COUNTRY);
 	let currency: string = $state(initialData.currency ?? '');
 	let issued_date: string = $state(extractDate(initialData.issued_date));
 	let required_delivery_date: string = $state(extractDate(initialData.required_delivery_date));
@@ -62,6 +73,10 @@
 	);
 	let submitting: boolean = $state(false);
 	let error: string = $state('');
+
+	onMount(async () => {
+		vendors = await listVendors('ACTIVE');
+	});
 
 	function addLineItem() {
 		lineItems = [...lineItems, emptyLineItem()];
@@ -104,6 +119,8 @@
 			po_number: '',
 			total_value: '',
 			vendor_id,
+			buyer_name,
+			buyer_country,
 			currency,
 			issued_date: toISODateTime(issued_date),
 			required_delivery_date: toISODateTime(required_delivery_date),
@@ -138,8 +155,21 @@
 		<h2>Purchase Order Details</h2>
 		<div class="form-grid">
 			<div class="form-group">
-				<label for="vendor_id">Vendor ID *</label>
-				<input id="vendor_id" class="input" type="text" required bind:value={vendor_id} />
+				<label for="vendor_id">Vendor *</label>
+				<select id="vendor_id" class="select" required bind:value={vendor_id}>
+					<option value="">Select a vendor</option>
+					{#each vendors as v}
+						<option value={v.id}>{v.name} ({v.country})</option>
+					{/each}
+				</select>
+			</div>
+			<div class="form-group">
+				<label for="buyer_name">Buyer Name *</label>
+				<input id="buyer_name" class="input" type="text" required bind:value={buyer_name} />
+			</div>
+			<div class="form-group">
+				<label for="buyer_country">Buyer Country *</label>
+				<input id="buyer_country" class="input" type="text" required bind:value={buyer_country} />
 			</div>
 			<div class="form-group">
 				<label for="currency">Currency *</label>

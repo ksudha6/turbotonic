@@ -23,6 +23,8 @@ _LINE_ITEM: dict = {
 
 _PO_PAYLOAD: dict = {
     "vendor_id": "vendor-1",
+    "buyer_name": "TurboTonic Ltd",
+    "buyer_country": "US",
     "ship_to_address": "123 Main St",
     "payment_terms": "NET30",
     "currency": "USD",
@@ -39,7 +41,12 @@ _PO_PAYLOAD: dict = {
 
 
 async def _create_po(client: AsyncClient, payload: dict | None = None) -> dict:
-    resp = await client.post("/api/v1/po/", json=payload or _PO_PAYLOAD)
+    p = dict(payload or _PO_PAYLOAD)
+    # Ensure a valid active vendor exists
+    vendor_resp = await client.post("/api/v1/vendors/", json={"name": "Test Vendor", "country": "US"})
+    assert vendor_resp.status_code == 201
+    p["vendor_id"] = vendor_resp.json()["id"]
+    resp = await client.post("/api/v1/po/", json=p)
     assert resp.status_code == 201
     return resp.json()
 
@@ -53,7 +60,7 @@ async def test_create_po_returns_201_with_draft_status(client: AsyncClient) -> N
     data = await _create_po(client)
     assert data["status"] == POStatus.DRAFT.value
     assert data["po_number"].startswith("PO-")
-    assert data["vendor_id"] == "vendor-1"
+    assert data["vendor_id"]  # vendor id is assigned dynamically
     assert len(data["line_items"]) == 1
     assert data["total_value"] == "50.00"
 
@@ -206,7 +213,7 @@ async def test_update_rejected_po_returns_revised_status(client: AsyncClient) ->
     await client.post(f"/api/v1/po/{po['id']}/submit")
     await client.post(f"/api/v1/po/{po['id']}/reject", json={"comment": "Needs revision"})
 
-    updated_payload = {**_PO_PAYLOAD, "currency": "EUR"}
+    updated_payload = {**_PO_PAYLOAD, "vendor_id": po["vendor_id"], "currency": "EUR"}
     resp = await client.put(f"/api/v1/po/{po['id']}", json=updated_payload)
     assert resp.status_code == 200
     data = resp.json()
@@ -216,7 +223,8 @@ async def test_update_rejected_po_returns_revised_status(client: AsyncClient) ->
 
 async def test_update_non_rejected_po_returns_409(client: AsyncClient) -> None:
     po = await _create_po(client)
-    resp = await client.put(f"/api/v1/po/{po['id']}", json=_PO_PAYLOAD)
+    updated_payload = {**_PO_PAYLOAD, "vendor_id": po["vendor_id"]}
+    resp = await client.put(f"/api/v1/po/{po['id']}", json=updated_payload)
     assert resp.status_code == 409
 
 
@@ -229,7 +237,7 @@ async def test_resubmit_revised_returns_pending(client: AsyncClient) -> None:
     po = await _create_po(client)
     await client.post(f"/api/v1/po/{po['id']}/submit")
     await client.post(f"/api/v1/po/{po['id']}/reject", json={"comment": "Fix it"})
-    await client.put(f"/api/v1/po/{po['id']}", json=_PO_PAYLOAD)
+    await client.put(f"/api/v1/po/{po['id']}", json={**_PO_PAYLOAD, "vendor_id": po["vendor_id"]})
 
     resp = await client.post(f"/api/v1/po/{po['id']}/resubmit")
     assert resp.status_code == 200
@@ -260,7 +268,7 @@ async def test_full_lifecycle(client: AsyncClient) -> None:
     assert resp.json()["status"] == POStatus.REJECTED.value
 
     # Update → REVISED
-    revised_payload = {**_PO_PAYLOAD, "currency": revised_currency}
+    revised_payload = {**_PO_PAYLOAD, "vendor_id": po["vendor_id"], "currency": revised_currency}
     resp = await client.put(f"/api/v1/po/{po['id']}", json=revised_payload)
     assert resp.json()["status"] == POStatus.REVISED.value
 

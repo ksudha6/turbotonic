@@ -41,6 +41,8 @@ class LineItemCreate(BaseModel):
 
 class PurchaseOrderCreate(BaseModel):
     vendor_id: str
+    buyer_name: str
+    buyer_country: str
     ship_to_address: str
     payment_terms: str
     currency: str
@@ -64,6 +66,8 @@ class PurchaseOrderCreate(BaseModel):
 
 class PurchaseOrderUpdate(BaseModel):
     vendor_id: str
+    buyer_name: str
+    buyer_country: str
     ship_to_address: str
     payment_terms: str
     currency: str
@@ -117,6 +121,10 @@ class PurchaseOrderResponse(BaseModel):
     po_number: str
     status: str
     vendor_id: str
+    buyer_name: str
+    buyer_country: str
+    vendor_name: str
+    vendor_country: str
     ship_to_address: str
     payment_terms: str
     currency: str
@@ -140,6 +148,10 @@ class PurchaseOrderListItem(BaseModel):
     po_number: str
     status: str
     vendor_id: str
+    buyer_name: str
+    buyer_country: str
+    vendor_name: str
+    vendor_country: str
     issued_date: datetime
     required_delivery_date: datetime
     total_value: str
@@ -165,12 +177,16 @@ def _rejection_record_to_response(record: RejectionRecord) -> RejectionResponse:
     )
 
 
-def po_to_response(po: PurchaseOrder) -> PurchaseOrderResponse:
+def po_to_response(po: PurchaseOrder, vendor_name: str = "", vendor_country: str = "") -> PurchaseOrderResponse:
     return PurchaseOrderResponse(
         id=po.id,
         po_number=po.po_number,
         status=po.status.value,
         vendor_id=po.vendor_id,
+        buyer_name=po.buyer_name,
+        buyer_country=po.buyer_country,
+        vendor_name=vendor_name,
+        vendor_country=vendor_country,
         ship_to_address=po.ship_to_address,
         payment_terms=po.payment_terms,
         currency=po.currency,
@@ -190,12 +206,16 @@ def po_to_response(po: PurchaseOrder) -> PurchaseOrderResponse:
     )
 
 
-def po_to_list_item(po: PurchaseOrder) -> PurchaseOrderListItem:
+def po_to_list_item(po: PurchaseOrder, vendor_name: str = "", vendor_country: str = "") -> PurchaseOrderListItem:
     return PurchaseOrderListItem(
         id=po.id,
         po_number=po.po_number,
         status=po.status.value,
         vendor_id=po.vendor_id,
+        buyer_name=po.buyer_name,
+        buyer_country=po.buyer_country,
+        vendor_name=vendor_name,
+        vendor_country=vendor_country,
         issued_date=po.issued_date,
         required_delivery_date=po.required_delivery_date,
         total_value=str(po.total_value),

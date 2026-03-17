@@ -25,6 +25,8 @@ DELIVERY = datetime(2026, 3, 1, tzinfo=UTC)
 
 BASE_CREATE_KWARGS = dict(
     vendor_id="vendor-abc",
+    buyer_name="TurboTonic Ltd",
+    buyer_country="US",
     ship_to_address="123 Main St",
     payment_terms="Net 30",
     currency="USD",
@@ -40,6 +42,8 @@ BASE_CREATE_KWARGS = dict(
 
 REVISE_KWARGS = dict(
     vendor_id="vendor-xyz",
+    buyer_name="TurboTonic Ltd",
+    buyer_country="US",
     ship_to_address="456 New Ave",
     payment_terms="Net 60",
     currency="USD",

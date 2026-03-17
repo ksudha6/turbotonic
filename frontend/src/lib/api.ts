@@ -1,4 +1,4 @@
-import type { PurchaseOrder, PurchaseOrderInput, PurchaseOrderListItem } from './types';
+import type { PurchaseOrder, PurchaseOrderInput, PurchaseOrderListItem, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path);
@@ -63,4 +63,21 @@ export function rejectPO(id: string, comment: string): Promise<PurchaseOrder> {
 
 export function resubmitPO(id: string): Promise<PurchaseOrder> {
 	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/resubmit`);
+}
+
+export function listVendors(status?: string): Promise<VendorListItem[]> {
+	const url = status ? `/api/v1/vendors?status=${encodeURIComponent(status)}` : '/api/v1/vendors';
+	return apiGet<VendorListItem[]>(url);
+}
+
+export function getVendor(id: string): Promise<Vendor> {
+	return apiGet<Vendor>(`/api/v1/vendors/${id}`);
+}
+
+export function createVendor(data: VendorInput): Promise<Vendor> {
+	return apiPost<Vendor>('/api/v1/vendors', data);
+}
+
+export function deactivateVendor(id: string): Promise<Vendor> {
+	return apiPost<Vendor>(`/api/v1/vendors/${id}/deactivate`);
 }

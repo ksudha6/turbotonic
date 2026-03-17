@@ -74,7 +74,7 @@
 				{#each pos as po}
 					<tr onclick={() => goto(`/po/${po.id}`)}>
 						<td>{po.po_number}</td>
-						<td>{po.vendor_id}</td>
+						<td>{po.vendor_name}</td>
 						<td>{formatDate(po.issued_date)}</td>
 						<td>{formatDate(po.required_delivery_date)}</td>
 						<td>{formatValue(po.total_value, po.currency)}</td>

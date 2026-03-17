@@ -39,6 +39,8 @@
 	<POForm
 		initialData={{
 			vendor_id: po.vendor_id,
+			buyer_name: po.buyer_name,
+			buyer_country: po.buyer_country,
 			currency: po.currency,
 			issued_date: po.issued_date,
 			required_delivery_date: po.required_delivery_date,

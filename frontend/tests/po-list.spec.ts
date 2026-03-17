@@ -5,6 +5,10 @@ const PO_DRAFT = {
 	po_number: 'PO-20260316-0001',
 	status: 'DRAFT',
 	vendor_id: 'VENDOR-A',
+	vendor_name: 'Vendor A',
+	vendor_country: 'CN',
+	buyer_name: 'TurboTonic Ltd',
+	buyer_country: 'US',
 	issued_date: '2026-03-16T00:00:00+00:00',
 	required_delivery_date: '2026-04-16T00:00:00+00:00',
 	total_value: '1500',
@@ -16,6 +20,10 @@ const PO_PENDING = {
 	po_number: 'PO-20260316-0002',
 	status: 'PENDING',
 	vendor_id: 'VENDOR-B',
+	vendor_name: 'Vendor B',
+	vendor_country: 'CN',
+	buyer_name: 'TurboTonic Ltd',
+	buyer_country: 'US',
 	issued_date: '2026-03-16T00:00:00+00:00',
 	required_delivery_date: '2026-04-16T00:00:00+00:00',
 	total_value: '2500',
@@ -27,6 +35,10 @@ const PO_ACCEPTED = {
 	po_number: 'PO-20260316-0003',
 	status: 'ACCEPTED',
 	vendor_id: 'VENDOR-C',
+	vendor_name: 'Vendor C',
+	vendor_country: 'CN',
+	buyer_name: 'TurboTonic Ltd',
+	buyer_country: 'US',
 	issued_date: '2026-03-16T00:00:00+00:00',
 	required_delivery_date: '2026-04-16T00:00:00+00:00',
 	total_value: '3500',
@@ -54,9 +66,9 @@ test('PO list page loads and shows table', async ({ page }) => {
 	await expect(page.locator('tbody')).toContainText('PO-20260316-0002');
 	await expect(page.locator('tbody')).toContainText('PO-20260316-0003');
 
-	await expect(page.locator('tbody')).toContainText('VENDOR-A');
-	await expect(page.locator('tbody')).toContainText('VENDOR-B');
-	await expect(page.locator('tbody')).toContainText('VENDOR-C');
+	await expect(page.locator('tbody')).toContainText('Vendor A');
+	await expect(page.locator('tbody')).toContainText('Vendor B');
+	await expect(page.locator('tbody')).toContainText('Vendor C');
 
 	// StatusPill renders capitalized status text
 	await expect(page.locator('tbody')).toContainText('Draft');

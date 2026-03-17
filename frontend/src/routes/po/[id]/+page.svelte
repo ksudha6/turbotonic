@@ -70,10 +70,6 @@
 		</div>
 		<div class="info-grid">
 			<div class="info-item">
-				<span class="field-label">Vendor</span>
-				<span class="value">{po.vendor_id}</span>
-			</div>
-			<div class="info-item">
 				<span class="field-label">Currency</span>
 				<span class="value">{po.currency}</span>
 			</div>
@@ -92,6 +88,34 @@
 			<div class="info-item">
 				<span class="field-label">Payment Terms</span>
 				<span class="value">{po.payment_terms}</span>
+			</div>
+		</div>
+	</div>
+
+	<div class="section card">
+		<h2>Buyer</h2>
+		<div class="info-grid">
+			<div class="info-item">
+				<span class="field-label">Name</span>
+				<span class="value">{po.buyer_name}</span>
+			</div>
+			<div class="info-item">
+				<span class="field-label">Country</span>
+				<span class="value">{po.buyer_country}</span>
+			</div>
+		</div>
+	</div>
+
+	<div class="section card">
+		<h2>Vendor</h2>
+		<div class="info-grid">
+			<div class="info-item">
+				<span class="field-label">Name</span>
+				<span class="value">{po.vendor_name}</span>
+			</div>
+			<div class="info-item">
+				<span class="field-label">Country</span>
+				<span class="value">{po.vendor_country}</span>
 			</div>
 		</div>
 	</div>

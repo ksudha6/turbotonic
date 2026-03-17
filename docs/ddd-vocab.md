@@ -6,7 +6,9 @@
 |------|-----------|-----------------|
 | Purchase Order | A buyer's formal request to a vendor for goods. Contains header, trade details, and one or more line items. Aggregate root. | Procurement |
 | Line Item | A single product/material entry on a PO: part number, description, quantity, UoM, unit price, HS code, country of origin. Child entity of Purchase Order. | Procurement |
-| Vendor | The supplier fulfilling the purchase order. | Procurement |
+| Vendor | The supplier fulfilling a purchase order. Separate entity with id (UUID), name, country, and active/inactive status. PO references vendor by id; name and country resolved on read. | Procurement |
+| Buyer | The purchasing party on a PO. Stored inline as buyer_name and buyer_country. Prefilled with a default value on creation. | Procurement |
+| Vendor Status | Active or Inactive. Only Active vendors can be assigned to new POs. Deactivation does not affect existing POs. | Procurement |
 | Rejection Record | A timestamped comment captured when a vendor rejects a PO. Append-only; accumulated across reject/revise cycles. Value object owned by Purchase Order. | Procurement |
 
 ## PO Header Fields
@@ -48,6 +50,21 @@
 | Export License Number | Government-issued license permitting export of controlled goods. | Compliance |
 | Packing List Reference | Pointer to the document detailing how goods are packed for shipment. | Compliance |
 | Bill of Lading Reference | Pointer to the carrier-issued document acknowledging receipt of goods for shipment. | Compliance |
+
+## PO Parties
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| Buyer Name | Name of the purchasing party. Inline on PO, prefilled with default. | Procurement |
+| Buyer Country | Country of the purchasing party. Inline on PO, prefilled with default. | Procurement |
+| Default Buyer | The system owner's identity (name and country) prefilled on new POs. Currently hardcoded; will become configurable when Buyer is promoted to a first-class entity. | Procurement |
+
+## PO Field Immutability
+
+| Fields | Rule |
+|--------|------|
+| `id`, `po_number`, `created_at` | Immutable after creation |
+| All other fields | Mutable only in Draft and Rejected status |
 
 ## PO Lifecycle
 

@@ -21,7 +21,11 @@ function makePO(status: string, extra: object = {}) {
 		id: PO_ID,
 		po_number: 'PO-20260316-0001',
 		status,
-		vendor_id: 'VENDOR-A',
+		vendor_id: 'vendor-uuid-1',
+		vendor_name: 'Acme Corp',
+		vendor_country: 'CN',
+		buyer_name: 'TurboTonic Ltd',
+		buyer_country: 'US',
 		ship_to_address: '123 Main St',
 		payment_terms: 'NET30',
 		currency: 'USD',
@@ -77,7 +81,7 @@ test('detail view shows header, trade, line items, status pill', async ({ page }
 	// StatusPill renders capitalized text
 	await expect(page.locator('body')).toContainText('Draft');
 	// Vendor
-	await expect(page.locator('body')).toContainText('VENDOR-A');
+	await expect(page.locator('body')).toContainText('Acme Corp');
 	// Trade details
 	await expect(page.locator('body')).toContainText('FOB');
 	await expect(page.locator('body')).toContainText('Shanghai');
@@ -152,11 +156,20 @@ test('accepted PO shows read-only view', async ({ page }) => {
 });
 
 test('create PO form validates empty part number', async ({ page }) => {
+	// Mock active vendors for the vendor dropdown
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([{ id: 'v1', name: 'Test Vendor', country: 'US', status: 'ACTIVE' }])
+		});
+	});
+
 	await page.goto('/po/new');
 	await page.waitForSelector('form');
 
 	// Fill required header fields
-	await page.fill('#vendor_id', 'VENDOR-TEST');
+	await page.selectOption('#vendor_id', 'v1');
 	await page.fill('#currency', 'USD');
 	await page.fill('#issued_date', '2026-03-16');
 	await page.fill('#required_delivery_date', '2026-04-16');
@@ -175,11 +188,20 @@ test('create PO form validates empty part number', async ({ page }) => {
 });
 
 test('create PO form rejects quantity <= 0', async ({ page }) => {
+	// Mock active vendors for the vendor dropdown
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([{ id: 'v1', name: 'Test Vendor', country: 'US', status: 'ACTIVE' }])
+		});
+	});
+
 	await page.goto('/po/new');
 	await page.waitForSelector('form');
 
 	// Fill required header fields
-	await page.fill('#vendor_id', 'VENDOR-TEST');
+	await page.selectOption('#vendor_id', 'v1');
 	await page.fill('#currency', 'USD');
 	await page.fill('#issued_date', '2026-03-16');
 	await page.fill('#required_delivery_date', '2026-04-16');
@@ -316,10 +338,19 @@ test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ pa
 		});
 	});
 
+	// Mock active vendors for the vendor dropdown (new and edit pages)
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([{ id: 'vendor-uuid-1', name: 'Acme Corp', country: 'CN', status: 'ACTIVE' }])
+		});
+	});
+
 	// Step 1: Create PO
 	await page.goto('/po/new');
 	await page.waitForSelector('form');
-	await page.fill('#vendor_id', 'VENDOR-A');
+	await page.selectOption('#vendor_id', 'vendor-uuid-1');
 	await page.fill('#currency', 'USD');
 	await page.fill('#issued_date', '2026-03-16');
 	await page.fill('#required_delivery_date', '2026-04-16');

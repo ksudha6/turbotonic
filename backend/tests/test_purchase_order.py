@@ -22,6 +22,8 @@ DELIVERY = datetime(2026, 3, 1, tzinfo=UTC)
 BASE_PO_KWARGS = dict(
     po_number="PO-001",
     vendor_id="vendor-abc",
+    buyer_name="TurboTonic Ltd",
+    buyer_country="US",
     ship_to_address="123 Main St",
     payment_terms="Net 30",
     currency="USD",
@@ -38,6 +40,8 @@ BASE_PO_KWARGS = dict(
 REVISED_PO_KWARGS = dict(
     po_number="PO-001",
     vendor_id="vendor-xyz",
+    buyer_name="TurboTonic Ltd",
+    buyer_country="US",
     ship_to_address="456 New Ave",
     payment_terms="Net 60",
     currency="USD",
@@ -228,6 +232,8 @@ def test_revise_updates_fields() -> None:
     new_item = make_line_item(part_number="PN-002", unit_price=Decimal("3.00"))
     po.revise(
         vendor_id="vendor-xyz",
+        buyer_name="TurboTonic Ltd",
+        buyer_country="US",
         ship_to_address="456 New Ave",
         payment_terms="Net 60",
         currency="USD",
@@ -255,6 +261,8 @@ def test_resubmit_revised_to_pending() -> None:
     new_item = make_line_item(part_number="PN-002", unit_price=Decimal("3.00"))
     po.revise(
         vendor_id="vendor-xyz",
+        buyer_name="TurboTonic Ltd",
+        buyer_country="US",
         ship_to_address="456 New Ave",
         payment_terms="Net 60",
         currency="USD",
@@ -336,6 +344,8 @@ def test_revise_from_draft_raises() -> None:
     with pytest.raises(ValueError, match="REJECTED"):
         po.revise(
             vendor_id="v",
+            buyer_name="TurboTonic Ltd",
+            buyer_country="US",
             ship_to_address="a",
             payment_terms="t",
             currency="USD",
@@ -369,6 +379,8 @@ def test_revise_with_no_line_items_raises() -> None:
     with pytest.raises(ValueError, match="line item"):
         po.revise(
             vendor_id="v",
+            buyer_name="TurboTonic Ltd",
+            buyer_country="US",
             ship_to_address="a",
             payment_terms="t",
             currency="USD",
@@ -419,6 +431,8 @@ def test_reject_revise_resubmit_accept_path() -> None:
     new_item = make_line_item(part_number="PN-002", unit_price=Decimal("3.00"))
     po.revise(
         vendor_id="vendor-xyz",
+        buyer_name="TurboTonic Ltd",
+        buyer_country="US",
         ship_to_address="456 New Ave",
         payment_terms="Net 60",
         currency="USD",
@@ -458,6 +472,8 @@ def test_rejection_history_accumulates() -> None:
     revision_item = make_line_item(part_number="PN-002", unit_price=Decimal("4.00"))
     po.revise(
         vendor_id="vendor-abc",
+        buyer_name="TurboTonic Ltd",
+        buyer_country="US",
         ship_to_address="123 Main St",
         payment_terms="Net 30",
         currency="USD",
@@ -478,3 +494,26 @@ def test_rejection_history_accumulates() -> None:
     assert comments == ["First rejection", "Second rejection"], (
         "rejection history must contain all rejection records in order"
     )
+
+
+# ---------------------------------------------------------------------------
+# Immutability: identity and audit fields are read-only
+# ---------------------------------------------------------------------------
+
+
+def test_id_is_read_only() -> None:
+    po = make_po()
+    with pytest.raises(AttributeError):
+        po.id = "new-id"  # type: ignore[misc]
+
+
+def test_po_number_is_read_only() -> None:
+    po = make_po()
+    with pytest.raises(AttributeError):
+        po.po_number = "new"  # type: ignore[misc]
+
+
+def test_created_at_is_read_only() -> None:
+    po = make_po()
+    with pytest.raises(AttributeError):
+        po.created_at = datetime.now(UTC)  # type: ignore[misc]
