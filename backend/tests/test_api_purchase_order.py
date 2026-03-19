@@ -26,14 +26,14 @@ _PO_PAYLOAD: dict = {
     "buyer_name": "TurboTonic Ltd",
     "buyer_country": "US",
     "ship_to_address": "123 Main St",
-    "payment_terms": "NET30",
+    "payment_terms": "TT",
     "currency": "USD",
     "issued_date": "2026-03-16T00:00:00Z",
     "required_delivery_date": "2026-04-01T00:00:00Z",
     "terms_and_conditions": "Standard T&C",
     "incoterm": "FOB",
-    "port_of_loading": "Los Angeles",
-    "port_of_discharge": "Shanghai",
+    "port_of_loading": "USLAX",
+    "port_of_discharge": "CNSHA",
     "country_of_origin": "US",
     "country_of_destination": "CN",
     "line_items": [_LINE_ITEM],
@@ -283,3 +283,40 @@ async def test_full_lifecycle(client: AsyncClient) -> None:
     assert data["currency"] == revised_currency
     assert len(data["rejection_history"]) == 1
     assert data["rejection_history"][0]["comment"] == rejection_comment
+
+
+# ---------------------------------------------------------------------------
+# Reference data validation
+# ---------------------------------------------------------------------------
+
+
+async def test_create_po_invalid_currency_returns_422(client: AsyncClient) -> None:
+    vendor_resp = await client.post("/api/v1/vendors/", json={"name": "V", "country": "US"})
+    vendor_id = vendor_resp.json()["id"]
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "currency": "FAKE"}
+    resp = await client.post("/api/v1/po/", json=payload)
+    assert resp.status_code == 422
+
+
+async def test_create_po_invalid_port_returns_422(client: AsyncClient) -> None:
+    vendor_resp = await client.post("/api/v1/vendors/", json={"name": "V", "country": "US"})
+    vendor_id = vendor_resp.json()["id"]
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "port_of_loading": "ZZZZZ"}
+    resp = await client.post("/api/v1/po/", json=payload)
+    assert resp.status_code == 422
+
+
+async def test_create_po_invalid_incoterm_returns_422(client: AsyncClient) -> None:
+    vendor_resp = await client.post("/api/v1/vendors/", json={"name": "V", "country": "US"})
+    vendor_id = vendor_resp.json()["id"]
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "incoterm": "NOPE"}
+    resp = await client.post("/api/v1/po/", json=payload)
+    assert resp.status_code == 422
+
+
+async def test_create_po_invalid_payment_terms_returns_422(client: AsyncClient) -> None:
+    vendor_resp = await client.post("/api/v1/vendors/", json={"name": "V", "country": "US"})
+    vendor_id = vendor_resp.json()["id"]
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "payment_terms": "NET90"}
+    resp = await client.post("/api/v1/po/", json=payload)
+    assert resp.status_code == 422

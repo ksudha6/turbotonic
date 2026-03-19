@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import type { LineItemInput, PurchaseOrderInput } from '$lib/types';
+	import type { LineItemInput, PurchaseOrderInput, ReferenceData } from '$lib/types';
 	import type { VendorListItem } from '$lib/types';
-	import { listVendors } from '$lib/api';
+	import { listVendors, fetchReferenceData } from '$lib/api';
 
 	const DEFAULT_BUYER_NAME = 'TurboTonic Ltd';
 	const DEFAULT_BUYER_COUNTRY = 'US';
@@ -52,6 +52,7 @@
 	}
 
 	let vendors: VendorListItem[] = $state([]);
+	let refData: ReferenceData | null = $state(null);
 	let vendor_id: string = $state(initialData.vendor_id ?? '');
 	let buyer_name: string = $state(initialData.buyer_name ?? DEFAULT_BUYER_NAME);
 	let buyer_country: string = $state(initialData.buyer_country ?? DEFAULT_BUYER_COUNTRY);
@@ -75,7 +76,7 @@
 	let error: string = $state('');
 
 	onMount(async () => {
-		vendors = await listVendors('ACTIVE');
+		[vendors, refData] = await Promise.all([listVendors('ACTIVE'), fetchReferenceData()]);
 	});
 
 	function addLineItem() {
@@ -169,11 +170,25 @@
 			</div>
 			<div class="form-group">
 				<label for="buyer_country">Buyer Country *</label>
-				<input id="buyer_country" class="input" type="text" required bind:value={buyer_country} />
+				<select id="buyer_country" class="select" required bind:value={buyer_country}>
+					<option value="">Select...</option>
+					{#if refData}
+						{#each refData.countries as item}
+							<option value={item.code}>{item.code} — {item.label}</option>
+						{/each}
+					{/if}
+				</select>
 			</div>
 			<div class="form-group">
 				<label for="currency">Currency *</label>
-				<input id="currency" class="input" type="text" required bind:value={currency} />
+				<select id="currency" class="select" required bind:value={currency}>
+					<option value="">Select...</option>
+					{#if refData}
+						{#each refData.currencies as item}
+							<option value={item.code}>{item.code} — {item.label}</option>
+						{/each}
+					{/if}
+				</select>
 			</div>
 			<div class="form-group">
 				<label for="issued_date">Issued Date *</label>
@@ -195,7 +210,14 @@
 			</div>
 			<div class="form-group">
 				<label for="payment_terms">Payment Terms</label>
-				<input id="payment_terms" class="input" type="text" bind:value={payment_terms} />
+				<select id="payment_terms" class="select" bind:value={payment_terms}>
+					<option value="">Select...</option>
+					{#if refData}
+						{#each refData.payment_terms as item}
+							<option value={item.code}>{item.code} — {item.label}</option>
+						{/each}
+					{/if}
+				</select>
 			</div>
 		</div>
 	</div>
@@ -206,28 +228,58 @@
 		<div class="form-grid">
 			<div class="form-group">
 				<label for="incoterm">Incoterm</label>
-				<input id="incoterm" class="input" type="text" bind:value={incoterm} />
+				<select id="incoterm" class="select" bind:value={incoterm}>
+					<option value="">Select...</option>
+					{#if refData}
+						{#each refData.incoterms as item}
+							<option value={item.code}>{item.code} — {item.label}</option>
+						{/each}
+					{/if}
+				</select>
 			</div>
 			<div class="form-group">
 				<label for="port_of_loading">Port of Loading</label>
-				<input id="port_of_loading" class="input" type="text" bind:value={port_of_loading} />
+				<select id="port_of_loading" class="select" bind:value={port_of_loading}>
+					<option value="">Select...</option>
+					{#if refData}
+						{#each refData.ports as item}
+							<option value={item.code}>{item.code} — {item.label}</option>
+						{/each}
+					{/if}
+				</select>
 			</div>
 			<div class="form-group">
 				<label for="port_of_discharge">Port of Discharge</label>
-				<input id="port_of_discharge" class="input" type="text" bind:value={port_of_discharge} />
+				<select id="port_of_discharge" class="select" bind:value={port_of_discharge}>
+					<option value="">Select...</option>
+					{#if refData}
+						{#each refData.ports as item}
+							<option value={item.code}>{item.code} — {item.label}</option>
+						{/each}
+					{/if}
+				</select>
 			</div>
 			<div class="form-group">
 				<label for="country_of_origin">Country of Origin</label>
-				<input id="country_of_origin" class="input" type="text" bind:value={country_of_origin} />
+				<select id="country_of_origin" class="select" bind:value={country_of_origin}>
+					<option value="">Select...</option>
+					{#if refData}
+						{#each refData.countries as item}
+							<option value={item.code}>{item.code} — {item.label}</option>
+						{/each}
+					{/if}
+				</select>
 			</div>
 			<div class="form-group">
 				<label for="country_of_destination">Country of Destination</label>
-				<input
-					id="country_of_destination"
-					class="input"
-					type="text"
-					bind:value={country_of_destination}
-				/>
+				<select id="country_of_destination" class="select" bind:value={country_of_destination}>
+					<option value="">Select...</option>
+					{#if refData}
+						{#each refData.countries as item}
+							<option value={item.code}>{item.code} — {item.label}</option>
+						{/each}
+					{/if}
+				</select>
 			</div>
 		</div>
 	</div>

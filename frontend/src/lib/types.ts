@@ -78,6 +78,19 @@ export interface LineItemInput {
 	country_of_origin: string;
 }
 
+export interface ReferenceDataItem {
+	code: string;
+	label: string;
+}
+
+export interface ReferenceData {
+	currencies: ReferenceDataItem[];
+	incoterms: ReferenceDataItem[];
+	payment_terms: ReferenceDataItem[];
+	countries: ReferenceDataItem[];
+	ports: ReferenceDataItem[];
+}
+
 export interface PurchaseOrderInput {
 	po_number: string;
 	vendor_id: string;

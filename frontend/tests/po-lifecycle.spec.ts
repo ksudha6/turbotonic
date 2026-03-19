@@ -6,6 +6,14 @@ import { test, expect } from '@playwright/test';
 
 const PO_ID = 'uuid-1';
 
+const REFERENCE_DATA = {
+	currencies: [{ code: 'USD', label: 'US Dollar' }, { code: 'EUR', label: 'Euro' }, { code: 'GBP', label: 'British Pound' }],
+	incoterms: [{ code: 'FOB', label: 'Free on Board' }, { code: 'CIF', label: 'Cost, Insurance and Freight' }],
+	payment_terms: [{ code: 'TT', label: 'Telegraphic Transfer' }, { code: 'LC', label: 'Letter of Credit' }],
+	countries: [{ code: 'US', label: 'United States' }, { code: 'CN', label: 'China' }],
+	ports: [{ code: 'CNSHA', label: 'Shanghai' }, { code: 'USLAX', label: 'Los Angeles' }]
+};
+
 const LINE_ITEM = {
 	part_number: 'PART-001',
 	description: 'Steel bolt',
@@ -27,14 +35,14 @@ function makePO(status: string, extra: object = {}) {
 		buyer_name: 'TurboTonic Ltd',
 		buyer_country: 'US',
 		ship_to_address: '123 Main St',
-		payment_terms: 'NET30',
+		payment_terms: 'TT',
 		currency: 'USD',
 		issued_date: '2026-03-16T00:00:00+00:00',
 		required_delivery_date: '2026-04-16T00:00:00+00:00',
 		terms_and_conditions: 'Standard terms',
 		incoterm: 'FOB',
-		port_of_loading: 'Shanghai',
-		port_of_discharge: 'Los Angeles',
+		port_of_loading: 'CNSHA',
+		port_of_discharge: 'USLAX',
 		country_of_origin: 'CN',
 		country_of_destination: 'US',
 		line_items: [LINE_ITEM],
@@ -84,7 +92,7 @@ test('detail view shows header, trade, line items, status pill', async ({ page }
 	await expect(page.locator('body')).toContainText('Acme Corp');
 	// Trade details
 	await expect(page.locator('body')).toContainText('FOB');
-	await expect(page.locator('body')).toContainText('Shanghai');
+	await expect(page.locator('body')).toContainText('CNSHA');
 	// Line item
 	await expect(page.locator('body')).toContainText('PART-001');
 	await expect(page.locator('body')).toContainText('100');
@@ -165,12 +173,20 @@ test('create PO form validates empty part number', async ({ page }) => {
 		});
 	});
 
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(REFERENCE_DATA)
+		});
+	});
+
 	await page.goto('/po/new');
 	await page.waitForSelector('form');
 
 	// Fill required header fields
 	await page.selectOption('#vendor_id', 'v1');
-	await page.fill('#currency', 'USD');
+	await page.selectOption('#currency', 'USD');
 	await page.fill('#issued_date', '2026-03-16');
 	await page.fill('#required_delivery_date', '2026-04-16');
 
@@ -197,12 +213,20 @@ test('create PO form rejects quantity <= 0', async ({ page }) => {
 		});
 	});
 
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(REFERENCE_DATA)
+		});
+	});
+
 	await page.goto('/po/new');
 	await page.waitForSelector('form');
 
 	// Fill required header fields
 	await page.selectOption('#vendor_id', 'v1');
-	await page.fill('#currency', 'USD');
+	await page.selectOption('#currency', 'USD');
 	await page.fill('#issued_date', '2026-03-16');
 	await page.fill('#required_delivery_date', '2026-04-16');
 
@@ -347,11 +371,20 @@ test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ pa
 		});
 	});
 
+	// Mock reference data for PO form dropdowns
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(REFERENCE_DATA)
+		});
+	});
+
 	// Step 1: Create PO
 	await page.goto('/po/new');
 	await page.waitForSelector('form');
 	await page.selectOption('#vendor_id', 'vendor-uuid-1');
-	await page.fill('#currency', 'USD');
+	await page.selectOption('#currency', 'USD');
 	await page.fill('#issued_date', '2026-03-16');
 	await page.fill('#required_delivery_date', '2026-04-16');
 	await page.locator('input[placeholder="Part No."]').fill('PART-001');
@@ -391,4 +424,44 @@ test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ pa
 	await page.getByRole('button', { name: 'Accept' }).click();
 	await expect(page.locator('body')).toContainText('Accepted');
 	await expect(page.locator('body')).toContainText('accepted');
+});
+
+test('PO form renders dropdown fields from reference data', async ({ page }) => {
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([{ id: 'vendor-uuid-1', name: 'Acme Corp', country: 'CN', status: 'ACTIVE' }])
+		});
+	});
+
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(REFERENCE_DATA)
+		});
+	});
+
+	await page.goto('/po/new');
+	await page.waitForSelector('form');
+
+	// Verify currency is a select with options from reference data
+	const currencySelect = page.locator('#currency');
+	await expect(currencySelect).toBeVisible();
+	const currencyOptions = currencySelect.locator('option');
+	// "Select..." placeholder + reference data items
+	await expect(currencyOptions).toHaveCount(4); // placeholder + USD + EUR + GBP
+
+	// Verify incoterm is a select
+	const incotermSelect = page.locator('#incoterm');
+	await expect(incotermSelect).toBeVisible();
+
+	// Verify port_of_loading is a select
+	const polSelect = page.locator('#port_of_loading');
+	await expect(polSelect).toBeVisible();
+
+	// Verify buyer_country is a select with default value pre-selected
+	const bcSelect = page.locator('#buyer_country');
+	await expect(bcSelect).toHaveValue('US');
 });

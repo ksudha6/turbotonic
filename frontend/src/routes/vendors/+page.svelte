@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { listVendors, deactivateVendor } from '$lib/api';
+	import { listVendors, deactivateVendor, reactivateVendor } from '$lib/api';
 	import type { VendorListItem } from '$lib/types';
 
 	let vendors: VendorListItem[] = $state([]);
@@ -29,6 +29,11 @@
 		await deactivateVendor(id);
 		await fetchVendors();
 	}
+
+	async function handleReactivate(id: string) {
+		await reactivateVendor(id);
+		await fetchVendors();
+	}
 </script>
 
 <div class="page-header">
@@ -53,6 +58,7 @@
 		<table class="table">
 			<thead>
 				<tr>
+					<th>ID</th>
 					<th>Name</th>
 					<th>Country</th>
 					<th>Status</th>
@@ -62,6 +68,7 @@
 			<tbody>
 				{#each vendors as vendor}
 					<tr>
+						<td class="vendor-id">{vendor.id.slice(0, 8)}</td>
 						<td>{vendor.name}</td>
 						<td>{vendor.country}</td>
 						<td>
@@ -73,6 +80,10 @@
 							{#if vendor.status === 'ACTIVE'}
 								<button class="btn btn-danger btn-sm" onclick={() => handleDeactivate(vendor.id)}>
 									Deactivate
+								</button>
+							{:else if vendor.status === 'INACTIVE'}
+								<button class="btn btn-success btn-sm" onclick={() => handleReactivate(vendor.id)}>
+									Reactivate
 								</button>
 							{/if}
 						</td>
@@ -116,5 +127,20 @@
 	.btn-sm {
 		font-size: var(--font-size-sm);
 		padding: var(--space-1) var(--space-3);
+	}
+
+	.vendor-id {
+		font-family: monospace;
+		font-size: var(--font-size-sm);
+		color: var(--gray-500);
+	}
+
+	.btn-success {
+		background-color: var(--green-600, #16a34a);
+		color: white;
+	}
+
+	.btn-success:hover {
+		background-color: var(--green-700, #15803d);
 	}
 </style>

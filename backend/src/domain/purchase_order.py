@@ -6,6 +6,14 @@ from decimal import Decimal
 from enum import Enum
 from uuid import uuid4
 
+from src.domain.reference_data import (
+    VALID_COUNTRIES,
+    VALID_CURRENCIES,
+    VALID_INCOTERMS,
+    VALID_PAYMENT_TERMS,
+    VALID_PORTS,
+)
+
 
 class POStatus(Enum):
     DRAFT = "DRAFT"
@@ -109,6 +117,37 @@ class PurchaseOrder:
         )
 
     @classmethod
+    def _validate_reference_fields(
+        cls,
+        *,
+        currency: str,
+        payment_terms: str,
+        incoterm: str,
+        buyer_country: str,
+        country_of_origin: str,
+        country_of_destination: str,
+        port_of_loading: str,
+        port_of_discharge: str,
+    ) -> None:
+        # Each field is constrained to its reference set; codes outside it are rejected
+        if currency not in VALID_CURRENCIES:
+            raise ValueError(f"invalid currency: {currency!r}")
+        if payment_terms not in VALID_PAYMENT_TERMS:
+            raise ValueError(f"invalid payment_terms: {payment_terms!r}")
+        if incoterm not in VALID_INCOTERMS:
+            raise ValueError(f"invalid incoterm: {incoterm!r}")
+        if buyer_country not in VALID_COUNTRIES:
+            raise ValueError(f"invalid buyer_country: {buyer_country!r}")
+        if country_of_origin not in VALID_COUNTRIES:
+            raise ValueError(f"invalid country_of_origin: {country_of_origin!r}")
+        if country_of_destination not in VALID_COUNTRIES:
+            raise ValueError(f"invalid country_of_destination: {country_of_destination!r}")
+        if port_of_loading not in VALID_PORTS:
+            raise ValueError(f"invalid port_of_loading: {port_of_loading!r}")
+        if port_of_discharge not in VALID_PORTS:
+            raise ValueError(f"invalid port_of_discharge: {port_of_discharge!r}")
+
+    @classmethod
     def create(
         cls,
         *,
@@ -129,6 +168,16 @@ class PurchaseOrder:
         country_of_destination: str,
         line_items: list[LineItem],
     ) -> PurchaseOrder:
+        cls._validate_reference_fields(
+            currency=currency,
+            payment_terms=payment_terms,
+            incoterm=incoterm,
+            buyer_country=buyer_country,
+            country_of_origin=country_of_origin,
+            country_of_destination=country_of_destination,
+            port_of_loading=port_of_loading,
+            port_of_discharge=port_of_discharge,
+        )
         if not line_items:
             raise ValueError("at least one line item is required")
         now = datetime.now(UTC)
@@ -212,6 +261,16 @@ class PurchaseOrder:
             raise ValueError(
                 f"revise requires REJECTED status; current status is {self.status.value}"
             )
+        self._validate_reference_fields(
+            currency=currency,
+            payment_terms=payment_terms,
+            incoterm=incoterm,
+            buyer_country=buyer_country,
+            country_of_origin=country_of_origin,
+            country_of_destination=country_of_destination,
+            port_of_loading=port_of_loading,
+            port_of_discharge=port_of_discharge,
+        )
         if not line_items:
             raise ValueError("at least one line item is required")
         self.vendor_id = vendor_id

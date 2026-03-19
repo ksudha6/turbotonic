@@ -27,14 +27,14 @@ _PO_BASE: dict = {
     "buyer_name": "TurboTonic Ltd",
     "buyer_country": "US",
     "ship_to_address": "123 Main St",
-    "payment_terms": "NET30",
+    "payment_terms": "TT",
     "currency": "USD",
     "issued_date": "2026-03-16T00:00:00Z",
     "required_delivery_date": "2026-04-01T00:00:00Z",
     "terms_and_conditions": "Standard T&C",
     "incoterm": "FOB",
-    "port_of_loading": "Los Angeles",
-    "port_of_discharge": "Shanghai",
+    "port_of_loading": "USLAX",
+    "port_of_discharge": "CNSHA",
     "country_of_origin": "US",
     "country_of_destination": "CN",
     "line_items": [_LINE_ITEM],
@@ -140,6 +140,31 @@ async def test_deactivate_already_inactive_returns_409(client: AsyncClient) -> N
     await client.post(f"/api/v1/vendors/{vendor['id']}/deactivate")
     resp = await client.post(f"/api/v1/vendors/{vendor['id']}/deactivate")
     assert resp.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# Vendor reactivate
+# ---------------------------------------------------------------------------
+
+
+async def test_reactivate_vendor(client: AsyncClient) -> None:
+    vendor = await _create_vendor(client)
+    await client.post(f"/api/v1/vendors/{vendor['id']}/deactivate")
+    resp = await client.post(f"/api/v1/vendors/{vendor['id']}/reactivate")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == VendorStatus.ACTIVE.value
+
+
+async def test_reactivate_already_active_returns_409(client: AsyncClient) -> None:
+    vendor = await _create_vendor(client)
+    resp = await client.post(f"/api/v1/vendors/{vendor['id']}/reactivate")
+    assert resp.status_code == 409
+
+
+async def test_reactivate_nonexistent_vendor_returns_404(client: AsyncClient) -> None:
+    resp = await client.post("/api/v1/vendors/fake-id/reactivate")
+    assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------
@@ -267,3 +292,21 @@ async def test_migrate_vendors_creates_records_and_rewrites_po_vendor_ids() -> N
         assert po_map["po-1"] != po_map["po-3"], (
             "Acme and Beta should have distinct vendor UUIDs"
         )
+
+
+# ---------------------------------------------------------------------------
+# Reference data endpoint
+# ---------------------------------------------------------------------------
+
+
+async def test_reference_data_returns_all_sets(client: AsyncClient) -> None:
+    resp = await client.get("/api/v1/reference-data/")
+    assert resp.status_code == 200
+    data = resp.json()
+    expected_keys = {"currencies", "incoterms", "payment_terms", "countries", "ports"}
+    assert set(data.keys()) == expected_keys
+    for key in expected_keys:
+        assert len(data[key]) > 0
+        first = data[key][0]
+        assert "code" in first
+        assert "label" in first

@@ -62,3 +62,21 @@ def test_deactivate_already_inactive_raises() -> None:
     vendor.deactivate()
     with pytest.raises(ValueError, match="INACTIVE"):
         vendor.deactivate()
+
+
+# ---------------------------------------------------------------------------
+# Vendor.reactivate
+# ---------------------------------------------------------------------------
+
+
+def test_reactivate_sets_active() -> None:
+    vendor = Vendor.create(name="Acme Corp", country="US")
+    vendor.deactivate()
+    vendor.reactivate()
+    assert vendor.status is VendorStatus.ACTIVE
+
+
+def test_reactivate_already_active_raises() -> None:
+    vendor = Vendor.create(name="Acme Corp", country="US")
+    with pytest.raises(ValueError, match="ACTIVE"):
+        vendor.reactivate()

@@ -68,3 +68,16 @@ async def deactivate_vendor(vendor_id: str, repo: VendorRepoDep) -> VendorRespon
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await repo.save(vendor)
     return vendor_to_response(vendor)
+
+
+@router.post("/{vendor_id}/reactivate", response_model=VendorResponse)
+async def reactivate_vendor(vendor_id: str, repo: VendorRepoDep) -> VendorResponse:
+    vendor = await repo.get_by_id(vendor_id)
+    if vendor is None:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    try:
+        vendor.reactivate()
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await repo.save(vendor)
+    return vendor_to_response(vendor)

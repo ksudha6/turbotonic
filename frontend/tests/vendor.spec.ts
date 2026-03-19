@@ -118,9 +118,88 @@ test('PO form prefills buyer fields with defaults', async ({ page }) => {
 		});
 	});
 
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				currencies: [{ code: 'USD', label: 'US Dollar' }],
+				incoterms: [{ code: 'FOB', label: 'Free on Board' }],
+				payment_terms: [{ code: 'TT', label: 'Telegraphic Transfer' }],
+				countries: [{ code: 'US', label: 'United States' }, { code: 'CN', label: 'China' }],
+				ports: [{ code: 'CNSHA', label: 'Shanghai' }, { code: 'USLAX', label: 'Los Angeles' }]
+			})
+		});
+	});
+
 	await page.goto('/po/new');
 	await page.waitForSelector('form');
 
 	await expect(page.locator('#buyer_name')).toHaveValue('TurboTonic Ltd');
 	await expect(page.locator('#buyer_country')).toHaveValue('US');
+});
+
+test('reactivate vendor updates status badge', async ({ page }) => {
+	const vendorActive = { ...VENDOR_INACTIVE, status: 'ACTIVE' };
+
+	const inactiveHandler = (route: import('@playwright/test').Route) => {
+		const url = route.request().url();
+		const path = new URL(url).pathname;
+		if (path === '/api/v1/vendors' || path === '/api/v1/vendors/') {
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([VENDOR_INACTIVE])
+			});
+		} else {
+			route.continue();
+		}
+	};
+	await page.route('**/api/v1/vendors**', inactiveHandler);
+
+	await page.goto('/vendors');
+	await page.waitForSelector('table');
+	await expect(page.getByRole('button', { name: 'Reactivate' })).toBeVisible();
+
+	await page.unroute('**/api/v1/vendors**', inactiveHandler);
+	await page.route('**/api/v1/vendors**', (route) => {
+		const url = route.request().url();
+		const path = new URL(url).pathname;
+		if (path.endsWith('/reactivate')) {
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(vendorActive)
+			});
+		} else {
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify([vendorActive])
+			});
+		}
+	});
+
+	await page.getByRole('button', { name: 'Reactivate' }).click();
+
+	await expect(page.getByRole('button', { name: 'Reactivate' })).toHaveCount(0);
+	await expect(page.locator('tbody')).toContainText('Active');
+});
+
+test('vendor list shows UUID column', async ({ page }) => {
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([VENDOR_ACTIVE])
+		});
+	});
+
+	await page.goto('/vendors');
+	await page.waitForSelector('table');
+
+	// ID column header exists
+	await expect(page.locator('thead')).toContainText('ID');
+	// First 8 chars of vendor ID are shown
+	await expect(page.locator('tbody .vendor-id')).toContainText(VENDOR_ACTIVE.id.slice(0, 8));
 });

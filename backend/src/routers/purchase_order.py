@@ -65,24 +65,27 @@ async def create_po(body: PurchaseOrderCreate, repo: RepoDep, vendor_repo: Vendo
         raise HTTPException(status_code=422, detail="Vendor is not active")
     po_number = await repo.next_po_number()
     line_items = _build_line_items(body)
-    po = PurchaseOrder.create(
-        po_number=po_number,
-        vendor_id=body.vendor_id,
-        buyer_name=body.buyer_name,
-        buyer_country=body.buyer_country,
-        ship_to_address=body.ship_to_address,
-        payment_terms=body.payment_terms,
-        currency=body.currency,
-        issued_date=body.issued_date,
-        required_delivery_date=body.required_delivery_date,
-        terms_and_conditions=body.terms_and_conditions,
-        incoterm=body.incoterm,
-        port_of_loading=body.port_of_loading,
-        port_of_discharge=body.port_of_discharge,
-        country_of_origin=body.country_of_origin,
-        country_of_destination=body.country_of_destination,
-        line_items=line_items,
-    )
+    try:
+        po = PurchaseOrder.create(
+            po_number=po_number,
+            vendor_id=body.vendor_id,
+            buyer_name=body.buyer_name,
+            buyer_country=body.buyer_country,
+            ship_to_address=body.ship_to_address,
+            payment_terms=body.payment_terms,
+            currency=body.currency,
+            issued_date=body.issued_date,
+            required_delivery_date=body.required_delivery_date,
+            terms_and_conditions=body.terms_and_conditions,
+            incoterm=body.incoterm,
+            port_of_loading=body.port_of_loading,
+            port_of_discharge=body.port_of_discharge,
+            country_of_origin=body.country_of_origin,
+            country_of_destination=body.country_of_destination,
+            line_items=line_items,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     await repo.save(po)
     return po_to_response(po, vendor_name=vendor.name, vendor_country=vendor.country)
 
@@ -203,7 +206,8 @@ async def update_po(po_id: str, body: PurchaseOrderUpdate, repo: RepoDep, vendor
             line_items=line_items,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        status_code = 422 if str(exc).startswith("invalid ") else 409
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
     await repo.save(po)
     return po_to_response(po, vendor_name=vendor.name, vendor_country=vendor.country)
 

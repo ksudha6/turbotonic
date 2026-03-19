@@ -54,8 +54,15 @@ class Vendor:
         )
 
     def deactivate(self) -> None:
-        # INACTIVE is terminal; repeated deactivation is an error
+        # ACTIVE -> INACTIVE; already-inactive is an error
         if self.status is VendorStatus.INACTIVE:
             raise ValueError("vendor is already INACTIVE")
         self.status = VendorStatus.INACTIVE
+        self.updated_at = datetime.now(UTC)
+
+    def reactivate(self) -> None:
+        # INACTIVE -> ACTIVE; only INACTIVE vendors transition back
+        if self.status is VendorStatus.ACTIVE:
+            raise ValueError("vendor is already ACTIVE")
+        self.status = VendorStatus.ACTIVE
         self.updated_at = datetime.now(UTC)
