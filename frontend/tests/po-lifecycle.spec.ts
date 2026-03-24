@@ -426,6 +426,16 @@ test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ pa
 	await expect(page.locator('body')).toContainText('accepted');
 });
 
+test('download PDF button is visible for every PO status', async ({ page }) => {
+	for (const status of ['DRAFT', 'PENDING', 'ACCEPTED', 'REJECTED', 'REVISED']) {
+		const po = makePO(status);
+		await mockDetail(page, po);
+		await page.goto(`/po/${PO_ID}`);
+		await page.waitForSelector('h1');
+		await expect(page.getByRole('button', { name: 'Download PDF' })).toBeVisible();
+	}
+});
+
 test('PO form renders dropdown fields from reference data', async ({ page }) => {
 	await page.route('**/api/v1/vendors**', (route) => {
 		route.fulfill({

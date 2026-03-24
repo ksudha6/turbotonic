@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Annotated, AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import Response
 
 from src.db import get_db
 from src.domain.purchase_order import LineItem, POStatus, PurchaseOrder
@@ -18,6 +19,7 @@ from src.dto import (
 )
 from src.repository import PurchaseOrderRepository
 from src.schema import init_db
+from src.services.po_pdf import generate_po_pdf
 from src.vendor_repository import VendorRepository
 
 router = APIRouter(prefix="/api/v1/po", tags=["purchase-orders"])
@@ -126,6 +128,23 @@ async def get_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep) -> Purch
     vname = vendor.name if vendor else ""
     vcountry = vendor.country if vendor else ""
     return po_to_response(po, vendor_name=vname, vendor_country=vcountry)
+
+
+@router.get("/{po_id}/pdf")
+async def get_po_pdf(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep) -> Response:
+    po = await repo.get(po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    vendor = await vendor_repo.get_by_id(po.vendor_id)
+    vname = vendor.name if vendor else ""
+    vcountry = vendor.country if vendor else ""
+    pdf_bytes = generate_po_pdf(po, vendor_name=vname, vendor_country=vcountry)
+    filename = f"{po.po_number}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/{po_id}/submit", response_model=PurchaseOrderResponse)

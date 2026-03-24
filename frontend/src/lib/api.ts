@@ -65,6 +65,10 @@ export function resubmitPO(id: string): Promise<PurchaseOrder> {
 	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/resubmit`);
 }
 
+export function downloadPoPdf(id: string): void {
+	window.open(`/api/v1/po/${id}/pdf`, '_blank');
+}
+
 export function listVendors(status?: string): Promise<VendorListItem[]> {
 	const url = status ? `/api/v1/vendors?status=${encodeURIComponent(status)}` : '/api/v1/vendors';
 	return apiGet<VendorListItem[]>(url);

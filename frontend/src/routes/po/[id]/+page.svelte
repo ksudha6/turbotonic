@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO } from '$lib/api';
+	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import RejectDialog from '$lib/components/RejectDialog.svelte';
 	import type { PurchaseOrder } from '$lib/types';
@@ -194,6 +194,7 @@
 	{/if}
 
 	<div class="actions">
+		<button class="btn btn-secondary" onclick={() => downloadPoPdf(id)}>Download PDF</button>
 		{#if po.status === 'DRAFT'}
 			<a href="/po/{po.id}/edit" class="btn btn-secondary">Edit</a>
 			<button class="btn btn-primary" onclick={handleSubmit}>Submit</button>
