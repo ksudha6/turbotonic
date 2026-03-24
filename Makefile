@@ -3,12 +3,12 @@
 up:
 	mkdir -p logs
 	@trap 'kill 0' EXIT; \
-	uv run uvicorn backend.src.main:app --host 0.0.0.0 --port 8000 --reload 2>&1 | tee logs/uvicorn.log & \
-	cd frontend && npm run dev 2>&1 | tee ../logs/sveltekit.log & \
+	uv run uvicorn backend.src.main:app --host 0.0.0.0 --port 8001 --reload 2>&1 | tee logs/uvicorn.log & \
+	cd frontend && npm run dev -- --port 5174 2>&1 | tee ../logs/sveltekit.log & \
 	wait
 
 down:
-	-pkill -f "uvicorn backend.src.main:app" 2>/dev/null || true
+	-pkill -f "uvicorn backend.src.main:app.*8001" 2>/dev/null || true
 	-pkill -f "vite" 2>/dev/null || true
 
 test-backend:
