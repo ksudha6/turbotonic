@@ -2,7 +2,7 @@
 
 ## Context
 
-PO document export. The PO detail page displays all header, trade, line item, and rejection history fields but there is no way to generate a printable or shareable document. Add a PDF export endpoint on the backend and a download button on the frontend PO detail page.
+I want to export the PO document. The PO detail page displays all header, trade, line item, and rejection history fields but there is no way to generate a printable or shareable document. Add a PDF export endpoint on the backend and a download button on the frontend PO detail page.
 
 The PO detail includes: po_number, status, vendor (name + country), buyer (name + country), currency, payment_terms, issued_date, required_delivery_date, total_value, ship_to_address, incoterm, port_of_loading, port_of_discharge, country_of_origin, country_of_destination, terms_and_conditions, line items (part_number, description, quantity, uom, unit_price, hs_code, country_of_origin), and rejection_history. No PDF library is currently installed.
 
@@ -42,3 +42,7 @@ The PO detail includes: po_number, status, vendor (name + country), buyer (name 
 
 ### Scratch (iteration validation)
 7. **Screenshot the download button** on the PO detail page across statuses
+
+## Notes
+
+Added `reportlab` for PDF generation and `pypdf` (dev) for text extraction in tests. The PDF service lives in `backend/src/services/po_pdf.py` and resolves all reference codes to labels via `backend/src/domain/reference_labels.py`, which builds lookup dicts from the existing reference data tuples. Port labels derive "City, Country" by combining the port name with the country resolved from the 2-char prefix of the port code. The initial blob download approach (`URL.createObjectURL` + programmatic click) failed silently in the browser; replaced with `window.open` which lets the browser handle the PDF natively. Dev ports changed to 8001/5174 to avoid conflicts with other local projects.

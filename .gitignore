@@ -24,6 +24,18 @@ tools/
 data/
 !data/.gitkeep
 
+# Playwright artifacts
+.playwright-mcp/
+frontend/test-results/
+
+# Claude Code
+.claude/
+
+# Scratch files
+po-detail-with-download-btn.jpeg
+ref.md
+frontend/playwright-scratch.config.ts
+
 # Editor
 .vscode/
 !.vscode/settings.json
