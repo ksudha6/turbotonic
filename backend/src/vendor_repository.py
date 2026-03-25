@@ -73,6 +73,14 @@ class VendorRepository:
                 rows = await cursor.fetchall()
         return [_reconstruct(row) for row in rows]
 
+    async def vendor_count_by_status(self) -> dict[str, int]:
+        self._conn.row_factory = aiosqlite.Row
+        async with self._conn.execute(
+            "SELECT status, COUNT(*) as cnt FROM vendors GROUP BY status"
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return {row["status"]: row["cnt"] for row in rows}
+
 
 def _reconstruct(row: aiosqlite.Row) -> Vendor:
     return Vendor(

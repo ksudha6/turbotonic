@@ -158,6 +158,13 @@ class PurchaseOrderListItem(BaseModel):
     currency: str
 
 
+class PaginatedPOList(BaseModel):
+    items: list[PurchaseOrderListItem]
+    total: int
+    page: int
+    page_size: int
+
+
 def _line_item_to_response(item: LineItem) -> LineItemResponse:
     return LineItemResponse(
         part_number=item.part_number,

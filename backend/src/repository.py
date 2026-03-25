@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timezone
 from decimal import Decimal
+from typing import Any
 from uuid import uuid4
 
 import aiosqlite
@@ -229,6 +230,95 @@ class PurchaseOrderRepository:
 
         return _reconstruct(po_row, item_rows, rejection_rows)
 
+    _SORT_ALLOWLIST: dict[str, str] = {
+        "po_number": "p.po_number",
+        "issued_date": "p.issued_date",
+        "required_delivery_date": "p.required_delivery_date",
+        "total_value": "total_value",
+        "created_at": "p.created_at",
+    }
+
+    async def list_pos_paginated(
+        self,
+        *,
+        status: POStatus | None = None,
+        vendor_id: str | None = None,
+        currency: str | None = None,
+        search: str | None = None,
+        sort_by: str = "created_at",
+        sort_dir: str = "desc",
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[dict[str, Any]], int]:
+        if sort_by not in self._SORT_ALLOWLIST:
+            raise ValueError(f"Invalid sort_by value: {sort_by!r}")
+        if sort_dir not in ("asc", "desc"):
+            raise ValueError(f"Invalid sort_dir value: {sort_dir!r}")
+
+        sort_col = self._SORT_ALLOWLIST[sort_by]
+
+        where_clauses: list[str] = []
+        params: list[Any] = []
+
+        if status is not None:
+            where_clauses.append("p.status = ?")
+            params.append(status.value)
+        if vendor_id is not None:
+            where_clauses.append("p.vendor_id = ?")
+            params.append(vendor_id)
+        if currency is not None:
+            where_clauses.append("p.currency = ?")
+            params.append(currency)
+        if search is not None:
+            term = f"%{search}%"
+            where_clauses.append(
+                "(LOWER(p.po_number) LIKE LOWER(?) OR LOWER(v.name) LIKE LOWER(?) OR LOWER(p.buyer_name) LIKE LOWER(?))"
+            )
+            params.extend([term, term, term])
+
+        where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+        base_query = f"""
+            SELECT
+                p.id,
+                p.po_number,
+                p.status,
+                p.vendor_id,
+                p.buyer_name,
+                p.buyer_country,
+                v.name AS vendor_name,
+                v.country AS vendor_country,
+                p.issued_date,
+                p.required_delivery_date,
+                p.currency,
+                (SELECT COALESCE(SUM(quantity * CAST(unit_price AS REAL)), 0)
+                 FROM line_items WHERE po_id = p.id) AS total_value
+            FROM purchase_orders p
+            LEFT JOIN vendors v ON v.id = p.vendor_id
+            {where_sql}
+        """
+
+        count_query = f"""
+            SELECT COUNT(*) FROM purchase_orders p
+            LEFT JOIN vendors v ON v.id = p.vendor_id
+            {where_sql}
+        """
+
+        self._conn.row_factory = aiosqlite.Row
+
+        async with self._conn.execute(count_query, params) as cursor:
+            count_row = await cursor.fetchone()
+            total: int = count_row[0] if count_row else 0
+
+        offset = (page - 1) * page_size
+        data_query = f"{base_query} ORDER BY {sort_col} {sort_dir.upper()} LIMIT ? OFFSET ?"
+        data_params = params + [page_size, offset]
+
+        async with self._conn.execute(data_query, data_params) as cursor:
+            rows = await cursor.fetchall()
+
+        return [dict(row) for row in rows], total
+
     async def list_pos(self, status: POStatus | None = None) -> list[PurchaseOrder]:
         self._conn.row_factory = aiosqlite.Row
 
@@ -240,6 +330,56 @@ class PurchaseOrderRepository:
         else:
             async with self._conn.execute("SELECT * FROM purchase_orders") as cursor:
                 po_rows = await cursor.fetchall()
+
+        result: list[PurchaseOrder] = []
+        for po_row in po_rows:
+            po_id = po_row["id"]
+
+            async with self._conn.execute(
+                "SELECT * FROM line_items WHERE po_id = ? ORDER BY sort_order",
+                (po_id,),
+            ) as cursor:
+                item_rows = await cursor.fetchall()
+
+            async with self._conn.execute(
+                "SELECT * FROM rejection_history WHERE po_id = ? ORDER BY rejected_at",
+                (po_id,),
+            ) as cursor:
+                rejection_rows = await cursor.fetchall()
+
+            result.append(_reconstruct(po_row, item_rows, rejection_rows))
+
+        return result
+
+    async def po_summary_by_status(self) -> list[dict[str, Any]]:
+        self._conn.row_factory = aiosqlite.Row
+        async with self._conn.execute(
+            """
+            SELECT p.status, p.currency, COUNT(DISTINCT p.id) as po_count,
+                   COALESCE(SUM(li.quantity * CAST(li.unit_price AS REAL)), 0) as total_value
+            FROM purchase_orders p
+            LEFT JOIN line_items li ON li.po_id = p.id
+            GROUP BY p.status, p.currency
+            """
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [
+            {
+                "status": row["status"],
+                "currency": row["currency"],
+                "po_count": row["po_count"],
+                "total_value": row["total_value"],
+            }
+            for row in rows
+        ]
+
+    async def recent_pos(self, limit: int = 10) -> list[PurchaseOrder]:
+        self._conn.row_factory = aiosqlite.Row
+        async with self._conn.execute(
+            "SELECT * FROM purchase_orders ORDER BY updated_at DESC LIMIT ?",
+            (limit,),
+        ) as cursor:
+            po_rows = await cursor.fetchall()
 
         result: list[PurchaseOrder] = []
         for po_row in po_rows:

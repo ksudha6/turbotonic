@@ -45,12 +45,34 @@ const PO_ACCEPTED = {
 	currency: 'USD'
 };
 
-test('PO list page loads and shows table', async ({ page }) => {
-	await page.route('**/api/v1/po', (route) => {
+const EMPTY_REF_DATA = {
+	currencies: [],
+	incoterms: [],
+	payment_terms: [],
+	countries: [],
+	ports: []
+};
+
+async function mockCommonRoutes(page: import('@playwright/test').Page) {
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/reference-data**', (route) => {
 		route.fulfill({
 			status: 200,
 			contentType: 'application/json',
-			body: JSON.stringify([PO_DRAFT, PO_PENDING, PO_ACCEPTED])
+			body: JSON.stringify(EMPTY_REF_DATA)
+		});
+	});
+}
+
+test('PO list page loads and shows table', async ({ page }) => {
+	await mockCommonRoutes(page);
+	await page.route('**/api/v1/po**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ items: [PO_DRAFT, PO_PENDING, PO_ACCEPTED], total: 3, page: 1, page_size: 20 })
 		});
 	});
 
@@ -79,6 +101,7 @@ test('PO list page loads and shows table', async ({ page }) => {
 test('status filter narrows displayed POs', async ({ page }) => {
 	let lastUrl = '';
 
+	await mockCommonRoutes(page);
 	await page.route('**/api/v1/po**', (route) => {
 		lastUrl = route.request().url();
 		const url = new URL(route.request().url());
@@ -88,13 +111,13 @@ test('status filter narrows displayed POs', async ({ page }) => {
 			route.fulfill({
 				status: 200,
 				contentType: 'application/json',
-				body: JSON.stringify([PO_DRAFT])
+				body: JSON.stringify({ items: [PO_DRAFT], total: 1, page: 1, page_size: 20 })
 			});
 		} else {
 			route.fulfill({
 				status: 200,
 				contentType: 'application/json',
-				body: JSON.stringify([PO_DRAFT, PO_PENDING, PO_ACCEPTED])
+				body: JSON.stringify({ items: [PO_DRAFT, PO_PENDING, PO_ACCEPTED], total: 3, page: 1, page_size: 20 })
 			});
 		}
 	});
@@ -103,7 +126,7 @@ test('status filter narrows displayed POs', async ({ page }) => {
 	await page.waitForSelector('table');
 	await expect(page.locator('tbody tr')).toHaveCount(3);
 
-	await page.locator('select').selectOption('DRAFT');
+	await page.locator('.filter-bar select').first().selectOption('DRAFT');
 	await page.waitForSelector('tbody tr');
 
 	await expect(page.locator('tbody tr')).toHaveCount(1);
@@ -111,10 +134,11 @@ test('status filter narrows displayed POs', async ({ page }) => {
 });
 
 test('click row navigates to detail', async ({ page }) => {
+	await mockCommonRoutes(page);
 	await page.route('**/api/v1/po**', (route) => {
 		const url = route.request().url();
 		// Detail page will also call /api/v1/po/{id}; return minimal valid response
-		if (url.includes('/uuid-draft') && !url.endsWith('/po')) {
+		if (url.includes('/uuid-draft') && !url.match(/\/po\??/)) {
 			route.fulfill({
 				status: 200,
 				contentType: 'application/json',
@@ -138,7 +162,7 @@ test('click row navigates to detail', async ({ page }) => {
 			route.fulfill({
 				status: 200,
 				contentType: 'application/json',
-				body: JSON.stringify([PO_DRAFT])
+				body: JSON.stringify({ items: [PO_DRAFT], total: 1, page: 1, page_size: 20 })
 			});
 		}
 	});
@@ -153,14 +177,74 @@ test('click row navigates to detail', async ({ page }) => {
 });
 
 test('empty list shows message', async ({ page }) => {
+	await mockCommonRoutes(page);
 	await page.route('**/api/v1/po**', (route) => {
 		route.fulfill({
 			status: 200,
 			contentType: 'application/json',
-			body: JSON.stringify([])
+			body: JSON.stringify({ items: [], total: 0, page: 1, page_size: 20 })
 		});
 	});
 
 	await page.goto('/po');
 	await expect(page.locator('body')).toContainText('No purchase orders found');
+});
+
+test('filter bar renders search input and dropdowns', async ({ page }) => {
+	await mockCommonRoutes(page);
+	await page.route('**/api/v1/po**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ items: [], total: 0, page: 1, page_size: 20 })
+		});
+	});
+
+	await page.goto('/po');
+	await page.waitForSelector('.filter-bar');
+
+	await expect(page.locator('.filter-bar input[type="text"]')).toBeVisible();
+	await expect(page.locator('.filter-bar select')).toHaveCount(3);
+});
+
+test('pagination controls appear when total exceeds page size', async ({ page }) => {
+	await mockCommonRoutes(page);
+	const items = Array.from({ length: 20 }, (_, i) => ({
+		...PO_DRAFT,
+		id: `uuid-${i}`,
+		po_number: `PO-2026-${String(i).padStart(4, '0')}`
+	}));
+	await page.route('**/api/v1/po**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ items, total: 45, page: 1, page_size: 20 })
+		});
+	});
+
+	await page.goto('/po');
+	await page.waitForSelector('.pagination');
+
+	await expect(page.locator('.pagination-info')).toContainText('Showing 1–20 of 45');
+	await expect(page.locator('.pagination-controls button').last()).not.toBeDisabled();
+});
+
+test('URL state preserved on navigation', async ({ page }) => {
+	await mockCommonRoutes(page);
+	await page.route('**/api/v1/po**', (route) => {
+		const url = new URL(route.request().url());
+		const status = url.searchParams.get('status');
+		const items = status === 'DRAFT' ? [PO_DRAFT] : [PO_DRAFT, PO_PENDING, PO_ACCEPTED];
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ items, total: items.length, page: 1, page_size: 20 })
+		});
+	});
+
+	await page.goto('/po?status=DRAFT&search=foo');
+	await page.waitForSelector('.filter-bar');
+
+	await expect(page.locator('.filter-bar input[type="text"]')).toHaveValue('foo');
+	await expect(page.locator('.filter-bar select').first()).toHaveValue('DRAFT');
 });

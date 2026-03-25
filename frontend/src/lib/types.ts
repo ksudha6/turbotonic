@@ -53,6 +53,13 @@ export interface PurchaseOrderListItem {
 	currency: string;
 }
 
+export interface PaginatedPOList {
+	items: PurchaseOrderListItem[];
+	total: number;
+	page: number;
+	page_size: number;
+}
+
 export interface PurchaseOrder extends PurchaseOrderListItem {
 	ship_to_address: string;
 	payment_terms: string;
@@ -109,4 +116,31 @@ export interface PurchaseOrderInput {
 	country_of_origin: string;
 	country_of_destination: string;
 	line_items: LineItemInput[];
+}
+
+export interface POStatusSummary {
+	status: POStatus;
+	count: number;
+	total_usd: string;
+}
+
+export interface VendorSummary {
+	active: number;
+	inactive: number;
+}
+
+export interface RecentPO {
+	id: string;
+	po_number: string;
+	status: POStatus;
+	vendor_name: string;
+	total_value: string;
+	currency: string;
+	updated_at: string;
+}
+
+export interface DashboardData {
+	po_summary: POStatusSummary[];
+	vendor_summary: VendorSummary;
+	recent_pos: RecentPO[];
 }

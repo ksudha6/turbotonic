@@ -76,8 +76,10 @@ async def test_list_pos_returns_array(client: AsyncClient) -> None:
     resp = await client.get("/api/v1/po/")
     assert resp.status_code == 200
     data = resp.json()
-    assert isinstance(data, list)
-    assert len(data) == 2
+    assert "items" in data
+    assert "total" in data
+    assert data["total"] == 2
+    assert len(data["items"]) == 2
 
 
 async def test_list_pos_with_status_filter(client: AsyncClient) -> None:
@@ -87,17 +89,210 @@ async def test_list_pos_with_status_filter(client: AsyncClient) -> None:
     resp = await client.get("/api/v1/po/", params={"status": "PENDING"})
     assert resp.status_code == 200
     data = resp.json()
-    assert len(data) == 1
-    assert data[0]["status"] == POStatus.PENDING.value
+    assert data["total"] == 1
+    assert len(data["items"]) == 1
+    assert data["items"][0]["status"] == POStatus.PENDING.value
 
     resp_draft = await client.get("/api/v1/po/", params={"status": "DRAFT"})
     assert resp_draft.status_code == 200
-    assert len(resp_draft.json()) == 0
+    assert resp_draft.json()["total"] == 0
+    assert len(resp_draft.json()["items"]) == 0
 
 
 async def test_list_pos_invalid_status_returns_422(client: AsyncClient) -> None:
     resp = await client.get("/api/v1/po/", params={"status": "INVALID"})
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Search
+# ---------------------------------------------------------------------------
+
+
+async def _create_vendor(client: AsyncClient, name: str, country: str = "US") -> str:
+    resp = await client.post("/api/v1/vendors/", json={"name": name, "country": country})
+    assert resp.status_code == 201
+    return resp.json()["id"]
+
+
+async def _create_po_for_vendor(client: AsyncClient, vendor_id: str, overrides: dict | None = None) -> dict:
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, **(overrides or {})}
+    resp = await client.post("/api/v1/po/", json=payload)
+    assert resp.status_code == 201
+    return resp.json()
+
+
+async def test_list_pos_search_by_po_number(client: AsyncClient) -> None:
+    po = await _create_po(client)
+    po_number = po["po_number"]
+    # Search by exact po_number prefix
+    resp = await client.get("/api/v1/po/", params={"search": po_number})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["items"][0]["po_number"] == po_number
+
+
+async def test_list_pos_search_by_vendor_name(client: AsyncClient) -> None:
+    vendor_a = await _create_vendor(client, "AlphaSupplier")
+    vendor_b = await _create_vendor(client, "BetaSupplier")
+    await _create_po_for_vendor(client, vendor_a)
+    await _create_po_for_vendor(client, vendor_b)
+
+    resp = await client.get("/api/v1/po/", params={"search": "AlphaSupplier"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["items"][0]["vendor_name"] == "AlphaSupplier"
+
+
+async def test_list_pos_search_by_buyer_name(client: AsyncClient) -> None:
+    vendor_id = await _create_vendor(client, "GenericVendor")
+    await _create_po_for_vendor(client, vendor_id, {"buyer_name": "UniqueCorpXYZ"})
+    await _create_po_for_vendor(client, vendor_id, {"buyer_name": "OtherBuyerABC"})
+
+    resp = await client.get("/api/v1/po/", params={"search": "UniqueCorpXYZ"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["items"][0]["buyer_name"] == "UniqueCorpXYZ"
+
+
+async def test_list_pos_search_case_insensitive(client: AsyncClient) -> None:
+    vendor_id = await _create_vendor(client, "CaseSensitiveVendor")
+    await _create_po_for_vendor(client, vendor_id)
+
+    resp = await client.get("/api/v1/po/", params={"search": "casesensitivevendor"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+
+
+# ---------------------------------------------------------------------------
+# Filter
+# ---------------------------------------------------------------------------
+
+
+async def test_list_pos_filter_by_vendor_id(client: AsyncClient) -> None:
+    vendor_a = await _create_vendor(client, "FilterVendorA")
+    vendor_b = await _create_vendor(client, "FilterVendorB")
+    await _create_po_for_vendor(client, vendor_a)
+    await _create_po_for_vendor(client, vendor_b)
+
+    resp = await client.get("/api/v1/po/", params={"vendor_id": vendor_a})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["items"][0]["vendor_id"] == vendor_a
+
+
+async def test_list_pos_filter_by_currency(client: AsyncClient) -> None:
+    vendor_id = await _create_vendor(client, "CurrencyVendor")
+    await _create_po_for_vendor(client, vendor_id, {"currency": "USD"})
+    await _create_po_for_vendor(client, vendor_id, {"currency": "EUR"})
+
+    resp = await client.get("/api/v1/po/", params={"currency": "EUR"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["items"][0]["currency"] == "EUR"
+
+
+async def test_list_pos_combined_filters(client: AsyncClient) -> None:
+    vendor_a = await _create_vendor(client, "ComboVendorA")
+    vendor_b = await _create_vendor(client, "ComboVendorB")
+    # vendor_a: USD draft, USD pending
+    po_a1 = await _create_po_for_vendor(client, vendor_a, {"currency": "USD"})
+    await _create_po_for_vendor(client, vendor_a, {"currency": "EUR"})
+    # vendor_b: USD draft
+    await _create_po_for_vendor(client, vendor_b, {"currency": "USD"})
+
+    await client.post(f"/api/v1/po/{po_a1['id']}/submit")
+
+    resp = await client.get("/api/v1/po/", params={"vendor_id": vendor_a, "currency": "USD", "status": "PENDING"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["items"][0]["vendor_id"] == vendor_a
+    assert data["items"][0]["currency"] == "USD"
+    assert data["items"][0]["status"] == POStatus.PENDING.value
+
+
+# ---------------------------------------------------------------------------
+# Sort
+# ---------------------------------------------------------------------------
+
+
+async def test_list_pos_sort_by_issued_date_asc(client: AsyncClient) -> None:
+    vendor_id = await _create_vendor(client, "SortVendor")
+    await _create_po_for_vendor(client, vendor_id, {"issued_date": "2026-01-01T00:00:00Z"})
+    await _create_po_for_vendor(client, vendor_id, {"issued_date": "2026-06-01T00:00:00Z"})
+    await _create_po_for_vendor(client, vendor_id, {"issued_date": "2026-03-01T00:00:00Z"})
+
+    resp = await client.get("/api/v1/po/", params={"sort_by": "issued_date", "sort_dir": "asc"})
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert len(items) == 3
+    assert items[0]["issued_date"] < items[1]["issued_date"] < items[2]["issued_date"]
+
+
+async def test_list_pos_default_sort_created_at_desc(client: AsyncClient) -> None:
+    vendor_id = await _create_vendor(client, "DefaultSortVendor")
+    await _create_po_for_vendor(client, vendor_id)
+    await _create_po_for_vendor(client, vendor_id)
+
+    resp = await client.get("/api/v1/po/")
+    assert resp.status_code == 200
+    items = resp.json()["items"]
+    assert len(items) == 2
+    # Default is created_at desc — most recently created first
+    assert items[0]["po_number"] > items[1]["po_number"]
+
+
+async def test_list_pos_invalid_sort_by_returns_422(client: AsyncClient) -> None:
+    resp = await client.get("/api/v1/po/", params={"sort_by": "injected_column"})
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Pagination
+# ---------------------------------------------------------------------------
+
+
+async def test_list_pos_pagination(client: AsyncClient) -> None:
+    vendor_id = await _create_vendor(client, "PaginationVendor")
+    for _ in range(5):
+        await _create_po_for_vendor(client, vendor_id)
+
+    resp = await client.get("/api/v1/po/", params={"page": 1, "page_size": 2})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 5
+    assert data["page"] == 1
+    assert data["page_size"] == 2
+    assert len(data["items"]) == 2
+
+
+async def test_list_pos_page_beyond_last_returns_empty(client: AsyncClient) -> None:
+    vendor_id = await _create_vendor(client, "EmptyPageVendor")
+    await _create_po_for_vendor(client, vendor_id)
+
+    resp = await client.get("/api/v1/po/", params={"page": 99, "page_size": 20})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1
+    assert len(data["items"]) == 0
+
+
+async def test_list_pos_empty_search_returns_all(client: AsyncClient) -> None:
+    vendor_id = await _create_vendor(client, "EmptySearchVendor")
+    await _create_po_for_vendor(client, vendor_id)
+    await _create_po_for_vendor(client, vendor_id)
+
+    resp = await client.get("/api/v1/po/", params={"search": ""})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 2
 
 
 # ---------------------------------------------------------------------------

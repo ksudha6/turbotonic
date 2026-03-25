@@ -11,6 +11,7 @@
 | Vendor Status | Active or Inactive. Only Active vendors can be assigned to new POs. Deactivation does not affect existing POs. | Procurement |
 | Vendor Reactivation | Restoring an Inactive vendor to Active status. Symmetric guard to deactivation: must be INACTIVE. | Procurement |
 | Reference Data | System-managed, immutable value lists (currencies, incoterms, payment terms, countries, ports) that constrain PO fields. Served via API; frontend renders as dropdowns. | Procurement |
+| USD Exchange Rate | Static indicative rate converting a currency to USD, stored in reference data as `(currency_code, rate)` pairs. Used for approximate dashboard totals, not financial calculations. | Procurement |
 | Rejection Record | A timestamped comment captured when a vendor rejects a PO. Append-only; accumulated across reject/revise cycles. Value object owned by Purchase Order. | Procurement |
 
 ## PO Header Fields
@@ -43,6 +44,21 @@
 | Part Number | Identifier for the product or material. | Procurement |
 | Unit of Measure | The measurement unit for a line item quantity (e.g., pcs, kg, m). | Procurement |
 | HS Code | Harmonized System tariff classification code for a product. Used for customs declarations. | Trade |
+
+## Document Export
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| Reference Label | The human-readable form of a reference data code, resolved via lookup. Port labels combine city and country (e.g. "CNSHA" resolves to "Shanghai, China"). | Procurement |
+| PO Document Export | A PDF rendering of a PO as a clean commercial document: header, parties, trade details, line items, terms and conditions. Excludes operational data (rejection history). | Procurement |
+
+## Read Models
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| Dashboard | Read model aggregating PO counts, USD-equivalent totals by status, vendor health metrics (active/inactive counts), and recent PO activity. Not a domain aggregate. | Procurement |
+| Paginated List | A windowed query result containing items, total count, page number, and page size. Backend-enforced to avoid full dataset transfer. | Procurement |
+| PO Search | Text-based lookup matching against po_number, vendor_name, and buyer_name. Case-insensitive substring match, server-side. | Procurement |
 
 ## Compliance (deferred)
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 # Reference Data: system-managed value lists constraining PO fields.
 # Frontend renders these as dropdowns; backend validates against them.
 
@@ -155,3 +157,40 @@ VALID_INCOTERMS: frozenset[str] = frozenset(code for code, _ in INCOTERMS)
 VALID_PAYMENT_TERMS: frozenset[str] = frozenset(code for code, _ in PAYMENT_TERMS)
 VALID_COUNTRIES: frozenset[str] = frozenset(code for code, _ in COUNTRIES)
 VALID_PORTS: frozenset[str] = frozenset(code for code, _ in PORTS)
+
+# Static USD exchange rates: 1 unit of currency = this many USD.
+# Approximate indicative rates; not for financial calculations.
+USD_EXCHANGE_RATES: tuple[tuple[str, str], ...] = (
+    ("AED", "0.2723"),
+    ("AUD", "0.6500"),
+    ("BDT", "0.0083"),
+    ("BRL", "0.1700"),
+    ("CAD", "0.7400"),
+    ("CHF", "1.1300"),
+    ("CNY", "0.1380"),
+    ("DKK", "0.1450"),
+    ("EUR", "1.0800"),
+    ("GBP", "1.2700"),
+    ("HKD", "0.1280"),
+    ("IDR", "0.0000625"),
+    ("INR", "0.0119"),
+    ("JPY", "0.0067"),
+    ("KRW", "0.000725"),
+    ("MXN", "0.0580"),
+    ("MYR", "0.2130"),
+    ("NOK", "0.0920"),
+    ("NZD", "0.6100"),
+    ("PHP", "0.0175"),
+    ("PKR", "0.0036"),
+    ("SAR", "0.2667"),
+    ("SEK", "0.0950"),
+    ("SGD", "0.7500"),
+    ("THB", "0.0280"),
+    ("TRY", "0.0310"),
+    ("TWD", "0.0320"),
+    ("USD", "1.0000"),
+    ("VND", "0.0000400"),
+    ("ZAR", "0.0530"),
+)
+
+RATE_TO_USD: dict[str, Decimal] = {code: Decimal(rate) for code, rate in USD_EXCHANGE_RATES}

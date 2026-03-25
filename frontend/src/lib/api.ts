@@ -1,4 +1,4 @@
-import type { PurchaseOrder, PurchaseOrderInput, PurchaseOrderListItem, ReferenceData, Vendor, VendorInput, VendorListItem } from './types';
+import type { DashboardData, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, PurchaseOrderListItem, ReferenceData, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path);
@@ -32,9 +32,24 @@ async function apiPut<T>(path: string, body: unknown): Promise<T> {
 	return res.json() as Promise<T>;
 }
 
-export function listPOs(status?: string): Promise<PurchaseOrderListItem[]> {
-	const url = status ? `/api/v1/po?status=${encodeURIComponent(status)}` : '/api/v1/po';
-	return apiGet<PurchaseOrderListItem[]>(url);
+export interface POListParams {
+	search?: string;
+	status?: string;
+	vendor_id?: string;
+	currency?: string;
+	sort_by?: string;
+	sort_dir?: string;
+	page?: number;
+	page_size?: number;
+}
+
+export function listPOs(params: POListParams = {}): Promise<PaginatedPOList> {
+	const query = new URLSearchParams();
+	for (const [k, v] of Object.entries(params)) {
+		if (v !== undefined && v !== '') query.set(k, String(v));
+	}
+	const qs = query.toString();
+	return apiGet<PaginatedPOList>(qs ? `/api/v1/po/?${qs}` : '/api/v1/po/');
 }
 
 export function getPO(id: string): Promise<PurchaseOrder> {
@@ -42,7 +57,7 @@ export function getPO(id: string): Promise<PurchaseOrder> {
 }
 
 export function createPO(data: PurchaseOrderInput): Promise<PurchaseOrder> {
-	return apiPost<PurchaseOrder>('/api/v1/po', data);
+	return apiPost<PurchaseOrder>('/api/v1/po/', data);
 }
 
 export function updatePO(id: string, data: PurchaseOrderInput): Promise<PurchaseOrder> {
@@ -70,7 +85,7 @@ export function downloadPoPdf(id: string): void {
 }
 
 export function listVendors(status?: string): Promise<VendorListItem[]> {
-	const url = status ? `/api/v1/vendors?status=${encodeURIComponent(status)}` : '/api/v1/vendors';
+	const url = status ? `/api/v1/vendors/?status=${encodeURIComponent(status)}` : '/api/v1/vendors/';
 	return apiGet<VendorListItem[]>(url);
 }
 
@@ -79,7 +94,7 @@ export function getVendor(id: string): Promise<Vendor> {
 }
 
 export function createVendor(data: VendorInput): Promise<Vendor> {
-	return apiPost<Vendor>('/api/v1/vendors', data);
+	return apiPost<Vendor>('/api/v1/vendors/', data);
 }
 
 export function deactivateVendor(id: string): Promise<Vendor> {
@@ -91,5 +106,9 @@ export function reactivateVendor(id: string): Promise<Vendor> {
 }
 
 export function fetchReferenceData(): Promise<ReferenceData> {
-	return apiGet<ReferenceData>('/api/v1/reference-data');
+	return apiGet<ReferenceData>('/api/v1/reference-data/');
+}
+
+export function fetchDashboard(): Promise<DashboardData> {
+	return apiGet<DashboardData>('/api/v1/dashboard/');
 }

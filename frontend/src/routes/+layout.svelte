@@ -13,6 +13,7 @@
 	<div class="nav-inner">
 		<a href="/" class="nav-brand">Vendor Portal</a>
 		<ul class="nav-links">
+			<li><a href="/dashboard">Dashboard</a></li>
 			<li><a href="/po">Purchase Orders</a></li>
 			<li><a href="/vendors">Vendors</a></li>
 		</ul>

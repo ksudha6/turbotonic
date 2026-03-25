@@ -9,6 +9,7 @@ from src.db import get_db
 from src.domain.purchase_order import LineItem, POStatus, PurchaseOrder
 from src.domain.vendor import VendorStatus
 from src.dto import (
+    PaginatedPOList,
     PurchaseOrderCreate,
     PurchaseOrderListItem,
     PurchaseOrderResponse,
@@ -92,31 +93,64 @@ async def create_po(body: PurchaseOrderCreate, repo: RepoDep, vendor_repo: Vendo
     return po_to_response(po, vendor_name=vendor.name, vendor_country=vendor.country)
 
 
-@router.get("/", response_model=list[PurchaseOrderListItem])
+@router.get("/", response_model=PaginatedPOList)
 async def list_pos(
     repo: RepoDep,
-    vendor_repo: VendorRepoDep,
     status: str | None = None,
-) -> list[PurchaseOrderListItem]:
+    search: str | None = None,
+    vendor_id: str | None = None,
+    currency: str | None = None,
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
+    page: int = 1,
+    page_size: int = 20,
+) -> PaginatedPOList:
+    if page < 1:
+        raise HTTPException(status_code=422, detail="page must be >= 1")
+    if not (1 <= page_size <= 100):
+        raise HTTPException(status_code=422, detail="page_size must be between 1 and 100")
+    if sort_dir not in ("asc", "desc"):
+        raise HTTPException(status_code=422, detail=f"Invalid sort_dir value: {sort_dir!r}")
+
     po_status: POStatus | None = None
     if status is not None:
         try:
             po_status = POStatus(status.upper())
         except ValueError:
             raise HTTPException(status_code=422, detail=f"Invalid status value: {status!r}")
-    pos = await repo.list_pos(po_status)
-    vendors = await vendor_repo.list_vendors()
-    vendor_map: dict[str, tuple[str, str]] = {
-        v.id: (v.name, v.country) for v in vendors
-    }
-    return [
-        po_to_list_item(
-            po,
-            vendor_name=vendor_map.get(po.vendor_id, ("", ""))[0],
-            vendor_country=vendor_map.get(po.vendor_id, ("", ""))[1],
+
+    try:
+        rows, total = await repo.list_pos_paginated(
+            status=po_status,
+            vendor_id=vendor_id,
+            currency=currency,
+            search=search,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+            page=page,
+            page_size=page_size,
         )
-        for po in pos
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    items = [
+        PurchaseOrderListItem(
+            id=row["id"],
+            po_number=row["po_number"],
+            status=row["status"],
+            vendor_id=row["vendor_id"],
+            buyer_name=row["buyer_name"],
+            buyer_country=row["buyer_country"],
+            vendor_name=row["vendor_name"] or "",
+            vendor_country=row["vendor_country"] or "",
+            issued_date=row["issued_date"],
+            required_delivery_date=row["required_delivery_date"],
+            total_value=str(row["total_value"]),
+            currency=row["currency"],
+        )
+        for row in rows
     ]
+    return PaginatedPOList(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/{po_id}", response_model=PurchaseOrderResponse)

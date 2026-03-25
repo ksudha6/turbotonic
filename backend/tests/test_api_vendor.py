@@ -210,7 +210,9 @@ async def test_po_list_includes_vendor_name(client: AsyncClient) -> None:
     await _create_po(client, vendor_id=vendor["id"])
     resp = await client.get("/api/v1/po/")
     assert resp.status_code == 200
-    items = resp.json()
+    data = resp.json()
+    items = data["items"]
+    assert data["total"] == 1
     assert len(items) == 1
     assert items[0]["vendor_name"] == "List Vendor"
     assert items[0]["vendor_country"] == "JP"
