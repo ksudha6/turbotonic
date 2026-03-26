@@ -249,6 +249,21 @@ async def test_list_pos_default_sort_created_at_desc(client: AsyncClient) -> Non
     assert items[0]["po_number"] > items[1]["po_number"]
 
 
+# ---------------------------------------------------------------------------
+# page_size validation boundary
+# ---------------------------------------------------------------------------
+
+
+async def test_list_pos_page_size_200_accepted(client: AsyncClient) -> None:
+    resp = await client.get("/api/v1/po/", params={"page_size": 200})
+    assert resp.status_code == 200
+
+
+async def test_list_pos_page_size_201_rejected(client: AsyncClient) -> None:
+    resp = await client.get("/api/v1/po/", params={"page_size": 201})
+    assert resp.status_code == 422
+
+
 async def test_list_pos_invalid_sort_by_returns_422(client: AsyncClient) -> None:
     resp = await client.get("/api/v1/po/", params={"sort_by": "injected_column"})
     assert resp.status_code == 422
@@ -515,3 +530,121 @@ async def test_create_po_invalid_payment_terms_returns_422(client: AsyncClient) 
     payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "payment_terms": "NET90"}
     resp = await client.post("/api/v1/po/", json=payload)
     assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Bulk transition
+# ---------------------------------------------------------------------------
+
+
+async def test_bulk_submit_transitions_drafts_to_pending(client: AsyncClient) -> None:
+    expected_status = POStatus.PENDING.value
+    po1 = await _create_po(client)
+    po2 = await _create_po(client)
+    po3 = await _create_po(client)
+    po_ids = [po1["id"], po2["id"], po3["id"]]
+
+    resp = await client.post("/api/v1/po/bulk/transition", json={"po_ids": po_ids, "action": "submit"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["results"]) == 3
+    for result in data["results"]:
+        assert result == {"po_id": result["po_id"], "success": True, "error": None, "new_status": expected_status}
+
+
+async def test_bulk_accept_transitions_pending_to_accepted(client: AsyncClient) -> None:
+    expected_status = POStatus.ACCEPTED.value
+    po1 = await _create_po(client)
+    po2 = await _create_po(client)
+    await client.post(f"/api/v1/po/{po1['id']}/submit")
+    await client.post(f"/api/v1/po/{po2['id']}/submit")
+    po_ids = [po1["id"], po2["id"]]
+
+    resp = await client.post("/api/v1/po/bulk/transition", json={"po_ids": po_ids, "action": "accept"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["results"]) == 2
+    for result in data["results"]:
+        assert result == {"po_id": result["po_id"], "success": True, "error": None, "new_status": expected_status}
+
+
+async def test_bulk_reject_requires_comment(client: AsyncClient) -> None:
+    resp = await client.post("/api/v1/po/bulk/transition", json={"po_ids": ["some-id"], "action": "reject"})
+    assert resp.status_code == 422
+
+
+async def test_bulk_reject_with_comment_succeeds(client: AsyncClient) -> None:
+    rejection_comment = "Not acceptable"
+    expected_status = POStatus.REJECTED.value
+    po1 = await _create_po(client)
+    po2 = await _create_po(client)
+    await client.post(f"/api/v1/po/{po1['id']}/submit")
+    await client.post(f"/api/v1/po/{po2['id']}/submit")
+    po_ids = [po1["id"], po2["id"]]
+
+    resp = await client.post(
+        "/api/v1/po/bulk/transition",
+        json={"po_ids": po_ids, "action": "reject", "comment": rejection_comment},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["results"]) == 2
+    for result in data["results"]:
+        assert result == {"po_id": result["po_id"], "success": True, "error": None, "new_status": expected_status}
+
+
+async def test_bulk_transition_partial_failure(client: AsyncClient) -> None:
+    po_pending = await _create_po(client)
+    po_draft = await _create_po(client)
+    await client.post(f"/api/v1/po/{po_pending['id']}/submit")
+
+    resp = await client.post(
+        "/api/v1/po/bulk/transition",
+        json={"po_ids": [po_pending["id"], po_draft["id"]], "action": "accept"},
+    )
+    assert resp.status_code == 200
+    results = {r["po_id"]: r for r in resp.json()["results"]}
+
+    assert results[po_pending["id"]] == {
+        "po_id": po_pending["id"],
+        "success": True,
+        "error": None,
+        "new_status": POStatus.ACCEPTED.value,
+    }
+    assert results[po_draft["id"]]["success"] is False
+    assert results[po_draft["id"]]["error"] is not None
+
+
+async def test_bulk_transition_invalid_action(client: AsyncClient) -> None:
+    resp = await client.post("/api/v1/po/bulk/transition", json={"po_ids": ["some-id"], "action": "delete"})
+    assert resp.status_code == 422
+
+
+async def test_bulk_transition_empty_po_ids(client: AsyncClient) -> None:
+    resp = await client.post("/api/v1/po/bulk/transition", json={"po_ids": [], "action": "submit"})
+    assert resp.status_code == 422
+
+
+async def test_bulk_transition_nonexistent_po(client: AsyncClient) -> None:
+    nonexistent_id = "nonexistent-id"
+    po = await _create_po(client)
+
+    resp = await client.post(
+        "/api/v1/po/bulk/transition",
+        json={"po_ids": [po["id"], nonexistent_id], "action": "submit"},
+    )
+    assert resp.status_code == 200
+    results = {r["po_id"]: r for r in resp.json()["results"]}
+
+    assert results[po["id"]] == {
+        "po_id": po["id"],
+        "success": True,
+        "error": None,
+        "new_status": POStatus.PENDING.value,
+    }
+    assert results[nonexistent_id] == {
+        "po_id": nonexistent_id,
+        "success": False,
+        "error": "Purchase order not found",
+        "new_status": None,
+    }

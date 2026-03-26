@@ -1,4 +1,4 @@
-import type { DashboardData, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, PurchaseOrderListItem, ReferenceData, Vendor, VendorInput, VendorListItem } from './types';
+import type { BulkTransitionResult, DashboardData, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, PurchaseOrderListItem, ReferenceData, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path);
@@ -111,4 +111,12 @@ export function fetchReferenceData(): Promise<ReferenceData> {
 
 export function fetchDashboard(): Promise<DashboardData> {
 	return apiGet<DashboardData>('/api/v1/dashboard/');
+}
+
+export function bulkTransition(poIds: string[], action: string, comment?: string): Promise<BulkTransitionResult> {
+	return apiPost<BulkTransitionResult>('/api/v1/po/bulk/transition', {
+		po_ids: poIds,
+		action,
+		...(comment !== undefined && { comment })
+	});
 }

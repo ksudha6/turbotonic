@@ -9,6 +9,9 @@ from src.db import get_db
 from src.domain.purchase_order import LineItem, POStatus, PurchaseOrder
 from src.domain.vendor import VendorStatus
 from src.dto import (
+    BulkTransitionItemResult,
+    BulkTransitionRequest,
+    BulkTransitionResult,
     PaginatedPOList,
     PurchaseOrderCreate,
     PurchaseOrderListItem,
@@ -107,8 +110,8 @@ async def list_pos(
 ) -> PaginatedPOList:
     if page < 1:
         raise HTTPException(status_code=422, detail="page must be >= 1")
-    if not (1 <= page_size <= 100):
-        raise HTTPException(status_code=422, detail="page_size must be between 1 and 100")
+    if not (1 <= page_size <= 200):
+        raise HTTPException(status_code=422, detail="page_size must be between 1 and 200")
     if sort_dir not in ("asc", "desc"):
         raise HTTPException(status_code=422, detail=f"Invalid sort_dir value: {sort_dir!r}")
 
@@ -151,6 +154,33 @@ async def list_pos(
         for row in rows
     ]
     return PaginatedPOList(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.post("/bulk/transition", response_model=BulkTransitionResult)
+async def bulk_transition(body: BulkTransitionRequest) -> BulkTransitionResult:
+    results: list[BulkTransitionItemResult] = []
+    for po_id in body.po_ids:
+        async with get_db() as conn:
+            await conn.execute("PRAGMA foreign_keys = ON")
+            repo = PurchaseOrderRepository(conn)
+            po = await repo.get(po_id)
+            if po is None:
+                results.append(BulkTransitionItemResult(po_id=po_id, success=False, error="Purchase order not found"))
+                continue
+            try:
+                if body.action == "submit":
+                    po.submit()
+                elif body.action == "accept":
+                    po.accept()
+                elif body.action == "reject":
+                    po.reject(body.comment)
+                elif body.action == "resubmit":
+                    po.resubmit()
+                await repo.save(po)
+                results.append(BulkTransitionItemResult(po_id=po_id, success=True, new_status=po.status.value))
+            except ValueError as exc:
+                results.append(BulkTransitionItemResult(po_id=po_id, success=False, error=str(exc)))
+    return BulkTransitionResult(results=results)
 
 
 @router.get("/{po_id}", response_model=PurchaseOrderResponse)

@@ -144,3 +144,14 @@ export interface DashboardData {
 	vendor_summary: VendorSummary;
 	recent_pos: RecentPO[];
 }
+
+export interface BulkTransitionItemResult {
+	po_id: string;
+	success: boolean;
+	error: string | null;
+	new_status: string | null;
+}
+
+export interface BulkTransitionResult {
+	results: BulkTransitionItemResult[];
+}

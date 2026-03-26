@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 from src.domain.purchase_order import LineItem, PurchaseOrder, RejectionRecord
 
@@ -87,6 +87,51 @@ class PurchaseOrderUpdate(BaseModel):
         if not v:
             raise ValueError("at least one line item is required")
         return v
+
+
+_VALID_BULK_ACTIONS: tuple[str, ...] = ("submit", "accept", "reject", "resubmit")
+
+
+class BulkTransitionRequest(BaseModel):
+    po_ids: list[str]
+    action: str  # one of: submit, accept, reject, resubmit
+    comment: str | None = None
+
+    @field_validator("action")
+    @classmethod
+    def action_must_be_valid(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("action must not be empty or whitespace-only")
+        if v not in _VALID_BULK_ACTIONS:
+            raise ValueError(f"action must be one of: {', '.join(_VALID_BULK_ACTIONS)}")
+        return v
+
+    @field_validator("po_ids")
+    @classmethod
+    def po_ids_not_empty(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("po_ids must not be empty")
+        if len(v) > 200:
+            raise ValueError("po_ids must contain at most 200 items")
+        return v
+
+    @model_validator(mode="after")
+    def reject_requires_comment(self) -> BulkTransitionRequest:
+        if self.action == "reject":
+            if not self.comment or not self.comment.strip():
+                raise ValueError("comment is required and must not be empty when action is 'reject'")
+        return self
+
+
+class BulkTransitionItemResult(BaseModel):
+    po_id: str
+    success: bool
+    error: str | None = None
+    new_status: str | None = None
+
+
+class BulkTransitionResult(BaseModel):
+    results: list[BulkTransitionItemResult]
 
 
 class RejectRequest(BaseModel):

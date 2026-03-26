@@ -2,10 +2,10 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/stores';
-	import { listPOs, listVendors, fetchReferenceData } from '$lib/api';
+	import { listPOs, listVendors, fetchReferenceData, bulkTransition } from '$lib/api';
 	import type { POListParams } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
-	import type { PurchaseOrderListItem, VendorListItem, ReferenceDataItem } from '$lib/types';
+	import type { BulkTransitionItemResult, PurchaseOrderListItem, VendorListItem, ReferenceDataItem } from '$lib/types';
 
 	let search: string = $state('');
 	let debouncedSearch: string = $state('');
@@ -22,6 +22,14 @@
 	let vendors: VendorListItem[] = $state([]);
 	let currencies: ReferenceDataItem[] = $state([]);
 
+	let selectedIds: Set<string> = $state(new Set());
+	const allSelected = $derived(pos.length > 0 && pos.every(po => selectedIds.has(po.id)));
+
+	let bulkLoading: boolean = $state(false);
+	let bulkMessage: string = $state('');
+	let rejectComment: string = $state('');
+	let showRejectModal: boolean = $state(false);
+
 	let debounceTimer: ReturnType<typeof setTimeout>;
 	$effect(() => {
 		const s = search;
@@ -33,17 +41,40 @@
 		return () => clearTimeout(debounceTimer);
 	});
 
+	let pageSizeInitialized = false;
+	$effect(() => {
+		const _ = pageSize;
+		if (!pageSizeInitialized) {
+			pageSizeInitialized = true;
+			return;
+		}
+		page = 1;
+	});
+
 	let initialized = false;
 	$effect(() => {
 		// Touch all reactive dependencies
 		debouncedSearch; selectedStatus; selectedVendor; selectedCurrency;
-		sortBy; sortDir; page;
+		sortBy; sortDir; page; pageSize;
 
 		if (!initialized) {
 			initialized = true;
 			return;
 		}
 		fetchPOs();
+	});
+
+	let selectionClearInitialized = false;
+	$effect(() => {
+		// Touch all context-change dependencies
+		debouncedSearch; selectedStatus; selectedVendor; selectedCurrency;
+		sortBy; sortDir; page; pageSize;
+
+		if (!selectionClearInitialized) {
+			selectionClearInitialized = true;
+			return;
+		}
+		selectedIds = new Set();
 	});
 
 	onMount(async () => {
@@ -56,6 +87,7 @@
 		sortBy = params.get('sort_by') ?? 'created_at';
 		sortDir = params.get('sort_dir') ?? 'desc';
 		page = parseInt(params.get('page') ?? '1', 10);
+		pageSize = parseInt(params.get('page_size') ?? '20', 10);
 
 		const [vendorList, refData] = await Promise.all([
 			listVendors(),
@@ -78,6 +110,7 @@
 			if (sortBy !== 'created_at') params.sort_by = sortBy;
 			if (sortDir !== 'desc') params.sort_dir = sortDir;
 			if (page > 1) params.page = page;
+			params.page_size = pageSize;
 
 			const result = await listPOs(params);
 			pos = result.items;
@@ -124,6 +157,48 @@
 	function formatValue(value: string, currency: string): string {
 		return `${parseFloat(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
 	}
+
+	async function handleBulkAction(action: string) {
+		if (action === 'reject') {
+			showRejectModal = true;
+			return;
+		}
+		await executeBulkAction(action);
+	}
+
+	async function executeBulkAction(action: string, comment?: string) {
+		bulkLoading = true;
+		bulkMessage = '';
+		try {
+			const ids = [...selectedIds];
+			const result = await bulkTransition(ids, action, comment);
+			const succeeded = result.results.filter((r: BulkTransitionItemResult) => r.success).length;
+			const failed = result.results.filter((r: BulkTransitionItemResult) => !r.success).length;
+			if (failed === 0) {
+				bulkMessage = `${succeeded} PO(s) updated`;
+			} else {
+				bulkMessage = `${succeeded} updated, ${failed} failed`;
+			}
+			selectedIds = new Set();
+			showRejectModal = false;
+			rejectComment = '';
+			await fetchPOs();
+		} catch {
+			bulkMessage = 'Bulk action failed';
+		} finally {
+			bulkLoading = false;
+		}
+	}
+
+	async function confirmBulkReject() {
+		if (!rejectComment.trim()) return;
+		await executeBulkAction('reject', rejectComment.trim());
+	}
+
+	function cancelRejectModal() {
+		showRejectModal = false;
+		rejectComment = '';
+	}
 </script>
 
 <div class="page-header">
@@ -165,10 +240,33 @@
 {:else if pos.length === 0}
 	<p>No purchase orders found.</p>
 {:else}
+	{#if selectedIds.size > 0}
+		<div class="bulk-toolbar">
+			<span class="selection-count">{selectedIds.size} selected</span>
+			<div class="bulk-actions">
+				<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction('submit')}>Submit</button>
+				<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction('accept')}>Accept</button>
+				<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction('reject')}>Reject</button>
+				<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction('resubmit')}>Resubmit</button>
+			</div>
+		</div>
+	{/if}
+	{#if bulkMessage}
+		<div class="bulk-message">{bulkMessage}</div>
+	{/if}
 	<div class="card">
 		<table class="table">
 			<thead>
 				<tr>
+					<th class="checkbox-col">
+						<input type="checkbox" checked={allSelected} onchange={() => {
+							if (allSelected) {
+								selectedIds = new Set();
+							} else {
+								selectedIds = new Set(pos.map(p => p.id));
+							}
+						}} />
+					</th>
 					<th class="sortable" onclick={() => toggleSort('po_number')}>
 						PO Number {sortBy === 'po_number' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
 					</th>
@@ -188,6 +286,13 @@
 			<tbody>
 				{#each pos as po}
 					<tr onclick={() => goto(`/po/${po.id}`)}>
+						<td class="checkbox-col" onclick={(e) => e.stopPropagation()}>
+							<input type="checkbox" checked={selectedIds.has(po.id)} onchange={() => {
+								const next = new Set(selectedIds);
+								if (next.has(po.id)) { next.delete(po.id); } else { next.add(po.id); }
+								selectedIds = next;
+							}} />
+						</td>
 						<td>{po.po_number}</td>
 						<td>{po.vendor_name}</td>
 						<td>{formatDate(po.issued_date)}</td>
@@ -202,10 +307,30 @@
 
 	<div class="pagination">
 		<span class="pagination-info">Showing {startItem}–{endItem} of {total}</span>
+		<select class="page-size-select" value={pageSize} onchange={(e) => { pageSize = parseInt(e.currentTarget.value); page = 1; }}>
+			<option value={10}>10 / page</option>
+			<option value={20}>20 / page</option>
+			<option value={50}>50 / page</option>
+			<option value={100}>100 / page</option>
+			<option value={200}>200 / page</option>
+		</select>
 		<div class="pagination-controls">
 			<button class="btn btn-secondary" disabled={page <= 1} onclick={() => page--}>Previous</button>
 			<span class="pagination-page">Page {page} of {totalPages}</span>
 			<button class="btn btn-secondary" disabled={page >= totalPages} onclick={() => page++}>Next</button>
+		</div>
+	</div>
+{/if}
+
+{#if showRejectModal}
+	<div class="modal-backdrop" role="presentation" onclick={cancelRejectModal} onkeydown={(e) => e.key === 'Escape' && cancelRejectModal()}>
+		<div class="modal" role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+			<h3>Reject {selectedIds.size} PO(s)</h3>
+			<textarea class="input" rows="3" placeholder="Rejection comment (required)" bind:value={rejectComment}></textarea>
+			<div class="modal-actions">
+				<button class="btn btn-secondary" onclick={cancelRejectModal}>Cancel</button>
+				<button class="btn btn-primary" disabled={!rejectComment.trim() || bulkLoading} onclick={confirmBulkReject}>Reject</button>
+			</div>
 		</div>
 	</div>
 {/if}
@@ -272,5 +397,75 @@
 
 	.pagination-info {
 		color: var(--gray-600);
+	}
+
+	.page-size-select {
+		width: auto;
+		font-size: var(--font-size-sm);
+	}
+
+	.checkbox-col {
+		width: 40px;
+		text-align: center;
+	}
+
+	.selection-count {
+		font-size: var(--font-size-sm);
+		color: var(--gray-600);
+		font-weight: 500;
+	}
+
+	.bulk-toolbar {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		margin-bottom: var(--space-3);
+		padding: var(--space-3);
+		background-color: var(--gray-50);
+		border-radius: var(--radius);
+	}
+
+	.bulk-actions {
+		display: flex;
+		gap: var(--space-2);
+	}
+
+	.bulk-message {
+		font-size: var(--font-size-sm);
+		color: var(--gray-600);
+		margin-bottom: var(--space-2);
+	}
+
+	.modal-backdrop {
+		position: fixed;
+		inset: 0;
+		background: rgba(0, 0, 0, 0.4);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 100;
+	}
+
+	.modal {
+		background: white;
+		padding: var(--space-6);
+		border-radius: var(--radius);
+		width: 400px;
+		max-width: 90vw;
+	}
+
+	.modal h3 {
+		margin-bottom: var(--space-3);
+	}
+
+	.modal textarea {
+		width: 100%;
+		margin-bottom: var(--space-3);
+	}
+
+	.modal-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: var(--space-2);
 	}
 </style>

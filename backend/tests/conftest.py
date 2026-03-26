@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from typing import AsyncIterator
+from unittest.mock import patch
 
 import aiosqlite
 import pytest
@@ -34,6 +36,12 @@ async def client() -> AsyncIterator[AsyncClient]:
             await conn.execute("PRAGMA foreign_keys = ON")
             yield VendorRepository(conn)
 
+        # bulk_transition calls get_db() directly; patch it in the router module
+        # so it yields the same in-memory connection used by the rest of the test.
+        @asynccontextmanager
+        async def _test_get_db(*_args, **_kwargs) -> AsyncIterator[aiosqlite.Connection]:
+            yield conn
+
         app.dependency_overrides[get_repo] = override_get_repo
         app.dependency_overrides[po_get_vendor_repo] = override_get_vendor_repo
         app.dependency_overrides[vendor_get_vendor_repo] = override_get_vendor_repo
@@ -41,7 +49,8 @@ async def client() -> AsyncIterator[AsyncClient]:
         app.dependency_overrides[dash_get_vendor_repo] = override_get_vendor_repo
 
         transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            yield ac
+        with patch("src.routers.purchase_order.get_db", _test_get_db):
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                yield ac
 
     app.dependency_overrides.clear()
