@@ -25,8 +25,29 @@
 	let selectedIds: Set<string> = $state(new Set());
 	const allSelected = $derived(pos.length > 0 && pos.every(po => selectedIds.has(po.id)));
 
+	const STATUS_ACTIONS: Record<string, string[]> = {
+		DRAFT: ['submit'],
+		PENDING: ['accept', 'reject'],
+		REJECTED: ['resubmit'],
+		REVISED: ['resubmit'],
+		ACCEPTED: [],
+	};
+
+	const selectedStatuses = $derived(new Set(
+		pos.filter(po => selectedIds.has(po.id)).map(po => po.status)
+	));
+
+	const validActions: string[] = $derived.by(() => {
+		const statuses = [...selectedStatuses];
+		if (statuses.length === 0) return [];
+		const actionSets = statuses.map(s => new Set(STATUS_ACTIONS[s] ?? []));
+		const first = actionSets[0];
+		return [...first].filter(action => actionSets.every(set => set.has(action)));
+	});
+
 	let bulkLoading: boolean = $state(false);
 	let bulkMessage: string = $state('');
+	let bulkHadFailures: boolean = $state(false);
 	let rejectComment: string = $state('');
 	let showRejectModal: boolean = $state(false);
 
@@ -174,6 +195,7 @@
 			const result = await bulkTransition(ids, action, comment);
 			const succeeded = result.results.filter((r: BulkTransitionItemResult) => r.success).length;
 			const failed = result.results.filter((r: BulkTransitionItemResult) => !r.success).length;
+			bulkHadFailures = failed > 0;
 			if (failed === 0) {
 				bulkMessage = `${succeeded} PO(s) updated`;
 			} else {
@@ -244,15 +266,16 @@
 		<div class="bulk-toolbar">
 			<span class="selection-count">{selectedIds.size} selected</span>
 			<div class="bulk-actions">
-				<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction('submit')}>Submit</button>
-				<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction('accept')}>Accept</button>
-				<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction('reject')}>Reject</button>
-				<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction('resubmit')}>Resubmit</button>
+				{#each validActions as action}
+					<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction(action)}>
+						{action[0].toUpperCase() + action.slice(1)}
+					</button>
+				{/each}
 			</div>
 		</div>
 	{/if}
 	{#if bulkMessage}
-		<div class="bulk-message">{bulkMessage}</div>
+		<div class={bulkHadFailures ? 'bulk-message bulk-message-error' : 'bulk-message'}>{bulkMessage}</div>
 	{/if}
 	<div class="card">
 		<table class="table">
@@ -434,6 +457,12 @@
 		font-size: var(--font-size-sm);
 		color: var(--gray-600);
 		margin-bottom: var(--space-2);
+	}
+
+	.bulk-message-error {
+		color: var(--red-600, #dc2626);
+		font-weight: 600;
+		font-size: var(--font-size-base, 1rem);
 	}
 
 	.modal-backdrop {
