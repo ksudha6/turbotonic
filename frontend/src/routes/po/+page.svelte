@@ -51,6 +51,27 @@
 	let rejectComment: string = $state('');
 	let showRejectModal: boolean = $state(false);
 
+	let crossPageSelected: boolean = $state(false);
+
+	async function selectAllMatching() {
+		const params: POListParams = {};
+		if (debouncedSearch) params.search = debouncedSearch;
+		if (selectedStatus) params.status = selectedStatus;
+		if (selectedVendor) params.vendor_id = selectedVendor;
+		if (selectedCurrency) params.currency = selectedCurrency;
+		params.page_size = 200;
+		const result = await listPOs(params);
+		selectedIds = new Set(result.items.map(item => item.id));
+		crossPageSelected = true;
+	}
+
+	function clearSelection() {
+		selectedIds = new Set();
+		crossPageSelected = false;
+	}
+
+	let bulkMessageTimer: ReturnType<typeof setTimeout>;
+
 	let debounceTimer: ReturnType<typeof setTimeout>;
 	$effect(() => {
 		const s = search;
@@ -96,6 +117,7 @@
 			return;
 		}
 		selectedIds = new Set();
+		crossPageSelected = false;
 	});
 
 	onMount(async () => {
@@ -188,6 +210,7 @@
 	}
 
 	async function executeBulkAction(action: string, comment?: string) {
+		clearTimeout(bulkMessageTimer);
 		bulkLoading = true;
 		bulkMessage = '';
 		try {
@@ -201,12 +224,16 @@
 			} else {
 				bulkMessage = `${succeeded} updated, ${failed} failed`;
 			}
+			clearTimeout(bulkMessageTimer);
+			bulkMessageTimer = setTimeout(() => { bulkMessage = ''; }, 5000);
 			selectedIds = new Set();
 			showRejectModal = false;
 			rejectComment = '';
 			await fetchPOs();
 		} catch {
 			bulkMessage = 'Bulk action failed';
+			clearTimeout(bulkMessageTimer);
+			bulkMessageTimer = setTimeout(() => { bulkMessage = ''; }, 5000);
 		} finally {
 			bulkLoading = false;
 		}
@@ -265,13 +292,23 @@
 	{#if selectedIds.size > 0}
 		<div class="bulk-toolbar">
 			<span class="selection-count">{selectedIds.size} selected</span>
-			<div class="bulk-actions">
-				{#each validActions as action}
-					<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction(action)}>
-						{action[0].toUpperCase() + action.slice(1)}
-					</button>
-				{/each}
-			</div>
+			{#if allSelected && total > pos.length && !crossPageSelected}
+				<button class="btn-link" onclick={selectAllMatching}>Select all {total} matching POs</button>
+			{/if}
+			{#if crossPageSelected}
+				<button class="btn-link" onclick={clearSelection}>Clear selection</button>
+			{/if}
+			{#if validActions.length > 0}
+				<div class="bulk-actions">
+					{#each validActions as action}
+						<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction(action)}>
+							{action[0].toUpperCase() + action.slice(1)}
+						</button>
+					{/each}
+				</div>
+			{:else}
+				<span class="no-common-action">No common action for selected statuses</span>
+			{/if}
 		</div>
 	{/if}
 	{#if bulkMessage}
@@ -285,6 +322,7 @@
 						<input type="checkbox" checked={allSelected} onchange={() => {
 							if (allSelected) {
 								selectedIds = new Set();
+								crossPageSelected = false;
 							} else {
 								selectedIds = new Set(pos.map(p => p.id));
 							}
@@ -451,6 +489,26 @@
 	.bulk-actions {
 		display: flex;
 		gap: var(--space-2);
+	}
+
+	.btn-link {
+		background: none;
+		border: none;
+		color: var(--blue-600, #2563eb);
+		cursor: pointer;
+		font-size: var(--font-size-sm);
+		padding: 0;
+		text-decoration: underline;
+	}
+
+	.btn-link:hover {
+		color: var(--blue-800, #1e40af);
+	}
+
+	.no-common-action {
+		font-size: var(--font-size-sm);
+		color: var(--gray-500, #6b7280);
+		font-style: italic;
 	}
 
 	.bulk-message {
