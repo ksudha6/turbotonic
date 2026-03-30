@@ -7,7 +7,9 @@ from src.domain.reference_data import (
     CURRENCIES,
     INCOTERMS,
     PAYMENT_TERMS,
+    PO_TYPES,
     PORTS,
+    VENDOR_TYPES,
 )
 
 router = APIRouter(prefix="/api/v1/reference-data", tags=["reference-data"])
@@ -25,4 +27,6 @@ async def get_reference_data() -> dict[str, list[dict[str, str]]]:
         "payment_terms": _to_list(PAYMENT_TERMS),
         "countries": _to_list(COUNTRIES),
         "ports": _to_list(PORTS),
+        "vendor_types": _to_list(VENDOR_TYPES),
+        "po_types": _to_list(PO_TYPES),
     }

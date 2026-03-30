@@ -10,6 +10,13 @@ class VendorStatus(Enum):
     INACTIVE = "INACTIVE"
 
 
+class VendorType(Enum):
+    PROCUREMENT = "PROCUREMENT"
+    OPEX = "OPEX"
+    FREIGHT = "FREIGHT"
+    MISCELLANEOUS = "MISCELLANEOUS"
+
+
 class Vendor:
     # id owns the aggregate identity; name owns the business reference
     def __init__(
@@ -19,6 +26,7 @@ class Vendor:
         name: str,
         country: str,
         status: VendorStatus,
+        vendor_type: VendorType,
         created_at: datetime,
         updated_at: datetime,
     ) -> None:
@@ -26,6 +34,7 @@ class Vendor:
         self.name = name
         self.country = country
         self.status = status
+        self.vendor_type = vendor_type
         self._created_at = created_at
         self.updated_at = updated_at
 
@@ -38,7 +47,7 @@ class Vendor:
         return self._created_at
 
     @classmethod
-    def create(cls, *, name: str, country: str) -> Vendor:
+    def create(cls, *, name: str, country: str, vendor_type: VendorType) -> Vendor:
         if not name or not name.strip():
             raise ValueError("name must not be empty or whitespace-only")
         if not country or not country.strip():
@@ -49,6 +58,7 @@ class Vendor:
             name=name,
             country=country,
             status=VendorStatus.ACTIVE,
+            vendor_type=vendor_type,
             created_at=now,
             updated_at=now,
         )

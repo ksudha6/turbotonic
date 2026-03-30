@@ -10,6 +10,7 @@ import aiosqlite
 from src.domain.purchase_order import (
     LineItem,
     POStatus,
+    POType,
     PurchaseOrder,
     RejectionRecord,
 )
@@ -58,19 +59,20 @@ class PurchaseOrderRepository:
                 await self._conn.execute(
                     """
                     INSERT INTO purchase_orders (
-                        id, po_number, status, vendor_id, buyer_name, buyer_country,
+                        id, po_number, status, vendor_id, po_type, buyer_name, buyer_country,
                         ship_to_address, payment_terms, currency,
                         issued_date, required_delivery_date,
                         terms_and_conditions, incoterm, port_of_loading,
                         port_of_discharge, country_of_origin, country_of_destination,
                         created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         po.id,
                         po.po_number,
                         po.status.value,
                         po.vendor_id,
+                        po.po_type.value,
                         po.buyer_name,
                         po.buyer_country,
                         po.ship_to_address,
@@ -124,7 +126,7 @@ class PurchaseOrderRepository:
                 await self._conn.execute(
                     """
                     UPDATE purchase_orders SET
-                        po_number = ?, status = ?, vendor_id = ?,
+                        po_number = ?, status = ?, vendor_id = ?, po_type = ?,
                         buyer_name = ?, buyer_country = ?,
                         ship_to_address = ?, payment_terms = ?, currency = ?,
                         issued_date = ?, required_delivery_date = ?,
@@ -138,6 +140,7 @@ class PurchaseOrderRepository:
                         po.po_number,
                         po.status.value,
                         po.vendor_id,
+                        po.po_type.value,
                         po.buyer_name,
                         po.buyer_country,
                         po.ship_to_address,
@@ -286,6 +289,7 @@ class PurchaseOrderRepository:
                 p.vendor_id,
                 p.buyer_name,
                 p.buyer_country,
+                p.po_type,
                 v.name AS vendor_name,
                 v.country AS vendor_country,
                 p.issued_date,
@@ -432,6 +436,7 @@ def _reconstruct(
         id=po_row["id"],
         po_number=po_row["po_number"],
         status=POStatus(po_row["status"]),
+        po_type=POType(po_row["po_type"]),
         vendor_id=po_row["vendor_id"],
         buyer_name=po_row["buyer_name"],
         buyer_country=po_row["buyer_country"],

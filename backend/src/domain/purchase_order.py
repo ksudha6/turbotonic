@@ -23,6 +23,11 @@ class POStatus(Enum):
     REVISED = "REVISED"
 
 
+class POType(Enum):
+    PROCUREMENT = "PROCUREMENT"
+    OPEX = "OPEX"
+
+
 @dataclass
 class LineItem:
     part_number: str
@@ -56,6 +61,7 @@ class PurchaseOrder:
         id: str,
         po_number: str,
         status: POStatus,
+        po_type: POType,
         vendor_id: str,
         buyer_name: str,
         buyer_country: str,
@@ -78,6 +84,7 @@ class PurchaseOrder:
         self._id = id
         self._po_number = po_number
         self.status = status
+        self.po_type = po_type
         self.vendor_id = vendor_id
         self.buyer_name = buyer_name
         self.buyer_country = buyer_country
@@ -167,6 +174,7 @@ class PurchaseOrder:
         country_of_origin: str,
         country_of_destination: str,
         line_items: list[LineItem],
+        po_type: POType = POType.PROCUREMENT,
     ) -> PurchaseOrder:
         cls._validate_reference_fields(
             currency=currency,
@@ -185,6 +193,7 @@ class PurchaseOrder:
             id=str(uuid4()),
             po_number=po_number,
             status=POStatus.DRAFT,
+            po_type=po_type,
             vendor_id=vendor_id,
             buyer_name=buyer_name,
             buyer_country=buyer_country,

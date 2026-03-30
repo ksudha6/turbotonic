@@ -2,14 +2,15 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf } from '$lib/api';
+	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf, createInvoice, listInvoicesByPO } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import RejectDialog from '$lib/components/RejectDialog.svelte';
-	import type { PurchaseOrder } from '$lib/types';
+	import type { PurchaseOrder, InvoiceListItem } from '$lib/types';
 
 	let po: PurchaseOrder | null = $state(null);
 	let loading: boolean = $state(true);
 	let showRejectDialog: boolean = $state(false);
+	let invoices: InvoiceListItem[] = $state([]);
 
 	const id: string = $page.params.id ?? '';
 
@@ -17,6 +18,7 @@
 		loading = true;
 		try {
 			po = await getPO(id);
+			invoices = await listInvoicesByPO(id);
 		} finally {
 			loading = false;
 		}
@@ -45,6 +47,11 @@
 	async function handleResubmit() {
 		await resubmitPO(id);
 		await fetchPO();
+	}
+
+	async function handleCreateInvoice() {
+		const invoice = await createInvoice(id);
+		goto(`/invoice/${invoice.id}`);
 	}
 
 	function formatDate(dateStr: string): string {
@@ -193,6 +200,32 @@
 		</div>
 	{/if}
 
+	{#if invoices.length > 0}
+		<div class="section card">
+			<h2>Invoices</h2>
+			<table class="table">
+				<thead>
+					<tr>
+						<th>Invoice #</th>
+						<th>Status</th>
+						<th>Subtotal</th>
+						<th>Created</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each invoices as inv}
+						<tr>
+							<td><a href="/invoice/{inv.id}">{inv.invoice_number}</a></td>
+							<td><StatusPill status={inv.status} /></td>
+							<td>{formatValue(inv.subtotal, po.currency)}</td>
+							<td>{formatDate(inv.created_at)}</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
+
 	<div class="actions">
 		<button class="btn btn-secondary" onclick={() => downloadPoPdf(id)}>Download PDF</button>
 		{#if po.status === 'DRAFT'}
@@ -206,7 +239,11 @@
 		{:else if po.status === 'REVISED'}
 			<button class="btn btn-primary" onclick={handleResubmit}>Resubmit</button>
 		{:else if po.status === 'ACCEPTED'}
-			<p class="accepted-message">This PO has been accepted.</p>
+			{#if po.po_type === 'PROCUREMENT'}
+				<button class="btn btn-primary" onclick={handleCreateInvoice}>Create Invoice</button>
+			{:else}
+				<p class="accepted-message">This PO has been accepted.</p>
+			{/if}
 		{/if}
 	</div>
 

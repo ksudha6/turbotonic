@@ -2,11 +2,15 @@ export type POStatus = 'DRAFT' | 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'REVISED'
 
 export type VendorStatus = 'ACTIVE' | 'INACTIVE';
 
+export type VendorType = 'PROCUREMENT' | 'OPEX' | 'FREIGHT' | 'MISCELLANEOUS';
+export type POType = 'PROCUREMENT' | 'OPEX';
+
 export interface VendorListItem {
 	id: string;
 	name: string;
 	country: string;
 	status: VendorStatus;
+	vendor_type: VendorType;
 }
 
 export interface Vendor {
@@ -14,6 +18,7 @@ export interface Vendor {
 	name: string;
 	country: string;
 	status: VendorStatus;
+	vendor_type: VendorType;
 	created_at: string;
 	updated_at: string;
 }
@@ -21,6 +26,7 @@ export interface Vendor {
 export interface VendorInput {
 	name: string;
 	country: string;
+	vendor_type: VendorType;
 }
 
 export interface LineItem {
@@ -42,6 +48,7 @@ export interface PurchaseOrderListItem {
 	id: string;
 	po_number: string;
 	status: POStatus;
+	po_type: POType;
 	vendor_id: string;
 	buyer_name: string;
 	buyer_country: string;
@@ -96,10 +103,13 @@ export interface ReferenceData {
 	payment_terms: ReferenceDataItem[];
 	countries: ReferenceDataItem[];
 	ports: ReferenceDataItem[];
+	vendor_types: ReferenceDataItem[];
+	po_types: ReferenceDataItem[];
 }
 
 export interface PurchaseOrderInput {
 	po_number: string;
+	po_type: POType;
 	vendor_id: string;
 	buyer_name: string;
 	buyer_country: string;
@@ -154,4 +164,36 @@ export interface BulkTransitionItemResult {
 
 export interface BulkTransitionResult {
 	results: BulkTransitionItemResult[];
+}
+
+export type InvoiceStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PAID' | 'DISPUTED';
+
+export interface InvoiceLineItem {
+	part_number: string;
+	description: string;
+	quantity: number;
+	uom: string;
+	unit_price: string;
+}
+
+export interface InvoiceListItem {
+	id: string;
+	invoice_number: string;
+	status: InvoiceStatus;
+	subtotal: string;
+	created_at: string;
+}
+
+export interface Invoice {
+	id: string;
+	invoice_number: string;
+	po_id: string;
+	status: InvoiceStatus;
+	payment_terms: string;
+	currency: string;
+	line_items: InvoiceLineItem[];
+	subtotal: string;
+	dispute_reason: string;
+	created_at: string;
+	updated_at: string;
 }

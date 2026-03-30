@@ -60,6 +60,51 @@
 | Paginated List | A windowed query result containing items, total count, page number, and page size. Backend-enforced to avoid full dataset transfer. | Procurement |
 | PO Search | Text-based lookup matching against po_number, vendor_name, and buyer_name. Case-insensitive substring match, server-side. | Procurement |
 
+## Bulk Operations
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| Bulk Action | A single command (submit, accept, reject) applied to multiple selected POs. Only transitions common to all selected statuses are offered. | Procurement |
+| Cross-Page Selection | Selecting all POs matching current filters across all pages, not just the visible page. Fetched via the list endpoint with a large page size. Capped at 200 IDs until a dedicated IDs-only endpoint exists. | Procurement |
+| Valid Actions | The intersection of allowed transitions for all currently selected POs. When empty, no bulk action buttons appear and an explanatory hint is shown. | Procurement |
+
+## Vendor Classification
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| Vendor Type | Classification of a vendor: Procurement, OpEx, Freight, Miscellaneous. Required on creation. Constrains which POs the vendor can be assigned to. | Procurement |
+| PO Type | Classification of a purchase order: Procurement or OpEx. Required on creation (default Procurement), immutable after creation. Vendor type must match PO type. | Procurement |
+
+## Invoicing
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| Invoice | A payment obligation created against an Accepted Procurement PO. Pre-populated from PO line items, payment terms, and currency. Aggregate root. | Invoicing |
+| Invoice Number | Unique system-generated identifier. Format: `INV-YYYYMMDD-XXXX`, sequential per day. | Invoicing |
+| Invoice Status | Draft, Submitted, Approved, Paid, Disputed. | Invoicing |
+| Invoice Line Item | A line copied from the PO: part number, description, quantity, UoM, unit price. Child of Invoice. | Invoicing |
+| Dispute Reason | Mandatory text captured when an invoice is disputed. Stored on the invoice. | Invoicing |
+
+### Invoice Lifecycle
+
+| Status | Definition |
+|--------|-----------|
+| Draft | Invoice created, not yet submitted for approval. |
+| Submitted | Invoice sent for buyer approval. |
+| Approved | Buyer approved the invoice. |
+| Paid | Payment completed. Terminal. |
+| Disputed | Buyer disputes the invoice with a mandatory reason. |
+
+### Invoice Status Transitions
+
+| From | To | Trigger |
+|------|----|---------|
+| Draft | Submitted | Invoice submitted for approval |
+| Submitted | Approved | Buyer approves |
+| Submitted | Disputed | Buyer disputes with reason |
+| Approved | Paid | Payment confirmed |
+| Disputed | Submitted | Dispute resolved, invoice resubmitted |
+
 ## Compliance (deferred)
 
 | Term | Definition | Bounded Context |
@@ -90,7 +135,7 @@
 |--------|-----------|
 | Draft | PO is being composed, not yet visible to vendor. |
 | Pending | PO submitted to vendor, awaiting accept or reject. |
-| Accepted | Vendor formally accepted. Terminal. |
+| Accepted | Vendor formally accepted. Unlocks invoicing for Procurement POs. Terminal. |
 | Rejected | Vendor rejected with mandatory comment. |
 | Revised | Previously rejected PO updated and resubmitted, awaiting vendor action. |
 

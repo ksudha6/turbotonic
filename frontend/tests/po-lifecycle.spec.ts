@@ -11,7 +11,17 @@ const REFERENCE_DATA = {
 	incoterms: [{ code: 'FOB', label: 'Free on Board' }, { code: 'CIF', label: 'Cost, Insurance and Freight' }],
 	payment_terms: [{ code: 'TT', label: 'Telegraphic Transfer' }, { code: 'LC', label: 'Letter of Credit' }],
 	countries: [{ code: 'US', label: 'United States' }, { code: 'CN', label: 'China' }],
-	ports: [{ code: 'CNSHA', label: 'Shanghai' }, { code: 'USLAX', label: 'Los Angeles' }]
+	ports: [{ code: 'CNSHA', label: 'Shanghai' }, { code: 'USLAX', label: 'Los Angeles' }],
+	vendor_types: [
+		{ code: 'PROCUREMENT', label: 'Procurement' },
+		{ code: 'OPEX', label: 'OpEx' },
+		{ code: 'FREIGHT', label: 'Freight' },
+		{ code: 'MISCELLANEOUS', label: 'Miscellaneous' },
+	],
+	po_types: [
+		{ code: 'PROCUREMENT', label: 'Procurement' },
+		{ code: 'OPEX', label: 'OpEx' },
+	]
 };
 
 const LINE_ITEM = {
@@ -29,6 +39,7 @@ function makePO(status: string, extra: object = {}) {
 		id: PO_ID,
 		po_number: 'PO-20260316-0001',
 		status,
+		po_type: 'PROCUREMENT',
 		vendor_id: 'vendor-uuid-1',
 		vendor_name: 'Acme Corp',
 		vendor_country: 'CN',
@@ -169,7 +180,7 @@ test('create PO form validates empty part number', async ({ page }) => {
 		route.fulfill({
 			status: 200,
 			contentType: 'application/json',
-			body: JSON.stringify([{ id: 'v1', name: 'Test Vendor', country: 'US', status: 'ACTIVE' }])
+			body: JSON.stringify([{ id: 'v1', name: 'Test Vendor', country: 'US', status: 'ACTIVE', vendor_type: 'PROCUREMENT' }])
 		});
 	});
 
@@ -209,7 +220,7 @@ test('create PO form rejects quantity <= 0', async ({ page }) => {
 		route.fulfill({
 			status: 200,
 			contentType: 'application/json',
-			body: JSON.stringify([{ id: 'v1', name: 'Test Vendor', country: 'US', status: 'ACTIVE' }])
+			body: JSON.stringify([{ id: 'v1', name: 'Test Vendor', country: 'US', status: 'ACTIVE', vendor_type: 'PROCUREMENT' }])
 		});
 	});
 
@@ -367,7 +378,7 @@ test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ pa
 		route.fulfill({
 			status: 200,
 			contentType: 'application/json',
-			body: JSON.stringify([{ id: 'vendor-uuid-1', name: 'Acme Corp', country: 'CN', status: 'ACTIVE' }])
+			body: JSON.stringify([{ id: 'vendor-uuid-1', name: 'Acme Corp', country: 'CN', status: 'ACTIVE', vendor_type: 'PROCUREMENT' }])
 		});
 	});
 
@@ -441,7 +452,7 @@ test('PO form renders dropdown fields from reference data', async ({ page }) => 
 		route.fulfill({
 			status: 200,
 			contentType: 'application/json',
-			body: JSON.stringify([{ id: 'vendor-uuid-1', name: 'Acme Corp', country: 'CN', status: 'ACTIVE' }])
+			body: JSON.stringify([{ id: 'vendor-uuid-1', name: 'Acme Corp', country: 'CN', status: 'ACTIVE', vendor_type: 'PROCUREMENT' }])
 		});
 	});
 

@@ -41,8 +41,8 @@ _PO_BASE: dict = {
 }
 
 
-async def _create_vendor(client: AsyncClient, name: str = "Test Vendor", country: str = "US") -> dict:
-    resp = await client.post("/api/v1/vendors/", json={"name": name, "country": country})
+async def _create_vendor(client: AsyncClient, name: str = "Test Vendor", country: str = "US", vendor_type: str = "PROCUREMENT") -> dict:
+    resp = await client.post("/api/v1/vendors/", json={"name": name, "country": country, "vendor_type": vendor_type})
     assert resp.status_code == 201
     return resp.json()
 
@@ -60,7 +60,7 @@ async def _create_po(client: AsyncClient, vendor_id: str) -> dict:
 
 
 async def test_create_vendor_returns_201(client: AsyncClient) -> None:
-    resp = await client.post("/api/v1/vendors/", json={"name": "Acme Corp", "country": "US"})
+    resp = await client.post("/api/v1/vendors/", json={"name": "Acme Corp", "country": "US", "vendor_type": "PROCUREMENT"})
     assert resp.status_code == 201
     data = resp.json()
     assert data["name"] == "Acme Corp"
@@ -70,7 +70,7 @@ async def test_create_vendor_returns_201(client: AsyncClient) -> None:
 
 
 async def test_create_vendor_rejects_empty_name(client: AsyncClient) -> None:
-    resp = await client.post("/api/v1/vendors/", json={"name": "", "country": "US"})
+    resp = await client.post("/api/v1/vendors/", json={"name": "", "country": "US", "vendor_type": "PROCUREMENT"})
     assert resp.status_code == 422
 
 
@@ -305,7 +305,7 @@ async def test_reference_data_returns_all_sets(client: AsyncClient) -> None:
     resp = await client.get("/api/v1/reference-data/")
     assert resp.status_code == 200
     data = resp.json()
-    expected_keys = {"currencies", "incoterms", "payment_terms", "countries", "ports"}
+    expected_keys = {"currencies", "incoterms", "payment_terms", "countries", "ports", "vendor_types", "po_types"}
     assert set(data.keys()) == expected_keys
     for key in expected_keys:
         assert len(data[key]) > 0

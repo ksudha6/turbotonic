@@ -5,7 +5,7 @@ from typing import Annotated, AsyncIterator
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.db import get_db
-from src.domain.vendor import Vendor, VendorStatus
+from src.domain.vendor import Vendor, VendorStatus, VendorType
 from src.vendor_dto import (
     VendorCreate,
     VendorListItem,
@@ -29,7 +29,8 @@ VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
 
 @router.post("/", response_model=VendorResponse, status_code=201)
 async def create_vendor(body: VendorCreate, repo: VendorRepoDep) -> VendorResponse:
-    vendor = Vendor.create(name=body.name, country=body.country)
+    vendor_type = VendorType(body.vendor_type)
+    vendor = Vendor.create(name=body.name, country=body.country, vendor_type=vendor_type)
     await repo.save(vendor)
     return vendor_to_response(vendor)
 
@@ -38,6 +39,7 @@ async def create_vendor(body: VendorCreate, repo: VendorRepoDep) -> VendorRespon
 async def list_vendors(
     repo: VendorRepoDep,
     status: str | None = None,
+    vendor_type: str | None = None,
 ) -> list[VendorListItem]:
     vendor_status: VendorStatus | None = None
     if status is not None:
@@ -45,7 +47,13 @@ async def list_vendors(
             vendor_status = VendorStatus(status.upper())
         except ValueError:
             raise HTTPException(status_code=422, detail=f"Invalid status value: {status!r}")
-    vendors = await repo.list_vendors(vendor_status)
+    vtype: VendorType | None = None
+    if vendor_type is not None:
+        try:
+            vtype = VendorType(vendor_type.upper())
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"Invalid vendor_type value: {vendor_type!r}")
+    vendors = await repo.list_vendors(vendor_status, vendor_type=vtype)
     return [vendor_to_list_item(v) for v in vendors]
 
 

@@ -12,6 +12,7 @@ const MOCK_DASHBOARD = {
 			id: 'uuid-1',
 			po_number: 'PO-20260324-0001',
 			status: 'PENDING',
+			po_type: 'PROCUREMENT',
 			vendor_name: 'Acme Corp',
 			total_value: '5000.00',
 			currency: 'USD',
@@ -21,6 +22,7 @@ const MOCK_DASHBOARD = {
 			id: 'uuid-2',
 			po_number: 'PO-20260324-0002',
 			status: 'DRAFT',
+			po_type: 'PROCUREMENT',
 			vendor_name: 'Widget Inc',
 			total_value: '2500.00',
 			currency: 'EUR',
@@ -94,7 +96,19 @@ test('clicking status card navigates to filtered PO list', async ({ page }) => {
 	await page.route('**/api/v1/reference-data**', (route) => {
 		route.fulfill({
 			status: 200, contentType: 'application/json',
-			body: JSON.stringify({ currencies: [], incoterms: [], payment_terms: [], countries: [], ports: [] })
+			body: JSON.stringify({
+					currencies: [], incoterms: [], payment_terms: [], countries: [], ports: [],
+					vendor_types: [
+						{ code: 'PROCUREMENT', label: 'Procurement' },
+						{ code: 'OPEX', label: 'OpEx' },
+						{ code: 'FREIGHT', label: 'Freight' },
+						{ code: 'MISCELLANEOUS', label: 'Miscellaneous' },
+					],
+					po_types: [
+						{ code: 'PROCUREMENT', label: 'Procurement' },
+						{ code: 'OPEX', label: 'OpEx' },
+					]
+				})
 		});
 	});
 
@@ -129,7 +143,8 @@ test('recent PO rows link to detail page', async ({ page }) => {
 				country_of_destination: 'US',
 				line_items: [],
 				rejection_history: [],
-				created_at: '2026-03-24T00:00:00+00:00'
+				created_at: '2026-03-24T00:00:00+00:00',
+				po_type: 'PROCUREMENT'
 			})
 		});
 	});

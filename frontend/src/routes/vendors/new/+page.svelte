@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { createVendor } from '$lib/api';
+	import type { VendorType } from '$lib/types';
 
 	let name: string = $state('');
 	let country: string = $state('');
+	let vendor_type: VendorType = $state('PROCUREMENT');
 	let submitting: boolean = $state(false);
 	let error: string = $state('');
 
@@ -22,7 +24,7 @@
 
 		submitting = true;
 		try {
-			await createVendor({ name: name.trim(), country: country.trim() });
+			await createVendor({ name: name.trim(), country: country.trim(), vendor_type });
 			goto('/vendors');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'An error occurred.';
@@ -45,6 +47,15 @@
 			<div class="form-group">
 				<label for="country">Country *</label>
 				<input id="country" class="input" type="text" required bind:value={country} />
+			</div>
+			<div class="form-group">
+				<label for="vendor_type">Vendor Type *</label>
+				<select id="vendor_type" class="select" required bind:value={vendor_type}>
+					<option value="PROCUREMENT">Procurement</option>
+					<option value="OPEX">OpEx</option>
+					<option value="FREIGHT">Freight</option>
+					<option value="MISCELLANEOUS">Miscellaneous</option>
+				</select>
 			</div>
 		</div>
 	</div>

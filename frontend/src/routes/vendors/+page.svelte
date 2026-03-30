@@ -5,12 +5,16 @@
 
 	let vendors: VendorListItem[] = $state([]);
 	let selectedStatus: string = $state('');
+	let selectedVendorType: string = $state('');
 	let loading: boolean = $state(true);
 
 	async function fetchVendors() {
 		loading = true;
 		try {
-			vendors = await listVendors(selectedStatus || undefined);
+			vendors = await listVendors({
+				status: selectedStatus || undefined,
+				vendor_type: selectedVendorType || undefined,
+			});
 		} finally {
 			loading = false;
 		}
@@ -22,6 +26,7 @@
 
 	$effect(() => {
 		selectedStatus;
+		selectedVendorType;
 		fetchVendors();
 	});
 
@@ -47,6 +52,13 @@
 		<option value="ACTIVE">Active</option>
 		<option value="INACTIVE">Inactive</option>
 	</select>
+	<select class="select" bind:value={selectedVendorType}>
+		<option value="">All Types</option>
+		<option value="PROCUREMENT">Procurement</option>
+		<option value="OPEX">OpEx</option>
+		<option value="FREIGHT">Freight</option>
+		<option value="MISCELLANEOUS">Miscellaneous</option>
+	</select>
 </div>
 
 {#if loading}
@@ -61,6 +73,7 @@
 					<th>ID</th>
 					<th>Name</th>
 					<th>Country</th>
+					<th>Type</th>
 					<th>Status</th>
 					<th></th>
 				</tr>
@@ -71,6 +84,7 @@
 						<td class="vendor-id">{vendor.id.slice(0, 8)}</td>
 						<td>{vendor.name}</td>
 						<td>{vendor.country}</td>
+						<td>{vendor.vendor_type === 'PROCUREMENT' ? 'Procurement' : vendor.vendor_type === 'OPEX' ? 'OpEx' : vendor.vendor_type === 'FREIGHT' ? 'Freight' : 'Miscellaneous'}</td>
 						<td>
 							<span class="badge {vendor.status === 'ACTIVE' ? 'badge-active' : 'badge-inactive'}">
 								{vendor.status === 'ACTIVE' ? 'Active' : 'Inactive'}
@@ -103,6 +117,8 @@
 	}
 
 	.filter-bar {
+		display: flex;
+		gap: var(--space-3);
 		margin-bottom: var(--space-4);
 	}
 

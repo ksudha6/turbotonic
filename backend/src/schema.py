@@ -27,13 +27,13 @@ async def _migrate_vendors(conn: aiosqlite.Connection) -> None:
 
     for (old_vendor_id,) in rows:
         new_id = str(uuid4())
-        # Create a vendor record using the old vendor_id as the name
+        # Create a vendor record using the old vendor_id as the name; type defaults to PROCUREMENT
         await conn.execute(
             """
-            INSERT INTO vendors (id, name, country, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO vendors (id, name, country, status, vendor_type, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (new_id, old_vendor_id, "", "ACTIVE", now, now),
+            (new_id, old_vendor_id, "", "ACTIVE", "PROCUREMENT", now, now),
         )
         # Update all POs that referenced this vendor_id string to use the new UUID
         await conn.execute(
@@ -55,6 +55,7 @@ async def init_db(conn: aiosqlite.Connection) -> None:
             po_number             TEXT UNIQUE NOT NULL,
             status                TEXT NOT NULL,
             vendor_id             TEXT NOT NULL,
+            po_type               TEXT NOT NULL,
             ship_to_address       TEXT,
             payment_terms         TEXT,
             currency              TEXT NOT NULL,
@@ -103,12 +104,44 @@ async def init_db(conn: aiosqlite.Connection) -> None:
     await conn.execute(
         """
         CREATE TABLE IF NOT EXISTS vendors (
-            id         TEXT PRIMARY KEY,
-            name       TEXT NOT NULL,
-            country    TEXT NOT NULL,
-            status     TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            id          TEXT PRIMARY KEY,
+            name        TEXT NOT NULL,
+            country     TEXT NOT NULL,
+            status      TEXT NOT NULL,
+            vendor_type TEXT NOT NULL,
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL
+        )
+        """
+    )
+
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS invoices (
+            id              TEXT PRIMARY KEY,
+            invoice_number  TEXT UNIQUE NOT NULL,
+            po_id           TEXT NOT NULL REFERENCES purchase_orders(id),
+            status          TEXT NOT NULL,
+            payment_terms   TEXT NOT NULL,
+            currency        TEXT NOT NULL,
+            dispute_reason  TEXT NOT NULL DEFAULT '',
+            created_at      TEXT NOT NULL,
+            updated_at      TEXT NOT NULL
+        )
+        """
+    )
+
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS invoice_line_items (
+            id              TEXT PRIMARY KEY,
+            invoice_id      TEXT NOT NULL REFERENCES invoices(id),
+            part_number     TEXT NOT NULL,
+            description     TEXT,
+            quantity        INTEGER NOT NULL,
+            uom             TEXT NOT NULL,
+            unit_price      TEXT NOT NULL,
+            sort_order      INTEGER NOT NULL
         )
         """
     )
@@ -118,6 +151,26 @@ async def init_db(conn: aiosqlite.Connection) -> None:
         try:
             await conn.execute(
                 f"ALTER TABLE purchase_orders ADD COLUMN {col} TEXT NOT NULL DEFAULT ''"
+            )
+        except Exception as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
+
+    # Add vendor_type to vendors table.
+    for col, default in [("vendor_type", "PROCUREMENT")]:
+        try:
+            await conn.execute(
+                f"ALTER TABLE vendors ADD COLUMN {col} TEXT NOT NULL DEFAULT '{default}'"
+            )
+        except Exception as exc:
+            if "duplicate column name" not in str(exc).lower():
+                raise
+
+    # Add po_type to purchase_orders table.
+    for col, default in [("po_type", "PROCUREMENT")]:
+        try:
+            await conn.execute(
+                f"ALTER TABLE purchase_orders ADD COLUMN {col} TEXT NOT NULL DEFAULT '{default}'"
             )
         except Exception as exc:
             if "duplicate column name" not in str(exc).lower():

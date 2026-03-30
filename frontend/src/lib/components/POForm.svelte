@@ -9,6 +9,7 @@
 	const DEFAULT_BUYER_COUNTRY = 'US';
 
 	interface InitialData {
+		po_type?: string;
 		vendor_id?: string;
 		buyer_name?: string;
 		buyer_country?: string;
@@ -75,8 +76,18 @@
 	let submitting: boolean = $state(false);
 	let error: string = $state('');
 
+	let po_type: string = $state(initialData.po_type ?? 'PROCUREMENT');
+
+	let filteredVendors = $derived(vendors.filter(v => v.vendor_type === po_type));
+
+	$effect(() => {
+		if (vendor_id && !filteredVendors.some(v => v.id === vendor_id)) {
+			vendor_id = '';
+		}
+	});
+
 	onMount(async () => {
-		[vendors, refData] = await Promise.all([listVendors('ACTIVE'), fetchReferenceData()]);
+		[vendors, refData] = await Promise.all([listVendors({ status: 'ACTIVE' }), fetchReferenceData()]);
 	});
 
 	function addLineItem() {
@@ -118,6 +129,7 @@
 
 		const data: PurchaseOrderInput = {
 			po_number: '',
+			po_type: po_type as import('$lib/types').POType,
 			total_value: '',
 			vendor_id,
 			buyer_name,
@@ -156,10 +168,17 @@
 		<h2>Purchase Order Details</h2>
 		<div class="form-grid">
 			<div class="form-group">
+				<label for="po_type">PO Type *</label>
+				<select id="po_type" class="select" required bind:value={po_type}>
+					<option value="PROCUREMENT">Procurement</option>
+					<option value="OPEX">OpEx</option>
+				</select>
+			</div>
+			<div class="form-group">
 				<label for="vendor_id">Vendor *</label>
 				<select id="vendor_id" class="select" required bind:value={vendor_id}>
 					<option value="">Select a vendor</option>
-					{#each vendors as v}
+					{#each filteredVendors as v}
 						<option value={v.id}>{v.name} ({v.country})</option>
 					{/each}
 				</select>

@@ -4,6 +4,7 @@ const PO_DRAFT = {
 	id: 'uuid-draft',
 	po_number: 'PO-20260316-0001',
 	status: 'DRAFT',
+	po_type: 'PROCUREMENT',
 	vendor_id: 'VENDOR-A',
 	vendor_name: 'Vendor A',
 	vendor_country: 'CN',
@@ -19,6 +20,7 @@ const PO_PENDING = {
 	id: 'uuid-pending',
 	po_number: 'PO-20260316-0002',
 	status: 'PENDING',
+	po_type: 'PROCUREMENT',
 	vendor_id: 'VENDOR-B',
 	vendor_name: 'Vendor B',
 	vendor_country: 'CN',
@@ -34,6 +36,7 @@ const PO_ACCEPTED = {
 	id: 'uuid-accepted',
 	po_number: 'PO-20260316-0003',
 	status: 'ACCEPTED',
+	po_type: 'PROCUREMENT',
 	vendor_id: 'VENDOR-C',
 	vendor_name: 'Vendor C',
 	vendor_country: 'CN',
@@ -50,7 +53,17 @@ const EMPTY_REF_DATA = {
 	incoterms: [],
 	payment_terms: [],
 	countries: [],
-	ports: []
+	ports: [],
+	vendor_types: [
+		{ code: 'PROCUREMENT', label: 'Procurement' },
+		{ code: 'OPEX', label: 'OpEx' },
+		{ code: 'FREIGHT', label: 'Freight' },
+		{ code: 'MISCELLANEOUS', label: 'Miscellaneous' },
+	],
+	po_types: [
+		{ code: 'PROCUREMENT', label: 'Procurement' },
+		{ code: 'OPEX', label: 'OpEx' },
+	]
 };
 
 async function mockCommonRoutes(page: import('@playwright/test').Page) {

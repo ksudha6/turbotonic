@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import aiosqlite
 
-from src.domain.vendor import Vendor, VendorStatus
+from src.domain.vendor import Vendor, VendorStatus, VendorType
 
 
 def _iso(dt: datetime) -> str:
@@ -34,20 +34,20 @@ class VendorRepository:
         if not exists:
             await self._conn.execute(
                 """
-                INSERT INTO vendors (id, name, country, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO vendors (id, name, country, status, vendor_type, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (vendor.id, vendor.name, vendor.country, vendor.status.value,
-                 _iso(vendor.created_at), _iso(vendor.updated_at)),
+                 vendor.vendor_type.value, _iso(vendor.created_at), _iso(vendor.updated_at)),
             )
         else:
             await self._conn.execute(
                 """
-                UPDATE vendors SET name = ?, country = ?, status = ?, updated_at = ?
+                UPDATE vendors SET name = ?, country = ?, status = ?, vendor_type = ?, updated_at = ?
                 WHERE id = ?
                 """,
                 (vendor.name, vendor.country, vendor.status.value,
-                 _iso(vendor.updated_at), vendor.id),
+                 vendor.vendor_type.value, _iso(vendor.updated_at), vendor.id),
             )
         await self._conn.commit()
 
@@ -61,16 +61,20 @@ class VendorRepository:
             return None
         return _reconstruct(row)
 
-    async def list_vendors(self, status: VendorStatus | None = None) -> list[Vendor]:
+    async def list_vendors(self, status: VendorStatus | None = None, *, vendor_type: VendorType | None = None) -> list[Vendor]:
         self._conn.row_factory = aiosqlite.Row
+        where_clauses: list[str] = []
+        params: list[str] = []
         if status is not None:
-            async with self._conn.execute(
-                "SELECT * FROM vendors WHERE status = ?", (status.value,)
-            ) as cursor:
-                rows = await cursor.fetchall()
-        else:
-            async with self._conn.execute("SELECT * FROM vendors") as cursor:
-                rows = await cursor.fetchall()
+            where_clauses.append("status = ?")
+            params.append(status.value)
+        if vendor_type is not None:
+            where_clauses.append("vendor_type = ?")
+            params.append(vendor_type.value)
+        where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+        query = f"SELECT * FROM vendors {where_sql}"
+        async with self._conn.execute(query, params) as cursor:
+            rows = await cursor.fetchall()
         return [_reconstruct(row) for row in rows]
 
     async def vendor_count_by_status(self) -> dict[str, int]:
@@ -88,6 +92,7 @@ def _reconstruct(row: aiosqlite.Row) -> Vendor:
         name=row["name"],
         country=row["country"],
         status=VendorStatus(row["status"]),
+        vendor_type=VendorType(row["vendor_type"]),
         created_at=_parse_dt(row["created_at"]),
         updated_at=_parse_dt(row["updated_at"]),
     )

@@ -6,21 +6,24 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
 from src.db import get_db
-from src.domain.purchase_order import LineItem, POStatus, PurchaseOrder
+from src.domain.purchase_order import LineItem, POStatus, POType, PurchaseOrder
 from src.domain.vendor import VendorStatus
 from src.dto import (
     BulkTransitionItemResult,
     BulkTransitionRequest,
     BulkTransitionResult,
+    InvoiceListItem,
     PaginatedPOList,
     PurchaseOrderCreate,
     PurchaseOrderListItem,
     PurchaseOrderResponse,
     PurchaseOrderUpdate,
     RejectRequest,
+    invoice_to_list_item,
     po_to_list_item,
     po_to_response,
 )
+from src.invoice_repository import InvoiceRepository
 from src.repository import PurchaseOrderRepository
 from src.schema import init_db
 from src.services.po_pdf import generate_po_pdf
@@ -47,6 +50,15 @@ async def get_vendor_repo() -> AsyncIterator[VendorRepository]:
 VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
 
 
+async def get_invoice_repo() -> AsyncIterator[InvoiceRepository]:
+    async with get_db() as conn:
+        await conn.execute("PRAGMA foreign_keys = ON")
+        yield InvoiceRepository(conn)
+
+
+InvoiceRepoDep = Annotated[InvoiceRepository, Depends(get_invoice_repo)]
+
+
 def _build_line_items(data: PurchaseOrderCreate | PurchaseOrderUpdate) -> list[LineItem]:
     return [
         LineItem(
@@ -69,6 +81,12 @@ async def create_po(body: PurchaseOrderCreate, repo: RepoDep, vendor_repo: Vendo
         raise HTTPException(status_code=422, detail="Vendor not found")
     if vendor.status is not VendorStatus.ACTIVE:
         raise HTTPException(status_code=422, detail="Vendor is not active")
+    po_type = POType(body.po_type)
+    if vendor.vendor_type.value != po_type.value:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Vendor type {vendor.vendor_type.value} does not match PO type {po_type.value}",
+        )
     po_number = await repo.next_po_number()
     line_items = _build_line_items(body)
     try:
@@ -89,6 +107,7 @@ async def create_po(body: PurchaseOrderCreate, repo: RepoDep, vendor_repo: Vendo
             country_of_origin=body.country_of_origin,
             country_of_destination=body.country_of_destination,
             line_items=line_items,
+            po_type=po_type,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -141,6 +160,7 @@ async def list_pos(
             id=row["id"],
             po_number=row["po_number"],
             status=row["status"],
+            po_type=row["po_type"],
             vendor_id=row["vendor_id"],
             buyer_name=row["buyer_name"],
             buyer_country=row["buyer_country"],
@@ -211,6 +231,12 @@ async def get_po_pdf(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep) -> R
     )
 
 
+@router.get("/{po_id}/invoices", response_model=list[InvoiceListItem])
+async def list_po_invoices(po_id: str, invoice_repo: InvoiceRepoDep) -> list[InvoiceListItem]:
+    invoices = await invoice_repo.list_by_po(po_id)
+    return [invoice_to_list_item(inv) for inv in invoices]
+
+
 @router.post("/{po_id}/submit", response_model=PurchaseOrderResponse)
 async def submit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
@@ -269,6 +295,11 @@ async def update_po(po_id: str, body: PurchaseOrderUpdate, repo: RepoDep, vendor
         raise HTTPException(status_code=422, detail="Vendor not found")
     if vendor.status is not VendorStatus.ACTIVE:
         raise HTTPException(status_code=422, detail="Vendor is not active")
+    if vendor.vendor_type.value != po.po_type.value:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Vendor type {vendor.vendor_type.value} does not match PO type {po.po_type.value}",
+        )
     line_items = _build_line_items(body)
     try:
         po.revise(

@@ -5,7 +5,7 @@ from httpx import AsyncClient
 
 
 async def _create_vendor(client: AsyncClient, name: str = "Test Vendor", country: str = "CN") -> dict:
-    resp = await client.post("/api/v1/vendors/", json={"name": name, "country": country})
+    resp = await client.post("/api/v1/vendors/", json={"name": name, "country": country, "vendor_type": "PROCUREMENT"})
     assert resp.status_code == 201
     return resp.json()
 

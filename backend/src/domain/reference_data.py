@@ -151,12 +151,26 @@ PORTS: tuple[tuple[str, str], ...] = (
     ("ZADUR", "Durban"),
 )
 
+VENDOR_TYPES: tuple[tuple[str, str], ...] = (
+    ("PROCUREMENT", "Procurement"),
+    ("OPEX", "OpEx"),
+    ("FREIGHT", "Freight"),
+    ("MISCELLANEOUS", "Miscellaneous"),
+)
+
+PO_TYPES: tuple[tuple[str, str], ...] = (
+    ("PROCUREMENT", "Procurement"),
+    ("OPEX", "OpEx"),
+)
+
 # Lookup sets for fast validation
 VALID_CURRENCIES: frozenset[str] = frozenset(code for code, _ in CURRENCIES)
 VALID_INCOTERMS: frozenset[str] = frozenset(code for code, _ in INCOTERMS)
 VALID_PAYMENT_TERMS: frozenset[str] = frozenset(code for code, _ in PAYMENT_TERMS)
 VALID_COUNTRIES: frozenset[str] = frozenset(code for code, _ in COUNTRIES)
 VALID_PORTS: frozenset[str] = frozenset(code for code, _ in PORTS)
+VALID_VENDOR_TYPES: frozenset[str] = frozenset(code for code, _ in VENDOR_TYPES)
+VALID_PO_TYPES: frozenset[str] = frozenset(code for code, _ in PO_TYPES)
 
 # Static USD exchange rates: 1 unit of currency = this many USD.
 # Approximate indicative rates; not for financial calculations.

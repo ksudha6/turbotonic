@@ -13,6 +13,14 @@
 				return 'badge badge-rejected';
 			case 'REVISED':
 				return 'badge badge-revised';
+			case 'SUBMITTED':
+				return 'badge badge-submitted';
+			case 'APPROVED':
+				return 'badge badge-approved';
+			case 'PAID':
+				return 'badge badge-paid';
+			case 'DISPUTED':
+				return 'badge badge-disputed';
 			default:
 				return 'badge badge-draft';
 		}
@@ -24,3 +32,26 @@
 </script>
 
 <span class={badgeClass(status)}>{displayText(status)}</span>
+
+<style>
+	:global(.badge-submitted) {
+		background-color: var(--blue-100);
+		color: var(--blue-800);
+	}
+
+	:global(.badge-approved) {
+		background-color: var(--green-100);
+		color: var(--green-800);
+	}
+
+	:global(.badge-paid) {
+		background-color: var(--green-100);
+		color: var(--green-700);
+		font-weight: 600;
+	}
+
+	:global(.badge-disputed) {
+		background-color: var(--red-100);
+		color: var(--red-800);
+	}
+</style>

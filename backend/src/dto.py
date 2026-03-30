@@ -5,6 +5,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel, field_validator, model_validator
 
+from src.domain.invoice import Invoice
+from src.domain.invoice import InvoiceLineItem as DomainInvoiceLineItem
 from src.domain.purchase_order import LineItem, PurchaseOrder, RejectionRecord
 
 
@@ -55,6 +57,7 @@ class PurchaseOrderCreate(BaseModel):
     country_of_origin: str
     country_of_destination: str
     line_items: list[LineItemCreate]
+    po_type: str = "PROCUREMENT"
 
     @field_validator("line_items")
     @classmethod
@@ -62,6 +65,14 @@ class PurchaseOrderCreate(BaseModel):
         if not v:
             raise ValueError("at least one line item is required")
         return v
+
+    @field_validator("po_type")
+    @classmethod
+    def po_type_valid(cls, v: str) -> str:
+        upper = v.upper()
+        if upper not in {"PROCUREMENT", "OPEX"}:
+            raise ValueError("po_type must be one of: PROCUREMENT, OPEX")
+        return upper
 
 
 class PurchaseOrderUpdate(BaseModel):
@@ -165,6 +176,7 @@ class PurchaseOrderResponse(BaseModel):
     id: str
     po_number: str
     status: str
+    po_type: str
     vendor_id: str
     buyer_name: str
     buyer_country: str
@@ -192,6 +204,7 @@ class PurchaseOrderListItem(BaseModel):
     id: str
     po_number: str
     status: str
+    po_type: str
     vendor_id: str
     buyer_name: str
     buyer_country: str
@@ -234,6 +247,7 @@ def po_to_response(po: PurchaseOrder, vendor_name: str = "", vendor_country: str
         id=po.id,
         po_number=po.po_number,
         status=po.status.value,
+        po_type=po.po_type.value,
         vendor_id=po.vendor_id,
         buyer_name=po.buyer_name,
         buyer_country=po.buyer_country,
@@ -263,6 +277,7 @@ def po_to_list_item(po: PurchaseOrder, vendor_name: str = "", vendor_country: st
         id=po.id,
         po_number=po.po_number,
         status=po.status.value,
+        po_type=po.po_type.value,
         vendor_id=po.vendor_id,
         buyer_name=po.buyer_name,
         buyer_country=po.buyer_country,
@@ -272,4 +287,85 @@ def po_to_list_item(po: PurchaseOrder, vendor_name: str = "", vendor_country: st
         required_delivery_date=po.required_delivery_date,
         total_value=str(po.total_value),
         currency=po.currency,
+    )
+
+
+class InvoiceCreate(BaseModel):
+    po_id: str
+
+
+class InvoiceLineItemResponse(BaseModel):
+    part_number: str
+    description: str
+    quantity: int
+    uom: str
+    unit_price: str
+
+
+class InvoiceResponse(BaseModel):
+    id: str
+    invoice_number: str
+    po_id: str
+    status: str
+    payment_terms: str
+    currency: str
+    line_items: list[InvoiceLineItemResponse]
+    subtotal: str
+    dispute_reason: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class InvoiceListItem(BaseModel):
+    id: str
+    invoice_number: str
+    status: str
+    subtotal: str
+    created_at: datetime
+
+
+class DisputeRequest(BaseModel):
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def reason_not_whitespace(cls, v: str) -> str:
+        stripped = v.strip()
+        if not stripped:
+            raise ValueError("reason must not be empty or whitespace-only")
+        return stripped
+
+
+def invoice_to_response(inv: Invoice) -> InvoiceResponse:
+    return InvoiceResponse(
+        id=inv.id,
+        invoice_number=inv.invoice_number,
+        po_id=inv.po_id,
+        status=inv.status.value,
+        payment_terms=inv.payment_terms,
+        currency=inv.currency,
+        line_items=[
+            InvoiceLineItemResponse(
+                part_number=li.part_number,
+                description=li.description,
+                quantity=li.quantity,
+                uom=li.uom,
+                unit_price=str(li.unit_price),
+            )
+            for li in inv.line_items
+        ],
+        subtotal=str(inv.subtotal),
+        dispute_reason=inv.dispute_reason,
+        created_at=inv.created_at,
+        updated_at=inv.updated_at,
+    )
+
+
+def invoice_to_list_item(inv: Invoice) -> InvoiceListItem:
+    return InvoiceListItem(
+        id=inv.id,
+        invoice_number=inv.invoice_number,
+        status=inv.status.value,
+        subtotal=str(inv.subtotal),
+        created_at=inv.created_at,
     )

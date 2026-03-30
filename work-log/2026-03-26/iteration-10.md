@@ -50,3 +50,9 @@ Bulk action UX refinements. The toolbar needs cross-page selection, auto-clearin
 
 **Scratch tests** (`frontend/tests/scratch/iteration-010/`):
 - Select one Accepted PO and one Pending PO, screenshot showing hint text in toolbar
+
+---
+
+## Notes
+
+All three tasks complete. Cross-page selection fetches up to 200 matching IDs using the existing list endpoint with filters applied. Bulk result messages auto-dismiss after 5 seconds with timer cleanup on new actions. The toolbar now shows an italic hint when selected POs share no common transition. The 200-ID cap is a known limit; a dedicated IDs-only endpoint is noted for later.

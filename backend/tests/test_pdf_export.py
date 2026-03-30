@@ -53,7 +53,7 @@ _PO_PAYLOAD: dict = {
 
 async def _create_po(client: AsyncClient, payload: dict | None = None) -> dict:
     p = dict(payload or _PO_PAYLOAD)
-    vendor_resp = await client.post("/api/v1/vendors/", json={"name": "Test Vendor", "country": "US"})
+    vendor_resp = await client.post("/api/v1/vendors/", json={"name": "Test Vendor", "country": "US", "vendor_type": "PROCUREMENT"})
     assert vendor_resp.status_code == 201
     p["vendor_id"] = vendor_resp.json()["id"]
     resp = await client.post("/api/v1/po/", json=p)

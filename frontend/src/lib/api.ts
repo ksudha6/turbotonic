@@ -1,4 +1,4 @@
-import type { BulkTransitionResult, DashboardData, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, PurchaseOrderListItem, ReferenceData, Vendor, VendorInput, VendorListItem } from './types';
+import type { BulkTransitionResult, DashboardData, Invoice, InvoiceListItem, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, ReferenceData, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path);
@@ -84,9 +84,12 @@ export function downloadPoPdf(id: string): void {
 	window.open(`/api/v1/po/${id}/pdf`, '_blank');
 }
 
-export function listVendors(status?: string): Promise<VendorListItem[]> {
-	const url = status ? `/api/v1/vendors/?status=${encodeURIComponent(status)}` : '/api/v1/vendors/';
-	return apiGet<VendorListItem[]>(url);
+export function listVendors(params?: { status?: string; vendor_type?: string }): Promise<VendorListItem[]> {
+	const query = new URLSearchParams();
+	if (params?.status) query.set('status', params.status);
+	if (params?.vendor_type) query.set('vendor_type', params.vendor_type);
+	const qs = query.toString();
+	return apiGet<VendorListItem[]>(qs ? `/api/v1/vendors/?${qs}` : '/api/v1/vendors/');
 }
 
 export function getVendor(id: string): Promise<Vendor> {
@@ -119,4 +122,36 @@ export function bulkTransition(poIds: string[], action: string, comment?: string
 		action,
 		...(comment !== undefined && { comment })
 	});
+}
+
+export function createInvoice(poId: string): Promise<Invoice> {
+	return apiPost<Invoice>('/api/v1/invoices/', { po_id: poId });
+}
+
+export function getInvoice(id: string): Promise<Invoice> {
+	return apiGet<Invoice>(`/api/v1/invoices/${id}`);
+}
+
+export function listInvoicesByPO(poId: string): Promise<InvoiceListItem[]> {
+	return apiGet<InvoiceListItem[]>(`/api/v1/po/${poId}/invoices`);
+}
+
+export function submitInvoice(id: string): Promise<Invoice> {
+	return apiPost<Invoice>(`/api/v1/invoices/${id}/submit`);
+}
+
+export function approveInvoice(id: string): Promise<Invoice> {
+	return apiPost<Invoice>(`/api/v1/invoices/${id}/approve`);
+}
+
+export function payInvoice(id: string): Promise<Invoice> {
+	return apiPost<Invoice>(`/api/v1/invoices/${id}/pay`);
+}
+
+export function disputeInvoice(id: string, reason: string): Promise<Invoice> {
+	return apiPost<Invoice>(`/api/v1/invoices/${id}/dispute`, { reason });
+}
+
+export function resolveInvoice(id: string): Promise<Invoice> {
+	return apiPost<Invoice>(`/api/v1/invoices/${id}/resolve`);
 }

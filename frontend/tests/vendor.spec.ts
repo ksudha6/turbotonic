@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-const VENDOR_ACTIVE = { id: 'v1', name: 'Acme Corp', country: 'CN', status: 'ACTIVE' };
-const VENDOR_INACTIVE = { id: 'v2', name: 'Beta LLC', country: 'US', status: 'INACTIVE' };
+const VENDOR_ACTIVE = { id: 'v1', name: 'Acme Corp', country: 'CN', status: 'ACTIVE', vendor_type: 'PROCUREMENT' };
+const VENDOR_INACTIVE = { id: 'v2', name: 'Beta LLC', country: 'US', status: 'INACTIVE', vendor_type: 'PROCUREMENT' };
 
 test('vendor list loads and displays vendors', async ({ page }) => {
 	await page.route('**/api/v1/vendors**', (route) => {
@@ -28,7 +28,7 @@ test('vendor list loads and displays vendors', async ({ page }) => {
 });
 
 test('create vendor form submits and redirects', async ({ page }) => {
-	const createdVendor = { id: 'v3', name: 'New Vendor', country: 'JP', status: 'ACTIVE' };
+	const createdVendor = { id: 'v3', name: 'New Vendor', country: 'JP', status: 'ACTIVE', vendor_type: 'PROCUREMENT' };
 
 	await page.route('**/api/v1/vendors', (route) => {
 		const method = route.request().method();
@@ -127,7 +127,17 @@ test('PO form prefills buyer fields with defaults', async ({ page }) => {
 				incoterms: [{ code: 'FOB', label: 'Free on Board' }],
 				payment_terms: [{ code: 'TT', label: 'Telegraphic Transfer' }],
 				countries: [{ code: 'US', label: 'United States' }, { code: 'CN', label: 'China' }],
-				ports: [{ code: 'CNSHA', label: 'Shanghai' }, { code: 'USLAX', label: 'Los Angeles' }]
+				ports: [{ code: 'CNSHA', label: 'Shanghai' }, { code: 'USLAX', label: 'Los Angeles' }],
+				vendor_types: [
+					{ code: 'PROCUREMENT', label: 'Procurement' },
+					{ code: 'OPEX', label: 'OpEx' },
+					{ code: 'FREIGHT', label: 'Freight' },
+					{ code: 'MISCELLANEOUS', label: 'Miscellaneous' },
+				],
+				po_types: [
+					{ code: 'PROCUREMENT', label: 'Procurement' },
+					{ code: 'OPEX', label: 'OpEx' },
+				]
 			})
 		});
 	});
