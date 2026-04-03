@@ -1,7 +1,7 @@
 # Iteration 18 — 2026-03-30
 
 ## Context
-Production overview and alerts. Production milestone visible on PO list, filterable. Dashboard shows POs by production stage and flags overdue production.
+Production timeline UI on the PO detail page. Visual step indicator for milestones, update action for vendors, timestamps per milestone.
 
 ## JTBD
 

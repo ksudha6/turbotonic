@@ -1,4 +1,4 @@
-# Iteration 19 — 2026-04-03
+# Iteration 13 — 2026-04-03
 
 ## Context
 The PO detail page displays raw reference-data codes for payment terms (`DA`, `TT`, `LC`, `DP`) and incoterms (`FOB`, `CIF`, `CFR`, etc.) instead of human-readable labels. The backend already exposes a `/api/v1/reference-data/` endpoint with code-to-label mappings, and the PO create/edit forms already fetch this data. The detail view just never resolves the codes.
@@ -23,7 +23,7 @@ The PO detail page displays raw reference-data codes for payment terms (`DA`, `T
 - [x] Resolve port_of_loading and port_of_discharge codes to labels (city, country format)
 - [x] Resolve line item country_of_origin codes to labels
 
-### Scratch Tests (`frontend/tests/scratch/iteration-19/`)
+### Scratch Tests (`frontend/tests/scratch/iteration-13/`)
 - [x] PO detail shows "Documents against Acceptance" for payment_terms code "DA"
 - [x] PO detail shows "Free on Board" for incoterm code "FOB"
 - [x] PO detail shows "US Dollar" for currency code "USD"

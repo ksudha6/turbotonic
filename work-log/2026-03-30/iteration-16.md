@@ -1,7 +1,7 @@
 # Iteration 16 — 2026-03-30
 
 ## Context
-First iteration of the Production Status Tracking module. Vendors post milestone updates against Accepted POs. Milestones are ordered and append-only.
+Invoice PDF export and invoicing guards. PDF rendering for invoices, over-invoicing prevention at the line-item level, and partial invoicing progress visible on the PO detail.
 
 ## JTBD
 
