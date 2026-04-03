@@ -105,7 +105,11 @@ def generate_po_pdf(
         [
             Paragraph(f"<b>PO Number:</b> {po.po_number}", body_style),
             Paragraph(f"<b>Status:</b> {po.status.value}", body_style),
-        ]
+        ],
+        [
+            Paragraph(f"<b>Currency:</b> {po.currency} - {currency_label(po.currency)}", body_style),
+            Paragraph("", body_style),
+        ],
     ]
     po_header_table = Table(po_header_data, colWidths=[_PAGE_WIDTH / 2, _PAGE_WIDTH / 2])
     po_header_table.setStyle(
@@ -261,10 +265,10 @@ def generate_po_pdf(
             Paragraph(item.description, cell_style),
             Paragraph(str(item.quantity), cell_style),
             Paragraph(item.uom, cell_style),
-            Paragraph(_money(item.unit_price), cell_style),
+            Paragraph(f"{_money(item.unit_price)} {po.currency}", cell_style),
             Paragraph(item.hs_code, cell_style),
             Paragraph(country_label(item.country_of_origin), cell_style),
-            Paragraph(_money(line_total), cell_style),
+            Paragraph(f"{_money(line_total)} {po.currency}", cell_style),
         ])
 
     # Total row
@@ -277,7 +281,7 @@ def generate_po_pdf(
         Paragraph("", cell_style),
         Paragraph("", cell_style),
         Paragraph("<b>Total</b>", cell_bold),
-        Paragraph(f"<b>{_money(po.total_value)}</b>", cell_bold),
+        Paragraph(f"<b>{_money(po.total_value)} {po.currency}</b>", cell_bold),
     ]
 
     items_table_data = [header_row] + line_rows + [total_row]
@@ -289,8 +293,8 @@ def generate_po_pdf(
     items_table.setStyle(
         TableStyle([
             # Header row
-            ("BACKGROUND", (0, 0), (-1, 0), colors.Color(0.2, 0.2, 0.2)),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.Color(0.85, 0.85, 0.85)),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
             # Data rows alternating
             ("ROWBACKGROUNDS", (0, 1), (-1, num_data_rows), [colors.white, colors.Color(0.95, 0.95, 0.95)]),
             # Total row

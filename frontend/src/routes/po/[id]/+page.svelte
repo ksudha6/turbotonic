@@ -2,23 +2,31 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf, createInvoice, listInvoicesByPO } from '$lib/api';
+	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf, createInvoice, listInvoicesByPO, fetchReferenceData } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import RejectDialog from '$lib/components/RejectDialog.svelte';
-	import type { PurchaseOrder, InvoiceListItem } from '$lib/types';
+	import type { PurchaseOrder, InvoiceListItem, ReferenceData } from '$lib/types';
+	import { buildLabelResolver } from '$lib/labels';
 
 	let po: PurchaseOrder | null = $state(null);
 	let loading: boolean = $state(true);
 	let showRejectDialog: boolean = $state(false);
 	let invoices: InvoiceListItem[] = $state([]);
+	let refData: ReferenceData | null = $state(null);
+	let resolver: ReturnType<typeof buildLabelResolver> | null = $state(null);
 
 	const id: string = $page.params.id ?? '';
+
+	function resolve(category: string, code: string): string {
+		if (!resolver) return code;
+		return resolver.resolve(category, code);
+	}
 
 	async function fetchPO() {
 		loading = true;
 		try {
-			po = await getPO(id);
-			invoices = await listInvoicesByPO(id);
+			[po, invoices, refData] = await Promise.all([getPO(id), listInvoicesByPO(id), fetchReferenceData()]);
+			resolver = buildLabelResolver(refData);
 		} finally {
 			loading = false;
 		}
@@ -78,7 +86,7 @@
 		<div class="info-grid">
 			<div class="info-item">
 				<span class="field-label">Currency</span>
-				<span class="value">{po.currency}</span>
+				<span class="value">{resolve('currencies', po.currency)}</span>
 			</div>
 			<div class="info-item">
 				<span class="field-label">Issued Date</span>
@@ -94,7 +102,7 @@
 			</div>
 			<div class="info-item">
 				<span class="field-label">Payment Terms</span>
-				<span class="value">{po.payment_terms}</span>
+				<span class="value">{resolve('payment_terms', po.payment_terms)}</span>
 			</div>
 		</div>
 	</div>
@@ -108,7 +116,7 @@
 			</div>
 			<div class="info-item">
 				<span class="field-label">Country</span>
-				<span class="value">{po.buyer_country}</span>
+				<span class="value">{resolve('countries', po.buyer_country)}</span>
 			</div>
 		</div>
 	</div>
@@ -122,7 +130,7 @@
 			</div>
 			<div class="info-item">
 				<span class="field-label">Country</span>
-				<span class="value">{po.vendor_country}</span>
+				<span class="value">{resolve('countries', po.vendor_country)}</span>
 			</div>
 		</div>
 	</div>
@@ -132,23 +140,23 @@
 		<div class="info-grid">
 			<div class="info-item">
 				<span class="field-label">Incoterm</span>
-				<span class="value">{po.incoterm}</span>
+				<span class="value">{resolve('incoterms', po.incoterm)}</span>
 			</div>
 			<div class="info-item">
 				<span class="field-label">Port of Loading</span>
-				<span class="value">{po.port_of_loading}</span>
+				<span class="value">{resolve('ports', po.port_of_loading)}</span>
 			</div>
 			<div class="info-item">
 				<span class="field-label">Port of Discharge</span>
-				<span class="value">{po.port_of_discharge}</span>
+				<span class="value">{resolve('ports', po.port_of_discharge)}</span>
 			</div>
 			<div class="info-item">
 				<span class="field-label">Country of Origin</span>
-				<span class="value">{po.country_of_origin}</span>
+				<span class="value">{resolve('countries', po.country_of_origin)}</span>
 			</div>
 			<div class="info-item">
 				<span class="field-label">Country of Destination</span>
-				<span class="value">{po.country_of_destination}</span>
+				<span class="value">{resolve('countries', po.country_of_destination)}</span>
 			</div>
 		</div>
 	</div>
@@ -181,7 +189,7 @@
 						<td>{item.uom}</td>
 						<td>{formatPrice(item.unit_price)}</td>
 						<td>{item.hs_code}</td>
-						<td>{item.country_of_origin}</td>
+						<td>{resolve('countries', item.country_of_origin)}</td>
 					</tr>
 				{/each}
 			</tbody>
