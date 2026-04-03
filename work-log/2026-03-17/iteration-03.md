@@ -161,6 +161,13 @@ graph TD
 - [x] Screenshot: PO form with vendor dropdown and buyer fields
 - [x] Screenshot: PO detail with buyer and vendor sections
 
+### Reference Data — Exhaustive Payment Terms
+- [x] Expand `PAYMENT_TERMS` in `reference_data.py` from 4 entries (DA, DP, LC, TT) to 17 entries covering advance (ADV, CIA, COD), net terms (NET15/30/45/60/90/120), early-payment discount (2NET30), documentary trade (DA, DP, LC, SBLC, TT), and open account (OA, CONSIGN)
+- [x] Backend validation (`VALID_PAYMENT_TERMS` frozenset) auto-derives from tuple; no separate change needed
+- [x] Backend label resolution (`reference_labels.py`) auto-derives from tuple; no separate change needed
+- [x] Frontend dropdown (`POForm.svelte`) fetches from `/api/v1/reference-data/`; no separate change needed
+- [x] Update DDD vocab: Payment Terms definition expanded to list all categories
+
 ## Notes
 
 Vendor was promoted from a free-text string to a separate entity with UUID identity, name, country, and active/inactive status. PO creation and revision now validate that the referenced vendor exists and is active. Buyer is inline on the PO (name + country) with a hardcoded default, not a separate entity yet. Identity fields (id, po_number, created_at) are enforced as read-only via Python properties. A startup migration converts existing free-text vendor_id values into proper Vendor records. The vendor dropdown replaced the free-text input on the PO form, and the PO detail view now shows separate Buyer and Vendor sections.

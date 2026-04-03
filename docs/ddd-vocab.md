@@ -20,7 +20,7 @@
 |------|-----------|-----------------|
 | PO Number | Unique system-generated identifier for a purchase order. Format: `PO-YYYYMMDD-XXXX`, sequential per day. | Procurement |
 | Ship-to Address | The physical delivery address for the goods. | Procurement |
-| Payment Terms | How and when payment is made (LC, TT, DA, DP). | Procurement |
+| Payment Terms | How and when payment is made. Covers advance (ADV, CIA, COD), net terms (NET15 through NET120), early-payment discount (2NET30), documentary trade (DA, DP, LC, SBLC, TT), and open account (OA, CONSIGN). Validated against reference data. | Procurement |
 | Currency | The currency in which the PO is denominated. | Procurement |
 | Issued Date | Date the PO was formally issued. | Procurement |
 | Required Delivery Date | Date by which goods must be delivered. | Procurement |

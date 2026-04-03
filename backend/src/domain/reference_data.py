@@ -53,10 +53,28 @@ INCOTERMS: tuple[tuple[str, str], ...] = (
 )
 
 PAYMENT_TERMS: tuple[tuple[str, str], ...] = (
+    # Advance / immediate
+    ("ADV", "Advance Payment"),
+    ("CIA", "Cash in Advance"),
+    ("COD", "Cash on Delivery"),
+    # Net terms
+    ("NET15", "Net 15 Days"),
+    ("NET30", "Net 30 Days"),
+    ("NET45", "Net 45 Days"),
+    ("NET60", "Net 60 Days"),
+    ("NET90", "Net 90 Days"),
+    ("NET120", "Net 120 Days"),
+    # Early-payment discount
+    ("2NET30", "2/10 Net 30"),
+    # Documentary trade
     ("DA", "Documents against Acceptance"),
     ("DP", "Documents against Payment"),
     ("LC", "Letter of Credit"),
+    ("SBLC", "Standby Letter of Credit"),
     ("TT", "Telegraphic Transfer"),
+    # Open account / consignment
+    ("OA", "Open Account"),
+    ("CONSIGN", "Consignment"),
 )
 
 COUNTRIES: tuple[tuple[str, str], ...] = (
