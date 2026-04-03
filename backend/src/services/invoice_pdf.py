@@ -12,18 +12,14 @@ from reportlab.platypus import (
     TableStyle,
     Paragraph,
     Spacer,
+    PageBreak,
 )
 
+from src.domain.invoice import Invoice, InvoiceStatus
 from src.domain.purchase_order import PurchaseOrder
-from src.domain.reference_labels import (
-    currency_label,
-    incoterm_label,
-    payment_terms_label,
-    country_label,
-    port_label,
-)
+from src.domain.reference_labels import currency_label, payment_terms_label
 
-# Page margins
+# Page margins — match po_pdf.py
 _LEFT_MARGIN = 0.75 * inch
 _RIGHT_MARGIN = 0.75 * inch
 _TOP_MARGIN = 0.75 * inch
@@ -41,24 +37,14 @@ def _money(value) -> str:
     return f"{value:.2f}"
 
 
-def generate_po_pdf(
+def _build_invoice_story(
+    invoice: Invoice,
     po: PurchaseOrder,
     vendor_name: str,
     vendor_country: str,
-) -> bytes:
-    """Build a PDF for the given PurchaseOrder and return it as raw bytes."""
-    buf = io.BytesIO()
-
-    doc = SimpleDocTemplate(
-        buf,
-        pagesize=letter,
-        leftMargin=_LEFT_MARGIN,
-        rightMargin=_RIGHT_MARGIN,
-        topMargin=_TOP_MARGIN,
-        bottomMargin=_BOTTOM_MARGIN,
-    )
-
-    styles = getSampleStyleSheet()
+    styles,
+) -> list:
+    """Build the ReportLab story elements for one invoice page."""
     normal = styles["Normal"]
     body_style = ParagraphStyle(
         "Body",
@@ -84,12 +70,6 @@ def generate_po_pdf(
         parent=cell_style,
         fontName="Helvetica-Bold",
     )
-
-    story = []
-
-    # -------------------------------------------------------------------------
-    # 1. Header
-    # -------------------------------------------------------------------------
     title_style = ParagraphStyle(
         "Title",
         parent=normal,
@@ -98,23 +78,38 @@ def generate_po_pdf(
         alignment=1,  # center
         spaceAfter=12,
     )
-    story.append(Paragraph("PURCHASE ORDER", title_style))
 
-    # PO number (left) and status (right) in a two-cell table
-    po_header_data = [
+    story = []
+
+    # -------------------------------------------------------------------------
+    # 1. Header
+    # -------------------------------------------------------------------------
+    story.append(Paragraph("INVOICE", title_style))
+
+    inv_header_data = [
+        [
+            Paragraph(f"<b>Invoice Number:</b> {invoice.invoice_number}", body_style),
+            Paragraph(f"<b>Status:</b> {invoice.status.value}", body_style),
+        ],
         [
             Paragraph(f"<b>PO Number:</b> {po.po_number}", body_style),
-            Paragraph(f"<b>Status:</b> {po.status.value}", body_style),
+            Paragraph(f"<b>Created:</b> {_date_str(invoice.created_at)}", body_style),
         ],
         [
-            Paragraph(f"<b>Currency:</b> {po.currency} - {currency_label(po.currency)}", body_style),
-            Paragraph("", body_style),
+            Paragraph(
+                f"<b>Payment Terms:</b> {invoice.payment_terms} - {payment_terms_label(invoice.payment_terms)}",
+                body_style,
+            ),
+            Paragraph(
+                f"<b>Currency:</b> {invoice.currency} - {currency_label(invoice.currency)}",
+                body_style,
+            ),
         ],
     ]
-    po_header_table = Table(po_header_data, colWidths=[_PAGE_WIDTH / 2, _PAGE_WIDTH / 2])
-    po_header_table.setStyle(
+    inv_header_table = Table(inv_header_data, colWidths=[_PAGE_WIDTH / 2, _PAGE_WIDTH / 2])
+    inv_header_table.setStyle(
         TableStyle([
-            ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+            ("ALIGN", (1, 0), (1, -1), "RIGHT"),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
             ("LEFTPADDING", (0, 0), (-1, -1), 0),
             ("RIGHTPADDING", (0, 0), (-1, -1), 0),
@@ -122,46 +117,21 @@ def generate_po_pdf(
             ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ])
     )
-    story.append(po_header_table)
-
-    dates_data = [
-        [
-            Paragraph(f"<b>Issued Date:</b> {_date_str(po.issued_date)}", body_style),
-            Paragraph(
-                f"<b>Required Delivery:</b> {_date_str(po.required_delivery_date)}",
-                body_style,
-            ),
-        ]
-    ]
-    dates_table = Table(dates_data, colWidths=[_PAGE_WIDTH / 2, _PAGE_WIDTH / 2])
-    dates_table.setStyle(
-        TableStyle([
-            ("ALIGN", (1, 0), (1, 0), "RIGHT"),
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 0),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-            ("TOPPADDING", (0, 0), (-1, -1), 0),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
-        ])
-    )
-    story.append(dates_table)
+    story.append(inv_header_table)
     story.append(Spacer(1, 14))
 
     # -------------------------------------------------------------------------
-    # 2. Buyer / Vendor
+    # 2. Parties
     # -------------------------------------------------------------------------
     story.append(Paragraph("Parties", heading_style))
 
     buyer_content = [
         Paragraph("<b>Buyer</b>", cell_bold),
         Paragraph(po.buyer_name, cell_style),
-        Paragraph(country_label(po.buyer_country), cell_style),
-        Paragraph(po.ship_to_address, cell_style),
     ]
     vendor_content = [
         Paragraph("<b>Vendor</b>", cell_bold),
         Paragraph(vendor_name, cell_style),
-        Paragraph(country_label(vendor_country), cell_style),
     ]
 
     parties_data = [[buyer_content, vendor_content]]
@@ -186,62 +156,19 @@ def generate_po_pdf(
     story.append(Spacer(1, 14))
 
     # -------------------------------------------------------------------------
-    # 3. Trade Details
-    # -------------------------------------------------------------------------
-    story.append(Paragraph("Trade Details", heading_style))
-
-    trade_rows = [
-        ["Incoterm", f"{po.incoterm} - {incoterm_label(po.incoterm)}"],
-        ["Payment Terms", f"{po.payment_terms} - {payment_terms_label(po.payment_terms)}"],
-        ["Currency", f"{po.currency} - {currency_label(po.currency)}"],
-        ["Port of Loading", port_label(po.port_of_loading)],
-        ["Port of Discharge", port_label(po.port_of_discharge)],
-        ["Country of Origin", country_label(po.country_of_origin)],
-        ["Country of Destination", country_label(po.country_of_destination)],
-    ]
-
-    label_width = 2.0 * inch
-    value_width = _PAGE_WIDTH - label_width
-
-    trade_data = [
-        [
-            Paragraph(f"<b>{label}</b>", cell_style),
-            Paragraph(value, cell_style),
-        ]
-        for label, value in trade_rows
-    ]
-
-    trade_table = Table(trade_data, colWidths=[label_width, value_width])
-    trade_table.setStyle(
-        TableStyle([
-            ("VALIGN", (0, 0), (-1, -1), "TOP"),
-            ("LEFTPADDING", (0, 0), (-1, -1), 6),
-            ("RIGHTPADDING", (0, 0), (-1, -1), 6),
-            ("TOPPADDING", (0, 0), (-1, -1), 4),
-            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ("ROWBACKGROUNDS", (0, 0), (-1, -1), [colors.white, colors.Color(0.96, 0.96, 0.96)]),
-            ("GRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
-        ])
-    )
-    story.append(trade_table)
-    story.append(Spacer(1, 14))
-
-    # -------------------------------------------------------------------------
-    # 4. Line Items Table
+    # 3. Line Items Table
     # -------------------------------------------------------------------------
     story.append(Paragraph("Line Items", heading_style))
 
-    # Column widths: #, Part Number, Description, Qty, UoM, Unit Price, HS Code, Origin, Line Total
+    # Column widths: #, Part Number, Description, Qty, UoM, Unit Price, Line Total
     col_widths = [
         0.30 * inch,   # #
         0.90 * inch,   # Part Number
-        2.00 * inch,   # Description (most space)
-        0.40 * inch,   # Qty
-        0.40 * inch,   # UoM
-        0.70 * inch,   # Unit Price
-        0.65 * inch,   # HS Code
-        0.80 * inch,   # Origin
-        0.75 * inch,   # Line Total
+        2.60 * inch,   # Description
+        0.45 * inch,   # Qty
+        0.45 * inch,   # UoM
+        0.90 * inch,   # Unit Price
+        0.90 * inch,   # Line Total
     ]
 
     header_row = [
@@ -251,13 +178,11 @@ def generate_po_pdf(
         Paragraph("<b>Qty</b>", cell_bold),
         Paragraph("<b>UoM</b>", cell_bold),
         Paragraph("<b>Unit Price</b>", cell_bold),
-        Paragraph("<b>HS Code</b>", cell_bold),
-        Paragraph("<b>Origin</b>", cell_bold),
         Paragraph("<b>Line Total</b>", cell_bold),
     ]
 
     line_rows = []
-    for idx, item in enumerate(po.line_items, start=1):
+    for idx, item in enumerate(invoice.line_items, start=1):
         line_total = item.quantity * item.unit_price
         line_rows.append([
             Paragraph(str(idx), cell_style),
@@ -265,31 +190,26 @@ def generate_po_pdf(
             Paragraph(item.description, cell_style),
             Paragraph(str(item.quantity), cell_style),
             Paragraph(item.uom, cell_style),
-            Paragraph(f"{_money(item.unit_price)}", cell_style),
-            Paragraph(item.hs_code, cell_style),
-            Paragraph(country_label(item.country_of_origin), cell_style),
-            Paragraph(f"{_money(line_total)}", cell_style),
+            Paragraph(f"{_money(item.unit_price)} {invoice.currency}", cell_style),
+            Paragraph(f"{_money(line_total)} {invoice.currency}", cell_style),
         ])
 
-    # Total row
-    total_row = [
+    num_data_rows = len(line_rows)
+    last_row = num_data_rows + 1  # 0-indexed: header=0, data rows 1..N, subtotal row N+1
+
+    subtotal_row = [
         Paragraph("", cell_style),
         Paragraph("", cell_style),
         Paragraph("", cell_style),
         Paragraph("", cell_style),
         Paragraph("", cell_style),
-        Paragraph("", cell_style),
-        Paragraph("", cell_style),
-        Paragraph("<b>Total</b>", cell_bold),
-        Paragraph(f"<b>{_money(po.total_value)}</b>", cell_bold),
+        Paragraph("<b>Subtotal</b>", cell_bold),
+        Paragraph(f"<b>{_money(invoice.subtotal)} {invoice.currency}</b>", cell_bold),
     ]
 
-    items_table_data = [header_row] + line_rows + [total_row]
+    items_table_data = [header_row] + line_rows + [subtotal_row]
 
     items_table = Table(items_table_data, colWidths=col_widths, repeatRows=1)
-    num_data_rows = len(line_rows)
-    last_row = num_data_rows + 1  # 0-indexed: header=0, data rows 1..N, total row N+1
-
     items_table.setStyle(
         TableStyle([
             # Header row
@@ -297,13 +217,13 @@ def generate_po_pdf(
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.black),
             # Data rows alternating
             ("ROWBACKGROUNDS", (0, 1), (-1, num_data_rows), [colors.white, colors.Color(0.95, 0.95, 0.95)]),
-            # Total row
+            # Subtotal row
             ("BACKGROUND", (0, last_row), (-1, last_row), colors.Color(0.88, 0.88, 0.88)),
             ("LINEABOVE", (0, last_row), (-1, last_row), 0.75, colors.grey),
             # Alignment: numeric columns right-aligned
             ("ALIGN", (3, 0), (3, -1), "RIGHT"),   # Qty
             ("ALIGN", (5, 0), (5, -1), "RIGHT"),   # Unit Price
-            ("ALIGN", (8, 0), (8, -1), "RIGHT"),   # Line Total
+            ("ALIGN", (6, 0), (6, -1), "RIGHT"),   # Line Total
             # Grid and padding
             ("GRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
             ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -314,14 +234,65 @@ def generate_po_pdf(
         ])
     )
     story.append(items_table)
-    story.append(Spacer(1, 14))
 
     # -------------------------------------------------------------------------
-    # 5. Terms & Conditions
+    # 4. Dispute Reason (only for DISPUTED invoices)
     # -------------------------------------------------------------------------
-    if po.terms_and_conditions:
-        story.append(Paragraph("Terms & Conditions", heading_style))
-        story.append(Paragraph(po.terms_and_conditions, body_style))
+    if invoice.status is InvoiceStatus.DISPUTED and invoice.dispute_reason:
+        story.append(Spacer(1, 14))
+        story.append(Paragraph("Dispute Reason", heading_style))
+        story.append(Paragraph(invoice.dispute_reason, body_style))
+
+    return story
+
+
+def generate_invoice_pdf(
+    invoice: Invoice,
+    po: PurchaseOrder,
+    vendor_name: str,
+    vendor_country: str,
+) -> bytes:
+    """Build a PDF for the given Invoice and return it as raw bytes."""
+    buf = io.BytesIO()
+
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=letter,
+        leftMargin=_LEFT_MARGIN,
+        rightMargin=_RIGHT_MARGIN,
+        topMargin=_TOP_MARGIN,
+        bottomMargin=_BOTTOM_MARGIN,
+    )
+
+    styles = getSampleStyleSheet()
+    story = _build_invoice_story(invoice, po, vendor_name, vendor_country, styles)
+
+    doc.build(story)
+    return buf.getvalue()
+
+
+def generate_bulk_invoice_pdf(
+    invoices_with_context: list[tuple[Invoice, PurchaseOrder, str, str]],
+) -> bytes:
+    """Build a single PDF with one invoice per page and return it as raw bytes."""
+    buf = io.BytesIO()
+
+    doc = SimpleDocTemplate(
+        buf,
+        pagesize=letter,
+        leftMargin=_LEFT_MARGIN,
+        rightMargin=_RIGHT_MARGIN,
+        topMargin=_TOP_MARGIN,
+        bottomMargin=_BOTTOM_MARGIN,
+    )
+
+    styles = getSampleStyleSheet()
+    story = []
+
+    for idx, (invoice, po, vendor_name, vendor_country) in enumerate(invoices_with_context):
+        if idx > 0:
+            story.append(PageBreak())
+        story.extend(_build_invoice_story(invoice, po, vendor_name, vendor_country, styles))
 
     doc.build(story)
     return buf.getvalue()

@@ -76,6 +76,16 @@
 	let submitting: boolean = $state(false);
 	let error: string = $state('');
 
+	const HS_CODE_PATTERN = /^[\d.]{4,}$/;
+
+	function hsCodeError(code: string): string {
+		if (!code || code.trim().length === 0) return '';
+		return HS_CODE_PATTERN.test(code) ? '' : 'HS code must be at least 4 characters and contain only digits and dots';
+	}
+
+	let hsCodeErrors = $derived(lineItems.map((item) => hsCodeError(item.hs_code)));
+	let hasHsCodeErrors = $derived(hsCodeErrors.some((e) => e !== ''));
+
 	let po_type: string = $state(initialData.po_type ?? 'PROCUREMENT');
 
 	let filteredVendors = $derived(vendors.filter(v => v.vendor_type === po_type));
@@ -367,7 +377,12 @@
 						placeholder="0.00"
 						bind:value={item.unit_price}
 					/>
-					<input class="input" type="text" placeholder="HS Code" bind:value={item.hs_code} />
+					<div class="hs-code-cell">
+						<input class="input" type="text" placeholder="HS Code" bind:value={item.hs_code} />
+						{#if hsCodeErrors[i]}
+							<p class="error-message">{hsCodeErrors[i]}</p>
+						{/if}
+					</div>
 					<input
 						class="input"
 						type="text"
@@ -394,7 +409,7 @@
 		{/if}
 		<div class="action-buttons">
 			<a href="/po" class="btn btn-secondary">Cancel</a>
-			<button type="submit" class="btn btn-primary" disabled={submitting}>
+			<button type="submit" class="btn btn-primary" disabled={submitting || hasHsCodeErrors}>
 				{submitting ? 'Saving...' : submitLabel}
 			</button>
 		</div>
@@ -464,6 +479,16 @@
 	.remove-btn {
 		font-size: var(--font-size-sm);
 		padding: var(--space-2) var(--space-3);
+	}
+
+	.hs-code-cell {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+	}
+
+	.hs-code-cell .error-message {
+		margin-bottom: 0;
 	}
 
 	.form-actions {

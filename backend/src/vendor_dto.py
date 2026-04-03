@@ -4,6 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
+from src.domain.reference_data import VALID_COUNTRIES
 from src.domain.vendor import Vendor
 
 
@@ -21,9 +22,11 @@ class VendorCreate(BaseModel):
 
     @field_validator("country")
     @classmethod
-    def country_not_empty(cls, v: str) -> str:
+    def country_valid(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("country must not be empty or whitespace-only")
+        if v not in VALID_COUNTRIES:
+            raise ValueError(f"country must be a valid country code; got {v!r}")
         return v
 
     @field_validator("vendor_type")

@@ -648,3 +648,39 @@ async def test_bulk_transition_nonexistent_po(client: AsyncClient) -> None:
         "error": "Purchase order not found",
         "new_status": None,
     }
+
+
+# ---------------------------------------------------------------------------
+# HS code validation
+# ---------------------------------------------------------------------------
+
+
+async def _make_payload_with_hs_code(client: AsyncClient, hs_code: str) -> tuple[dict, int]:
+    """Create a PO payload with the given hs_code and return (response_json, status_code)."""
+    vendor_resp = await client.post(
+        "/api/v1/vendors/", json={"name": "HS Vendor", "country": "US", "vendor_type": "PROCUREMENT"}
+    )
+    assert vendor_resp.status_code == 201
+    vendor_id = vendor_resp.json()["id"]
+    line_item = {**_LINE_ITEM, "hs_code": hs_code}
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "line_items": [line_item]}
+    resp = await client.post("/api/v1/po/", json=payload)
+    return resp.json(), resp.status_code
+
+
+async def test_create_po_hs_code_too_short_returns_422(client: AsyncClient) -> None:
+    # "AB" is too short (2 chars) and contains non-digit characters
+    _, status = await _make_payload_with_hs_code(client, "AB")
+    assert status == 422
+
+
+async def test_create_po_hs_code_valid_with_dots_returns_201(client: AsyncClient) -> None:
+    # "7318.15" is valid: digits and dots, 7 characters
+    _, status = await _make_payload_with_hs_code(client, "7318.15")
+    assert status == 201
+
+
+async def test_create_po_hs_code_minimum_length_returns_201(client: AsyncClient) -> None:
+    # "1234" is the minimum valid HS code: 4 digits
+    _, status = await _make_payload_with_hs_code(client, "1234")
+    assert status == 201

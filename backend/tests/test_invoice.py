@@ -106,13 +106,14 @@ async def client() -> AsyncIterator[AsyncClient]:
     app.dependency_overrides.clear()
 
 
-async def _create_accepted_po(client: AsyncClient) -> dict:
+async def _create_accepted_po(client: AsyncClient, po_type: str = "PROCUREMENT") -> dict:
     vendor = await client.post(
         "/api/v1/vendors/",
-        json={"name": "Test Vendor", "country": "US", "vendor_type": "PROCUREMENT"},
+        json={"name": "Test Vendor", "country": "US", "vendor_type": po_type},
     )
     payload = dict(_PO_PAYLOAD)
     payload["vendor_id"] = vendor.json()["id"]
+    payload["po_type"] = po_type
     po = await client.post("/api/v1/po/", json=payload)
     po_id = po.json()["id"]
     await client.post(f"/api/v1/po/{po_id}/submit")
@@ -615,3 +616,88 @@ async def test_dashboard_includes_invoice_summary(client: AsyncClient) -> None:
     required_keys = {"status", "count", "total_usd"}
     for entry in invoice_summary:
         assert required_keys <= entry.keys(), f"invoice_summary entry missing keys: {required_keys - entry.keys()}"
+
+
+async def test_create_opex_invoice(client: AsyncClient) -> None:
+    # Creating an invoice against an ACCEPTED OPEX PO must succeed and include all line items at full quantity.
+    pn1 = "PN-001"
+    pn2 = "PN-002"
+    pn1_ordered = 100
+    pn2_ordered = 50
+
+    po = await _create_accepted_po(client, po_type="OPEX")
+    po_id = po["id"]
+
+    resp = await client.post("/api/v1/invoices/", json={"po_id": po_id})
+    assert resp.status_code == 201, f"expected 201, got {resp.status_code}: {resp.text}"
+
+    invoice = resp.json()
+    assert invoice["po_id"] == po_id, "invoice must reference the OPEX PO"
+
+    line_items_by_part = {li["part_number"]: li for li in invoice["line_items"]}
+    assert set(line_items_by_part.keys()) == {pn1, pn2}, "invoice must contain exactly the two PO line items"
+    assert line_items_by_part[pn1]["quantity"] == pn1_ordered, "PN-001 must be invoiced at full ordered quantity"
+    assert line_items_by_part[pn2]["quantity"] == pn2_ordered, "PN-002 must be invoiced at full ordered quantity"
+
+
+async def test_create_second_opex_invoice_returns_409(client: AsyncClient) -> None:
+    # A second invoice attempt on the same OPEX PO must return 409.
+    po = await _create_accepted_po(client, po_type="OPEX")
+    po_id = po["id"]
+
+    first = await client.post("/api/v1/invoices/", json={"po_id": po_id})
+    assert first.status_code == 201, f"first OPEX invoice must succeed: {first.text}"
+
+    second = await client.post("/api/v1/invoices/", json={"po_id": po_id})
+    assert second.status_code == 409, "second OPEX invoice must be rejected with 409"
+    assert "already exists" in second.json()["detail"], "409 detail must state an invoice already exists"
+
+
+async def test_create_opex_invoice_with_line_items_returns_422(client: AsyncClient) -> None:
+    # Sending line_items when creating an OPEX invoice must return 422.
+    po = await _create_accepted_po(client, po_type="OPEX")
+    po_id = po["id"]
+
+    resp = await client.post(
+        "/api/v1/invoices/",
+        json={"po_id": po_id, "line_items": [{"part_number": "PN-001", "quantity": 10}]},
+    )
+    assert resp.status_code == 422, "OPEX invoice with line_items must return 422"
+    assert "line_items" in resp.json()["detail"], "422 detail must mention line_items"
+
+
+async def test_opex_invoice_lifecycle(client: AsyncClient) -> None:
+    # An OPEX invoice must progress through the full lifecycle: Draft → Submitted → Approved → Paid.
+    # Dispute from Submitted must also work.
+    po = await _create_accepted_po(client, po_type="OPEX")
+    po_id = po["id"]
+
+    create_resp = await client.post("/api/v1/invoices/", json={"po_id": po_id})
+    assert create_resp.status_code == 201
+    invoice_id = create_resp.json()["id"]
+    assert create_resp.json()["status"] == "DRAFT", "new OPEX invoice must be in DRAFT"
+
+    submit_resp = await client.post(f"/api/v1/invoices/{invoice_id}/submit")
+    assert submit_resp.status_code == 200
+    assert submit_resp.json()["status"] == "SUBMITTED", "invoice must advance to SUBMITTED"
+
+    approve_resp = await client.post(f"/api/v1/invoices/{invoice_id}/approve")
+    assert approve_resp.status_code == 200
+    assert approve_resp.json()["status"] == "APPROVED", "invoice must advance to APPROVED"
+
+    pay_resp = await client.post(f"/api/v1/invoices/{invoice_id}/pay")
+    assert pay_resp.status_code == 200
+    assert pay_resp.json()["status"] == "PAID", "invoice must advance to PAID"
+
+    # Dispute path: create a second OPEX PO to test dispute → resolve.
+    po2 = await _create_accepted_po(client, po_type="OPEX")
+    inv2_resp = await client.post("/api/v1/invoices/", json={"po_id": po2["id"]})
+    assert inv2_resp.status_code == 201
+    inv2_id = inv2_resp.json()["id"]
+
+    await client.post(f"/api/v1/invoices/{inv2_id}/submit")
+    dispute_resp = await client.post(
+        f"/api/v1/invoices/{inv2_id}/dispute", json={"reason": "wrong amount"}
+    )
+    assert dispute_resp.status_code == 200
+    assert dispute_resp.json()["status"] == "DISPUTED", "invoice must advance to DISPUTED"

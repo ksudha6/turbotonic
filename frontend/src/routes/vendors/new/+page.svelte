@@ -1,13 +1,20 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { createVendor } from '$lib/api';
-	import type { VendorType } from '$lib/types';
+	import { createVendor, fetchReferenceData } from '$lib/api';
+	import type { ReferenceDataItem, VendorType } from '$lib/types';
 
 	let name: string = $state('');
 	let country: string = $state('');
 	let vendor_type: VendorType = $state('PROCUREMENT');
 	let submitting: boolean = $state(false);
 	let error: string = $state('');
+	let countries: ReferenceDataItem[] = $state([]);
+
+	onMount(async () => {
+		const refData = await fetchReferenceData();
+		countries = refData.countries;
+	});
 
 	async function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
@@ -17,14 +24,14 @@
 			error = 'Name is required.';
 			return;
 		}
-		if (!country.trim()) {
+		if (!country) {
 			error = 'Country is required.';
 			return;
 		}
 
 		submitting = true;
 		try {
-			await createVendor({ name: name.trim(), country: country.trim(), vendor_type });
+			await createVendor({ name: name.trim(), country, vendor_type });
 			goto('/vendors');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'An error occurred.';
@@ -46,7 +53,12 @@
 			</div>
 			<div class="form-group">
 				<label for="country">Country *</label>
-				<input id="country" class="input" type="text" required bind:value={country} />
+				<select id="country" class="select" required bind:value={country}>
+					<option value="">Select country</option>
+					{#each countries as c}
+						<option value={c.code}>{c.label}</option>
+					{/each}
+				</select>
 			</div>
 			<div class="form-group">
 				<label for="vendor_type">Vendor Type *</label>

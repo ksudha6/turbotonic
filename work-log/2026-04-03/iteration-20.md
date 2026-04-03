@@ -30,19 +30,19 @@ I want to make some cosmetic changes across the portal.
 ## Tasks
 
 ### PDF currency cleanup
-- [ ] Remove currency code from per-cell values in PDF (unit price, line total, grand total)
-- [ ] Currency in header ("Currency: USD — United States Dollar") remains the single source
-- [ ] Column headers stay plain: "Unit Price", "Line Total"
+- [x] Remove currency code from per-cell values in PDF (unit price, line total, grand total)
+- [x] Currency in header ("Currency: USD — United States Dollar") remains the single source
+- [x] Column headers stay plain: "Unit Price", "Line Total"
 
 ### Vendor country dropdown
-- [ ] Add country reference data (seed list of countries)
-- [ ] Replace free-text country field with dropdown on vendor create/edit
-- [ ] Migrate existing free-text values to reference data IDs
+- [x] Add country reference data (seed list of countries)
+- [x] Replace free-text country field with dropdown on vendor create/edit
+- [ ] ~~Migrate existing free-text values to reference data IDs~~ (carried forward)
 
 ### HS code validation
-- [ ] Backend: validate HS code format (digits and dots only, minimum 4 characters)
-- [ ] Frontend: show validation error on line item entry
-- [ ] Reject save if any line item has an invalid HS code
+- [x] Backend: validate HS code format (digits and dots only, minimum 4 characters)
+- [x] Frontend: show validation error on line item entry
+- [x] Reject save if any line item has an invalid HS code
 
 ## Tests
 
@@ -55,10 +55,10 @@ I want to make some cosmetic changes across the portal.
 - Line item creation with HS code "1234" (minimum length, digits only) returns 201.
 
 ### Permanent frontend
-- Vendor create form renders a `<select>` element for the country field.
-- Vendor edit form renders the same `<select>` with the existing value pre-selected.
-- Line item HS code input shows an inline error message when the entered value is invalid format.
-- Submit button is disabled while any HS code field has a validation error.
+- [x] Vendor create form renders a `<select>` element for the country field.
+- Vendor edit form renders the same `<select>` with the existing value pre-selected. (N/A - no edit page)
+- [x] Line item HS code input shows an inline error message when the entered value is invalid format.
+- [x] Submit button is disabled while any HS code field has a validation error.
 
 ### Scratch
 - Screenshot: vendor create form with country dropdown visible.
@@ -66,4 +66,6 @@ I want to make some cosmetic changes across the portal.
 - Screenshot: line item form with HS code validation error shown.
 
 ## Notes
+
+PDF currency cleanup was three line edits in `po_pdf.py`. Vendor country switched from free-text to a validated reference data code; `VALID_COUNTRIES` frozenset added to `reference_data.py`, validator added to `VendorCreate`. Existing free-text vendor records were not migrated (carried forward). HS code validation uses a compiled regex pattern (`[\d.]+`, 4+ chars) on both backend (`field_validator` on `LineItemCreate`) and frontend (`POForm.svelte` with inline errors and submit-disable). No vendor edit page exists, so country dropdown only applies to create.
 

@@ -18,18 +18,20 @@ Production timeline UI on the PO detail page. Visual step indicator for mileston
 - Timeline section only renders on ACCEPTED PROCUREMENT POs
 
 ## Tasks
-- Frontend: `MilestoneTimeline` component with horizontal step indicator; accepts milestone list and next milestone as props
-- Frontend: Fetch milestones from `GET /api/v1/po/{po_id}/milestones` on PO detail page load
-- Frontend: "Post Next Milestone" button calls `POST /api/v1/po/{po_id}/milestones` and refreshes milestone list on success
-- Frontend: Conditional render gate (only ACCEPTED PROCUREMENT POs show the timeline)
-- Scratch tests: screenshots of timeline at 0 milestones, 2 milestones, and fully completed
+- [x] Frontend: `MilestoneTimeline` component with horizontal step indicator; accepts milestone list and next milestone as props
+- [x] Frontend: Fetch milestones from `GET /api/v1/po/{po_id}/milestones` on PO detail page load
+- [x] Frontend: "Post Next Milestone" button calls `POST /api/v1/po/{po_id}/milestones` and refreshes milestone list on success
+- [x] Frontend: Conditional render gate (only ACCEPTED PROCUREMENT POs show the timeline)
+- [ ] Scratch tests: screenshots of timeline at 0 milestones, 2 milestones, and fully completed (carried forward)
 
 ## Tests
-- Timeline renders with correct completed/pending states given a milestone list
-- Post button label matches the next milestone name
-- Post button is absent when all milestones are posted
-- Timeline is absent on non-ACCEPTED or non-PROCUREMENT POs
-- Clicking Post Next Milestone advances the timeline (integration)
+- [ ] Timeline renders with correct completed/pending states given a milestone list (carried forward - scratch)
+- [ ] Post button label matches the next milestone name (carried forward - scratch)
+- [ ] Post button is absent when all milestones are posted (carried forward - scratch)
+- [ ] Timeline is absent on non-ACCEPTED or non-PROCUREMENT POs (carried forward - scratch)
+- [ ] Clicking Post Next Milestone advances the timeline (carried forward - scratch)
 
 ## Notes
+
+`MilestoneTimeline.svelte` renders a horizontal step indicator with 5 steps connected by lines. Completed steps show a filled blue circle with checkmark and date. The current step gets a ring highlight. Future steps are gray. "Mark {label}" button appears for the next unposted milestone. PO detail page conditionally fetches milestones in the existing `fetchPO` function when PO is ACCEPTED PROCUREMENT. Frontend tests carried forward since the app server was not running for Playwright.
 

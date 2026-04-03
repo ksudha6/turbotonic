@@ -187,3 +187,30 @@ async def test_pdf_excludes_rejection_history(client: AsyncClient) -> None:
 
     pdf_text = _extract_pdf_text(pdf_resp.content)
     assert rejection_comment not in pdf_text
+
+
+# ---------------------------------------------------------------------------
+# PDF content: currency appears in header only, not on line item cells
+# ---------------------------------------------------------------------------
+
+
+async def test_pdf_currency_in_header_not_line_items(client: AsyncClient) -> None:
+    # The PO uses USD. The PDF should state currency once in the header/trade
+    # details section. Line item cells must not repeat the currency code.
+    currency_code = "USD"
+    unit_price = "5.00"
+    line_total = "50.00"  # quantity 10 * unit_price 5.00
+
+    po = await _create_po(client)
+    pdf_resp = await client.get(f"/api/v1/po/{po['id']}/pdf")
+    assert pdf_resp.status_code == 200
+
+    pdf_text = _extract_pdf_text(pdf_resp.content)
+
+    # Currency label must appear in the document (header / trade details).
+    assert currency_code in pdf_text
+
+    # The numeric values must appear without the currency code appended.
+    # If the code were still appended, "5.00 USD" or "50.00 USD" would appear.
+    assert f"{unit_price} {currency_code}" not in pdf_text
+    assert f"{line_total} {currency_code}" not in pdf_text

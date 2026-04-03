@@ -84,8 +84,8 @@ class Invoice:
     ) -> Invoice:
         if po_status != "ACCEPTED":
             raise ValueError("invoice creation requires PO status ACCEPTED")
-        if po_type != "PROCUREMENT":
-            raise ValueError("invoice creation is limited to Procurement POs")
+        if po_type not in ("PROCUREMENT", "OPEX"):
+            raise ValueError(f"invoice creation is not supported for PO type {po_type}")
         if not line_items:
             raise ValueError("at least one line item is required")
         now = datetime.now(UTC)

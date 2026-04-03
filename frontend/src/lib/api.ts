@@ -1,4 +1,4 @@
-import type { BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, PaginatedInvoiceList, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
+import type { BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PaginatedInvoiceList, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path);
@@ -37,6 +37,7 @@ export interface POListParams {
 	status?: string;
 	vendor_id?: string;
 	currency?: string;
+	milestone?: string;
 	sort_by?: string;
 	sort_dir?: string;
 	page?: number;
@@ -82,6 +83,28 @@ export function resubmitPO(id: string): Promise<PurchaseOrder> {
 
 export function downloadPoPdf(id: string): void {
 	window.open(`/api/v1/po/${id}/pdf`, '_blank');
+}
+
+export function downloadInvoicePdf(id: string): void {
+	window.open(`/api/v1/invoices/${id}/pdf`, '_blank');
+}
+
+export async function downloadBulkInvoicePdf(ids: string[]): Promise<void> {
+	const res = await fetch('/api/v1/invoices/bulk/pdf', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ invoice_ids: ids }),
+	});
+	if (!res.ok) {
+		throw new Error(`POST /api/v1/invoices/bulk/pdf failed: ${res.status}`);
+	}
+	const blob = await res.blob();
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = 'invoices-bulk.pdf';
+	a.click();
+	URL.revokeObjectURL(url);
 }
 
 export function listVendors(params?: { status?: string; vendor_type?: string }): Promise<VendorListItem[]> {
@@ -183,4 +206,12 @@ export function disputeInvoice(id: string, reason: string): Promise<Invoice> {
 
 export function resolveInvoice(id: string): Promise<Invoice> {
 	return apiPost<Invoice>(`/api/v1/invoices/${id}/resolve`);
+}
+
+export function listMilestones(poId: string): Promise<MilestoneUpdate[]> {
+	return apiGet<MilestoneUpdate[]>(`/api/v1/po/${poId}/milestones`);
+}
+
+export function postMilestone(poId: string, milestone: string): Promise<MilestoneUpdate> {
+	return apiPost<MilestoneUpdate>(`/api/v1/po/${poId}/milestones`, { milestone });
 }

@@ -146,6 +146,17 @@ async def init_db(conn: aiosqlite.Connection) -> None:
         """
     )
 
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS milestone_updates (
+            id         TEXT PRIMARY KEY,
+            po_id      TEXT NOT NULL REFERENCES purchase_orders(id),
+            milestone  TEXT NOT NULL,
+            posted_at  TEXT NOT NULL
+        )
+        """
+    )
+
     # Add buyer columns to existing purchase_orders tables.
     for col in ("buyer_name", "buyer_country"):
         try:

@@ -247,6 +247,7 @@ class PurchaseOrderRepository:
         status: POStatus | None = None,
         vendor_id: str | None = None,
         currency: str | None = None,
+        milestone: str | None = None,
         search: str | None = None,
         sort_by: str = "created_at",
         sort_dir: str = "desc",
@@ -272,6 +273,9 @@ class PurchaseOrderRepository:
         if currency is not None:
             where_clauses.append("p.currency = ?")
             params.append(currency)
+        if milestone is not None:
+            where_clauses.append("lm.milestone = ?")
+            params.append(milestone)
         if search is not None:
             term = f"%{search}%"
             where_clauses.append(
@@ -280,6 +284,19 @@ class PurchaseOrderRepository:
             params.extend([term, term, term])
 
         where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+        # latest_milestones: one row per PO with the most-recent milestone value.
+        latest_milestones_subquery = """
+            LEFT JOIN (
+                SELECT mu.po_id, mu.milestone
+                FROM milestone_updates mu
+                INNER JOIN (
+                    SELECT po_id, MAX(posted_at) AS max_posted_at
+                    FROM milestone_updates
+                    GROUP BY po_id
+                ) latest ON mu.po_id = latest.po_id AND mu.posted_at = latest.max_posted_at
+            ) lm ON lm.po_id = p.id
+        """
 
         base_query = f"""
             SELECT
@@ -296,15 +313,18 @@ class PurchaseOrderRepository:
                 p.required_delivery_date,
                 p.currency,
                 (SELECT COALESCE(SUM(quantity * CAST(unit_price AS REAL)), 0)
-                 FROM line_items WHERE po_id = p.id) AS total_value
+                 FROM line_items WHERE po_id = p.id) AS total_value,
+                lm.milestone AS current_milestone
             FROM purchase_orders p
             LEFT JOIN vendors v ON v.id = p.vendor_id
+            {latest_milestones_subquery}
             {where_sql}
         """
 
         count_query = f"""
             SELECT COUNT(*) FROM purchase_orders p
             LEFT JOIN vendors v ON v.id = p.vendor_id
+            {latest_milestones_subquery}
             {where_sql}
         """
 

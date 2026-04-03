@@ -6,7 +6,7 @@
 |------|-----------|-----------------|
 | Purchase Order | A buyer's formal request to a vendor for goods. Contains header, trade details, and one or more line items. Aggregate root. | Procurement |
 | Line Item | A single product/material entry on a PO: part number, description, quantity, UoM, unit price, HS code, country of origin. Child entity of Purchase Order. | Procurement |
-| Vendor | The supplier fulfilling a purchase order. Separate entity with id (UUID), name, country, and active/inactive status. PO references vendor by id; name and country resolved on read. | Procurement |
+| Vendor | The supplier fulfilling a purchase order. Separate entity with id (UUID), name, country (validated reference data code), and active/inactive status. PO references vendor by id; name and country resolved on read. | Procurement |
 | Buyer | The purchasing party on a PO. Stored inline as buyer_name and buyer_country. Prefilled with a default value on creation. | Procurement |
 | Vendor Status | Active or Inactive. Only Active vendors can be assigned to new POs. Deactivation does not affect existing POs. | Procurement |
 | Vendor Reactivation | Restoring an Inactive vendor to Active status. Symmetric guard to deactivation: must be INACTIVE. | Procurement |
@@ -43,14 +43,16 @@
 |------|-----------|-----------------|
 | Part Number | Identifier for the product or material. | Procurement |
 | Unit of Measure | The measurement unit for a line item quantity (e.g., pcs, kg, m). | Procurement |
-| HS Code | Harmonized System tariff classification code for a product. Used for customs declarations. | Trade |
+| HS Code | Harmonized System tariff classification code for a product. Used for customs declarations. Format: digits and dots only, minimum 4 characters. Validated on backend (field_validator) and frontend (inline error with submit-disable). | Trade |
 
 ## Document Export
 
 | Term | Definition | Bounded Context |
 |------|-----------|-----------------|
 | Reference Label | The human-readable form of a reference data code, resolved via lookup. Port labels combine city and country (e.g. "CNSHA" resolves to "Shanghai, China"). Resolved server-side for PDF export (`reference_labels.py`) and client-side for detail views (`labels.ts`). | Procurement |
-| PO Document Export | A PDF rendering of a PO as a clean commercial document: header, parties, trade details, line items, terms and conditions. Excludes operational data (rejection history). | Procurement |
+| PO Document Export | A PDF rendering of a PO as a clean commercial document: header, parties, trade details, line items, terms and conditions. Currency stated once in the header; line item amounts are plain numbers. Excludes operational data (rejection history). | Procurement |
+| Invoice Document Export | A PDF rendering of an invoice: header (invoice number, status, PO number, currency, payment terms, created date), parties (buyer/vendor), line items table with subtotal. Includes dispute reason section when status is DISPUTED. Same ReportLab layout as PO PDF. | Invoicing |
+| Bulk Document Export | Multiple invoices combined into a single PDF with one invoice per page. Requested via POST with a list of invoice IDs; missing IDs are skipped. | Invoicing |
 
 ## Read Models
 
@@ -80,7 +82,7 @@
 
 | Term | Definition | Bounded Context |
 |------|-----------|-----------------|
-| Invoice | A payment obligation created against an Accepted Procurement PO. Pre-populated from PO line items, payment terms, and currency. Aggregate root. | Invoicing |
+| Invoice | A payment obligation created against an Accepted PO (Procurement or OPEX). Pre-populated from PO line items, payment terms, and currency. Aggregate root. | Invoicing |
 | Invoice Number | Unique system-generated identifier. Format: `INV-YYYYMMDD-XXXX`, sequential per day. | Invoicing |
 | Invoice Status | Draft, Submitted, Approved, Paid, Disputed. | Invoicing |
 | Invoice Line Item | A line copied from the PO: part number, description, quantity, UoM, unit price. Child of Invoice. | Invoicing |
@@ -88,6 +90,8 @@
 | Invoiced Quantity | Cumulative quantity invoiced per line item across all non-disputed invoices for a PO. Keyed by part_number. | Invoicing |
 | Remaining Quantity | Ordered quantity minus invoiced quantity for a line item. Ceiling for the next invoice's quantity on that line. | Invoicing |
 | Over-invoicing Guard | Validation that rejects invoice creation when cumulative invoiced quantity would exceed the PO's ordered quantity for any line item. Returns 409 with per-line violation detail. | Invoicing |
+| OPEX Invoice | An invoice against an OPEX PO. Copies all PO line items at full quantity with no partial splits. One invoice per OPEX PO; a second attempt returns 409. Explicit `line_items` param rejected with 422. | Invoicing |
+| One-Invoice-per-PO Guard | OPEX-specific enforcement: if any part_number already has invoiced quantity > 0, a new invoice is rejected (409). Does not apply to Procurement POs, which allow multiple partial invoices. | Invoicing |
 
 ### Invoice Lifecycle
 
@@ -108,6 +112,16 @@
 | Submitted | Disputed | Buyer disputes with reason |
 | Approved | Paid | Payment confirmed |
 | Disputed | Submitted | Dispute resolved, invoice resubmitted |
+
+## Production Tracking
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| Production Milestone | Ordered enum of manufacturing stages: RAW_MATERIALS, PRODUCTION_STARTED, QC_PASSED, READY_TO_SHIP, SHIPPED. Append-only, posted in sequence against ACCEPTED PROCUREMENT POs. | Production |
+| Milestone Update | Value object recording a milestone post (milestone, posted_at). Append-only child of Purchase Order. | Production |
+| Milestone Order Enforcement | Validation that the proposed milestone is the next in the fixed sequence. Rejects out-of-order, duplicate, and beyond-terminal posts. | Production |
+| Current Milestone | The latest posted milestone for a PO. Null when no milestones exist. Exposed on the PO list as a read model field via subquery join. | Production |
+| Overdue Production | A PO whose latest milestone has exceeded its time threshold: 7 days for RAW_MATERIALS and PRODUCTION_STARTED, 3 days for QC_PASSED and READY_TO_SHIP. SHIPPED is never overdue. Surfaced on the dashboard. | Production |
 
 ## Compliance (deferred)
 
@@ -139,7 +153,7 @@
 |--------|-----------|
 | Draft | PO is being composed, not yet visible to vendor. |
 | Pending | PO submitted to vendor, awaiting accept or reject. |
-| Accepted | Vendor formally accepted. Unlocks invoicing for Procurement POs. Terminal. |
+| Accepted | Vendor formally accepted. Unlocks invoicing for Procurement and OPEX POs. Terminal. |
 | Rejected | Vendor rejected with mandatory comment. |
 | Revised | Previously rejected PO updated and resubmitted, awaiting vendor action. |
 

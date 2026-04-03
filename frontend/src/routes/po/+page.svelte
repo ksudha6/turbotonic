@@ -7,11 +7,20 @@
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import type { BulkTransitionItemResult, PurchaseOrderListItem, VendorListItem, ReferenceDataItem } from '$lib/types';
 
+	const MILESTONE_LABELS: Record<string, string> = {
+		RAW_MATERIALS: 'Raw Materials',
+		PRODUCTION_STARTED: 'Production Started',
+		QC_PASSED: 'QC Passed',
+		READY_TO_SHIP: 'Ready to Ship',
+		SHIPPED: 'Shipped',
+	};
+
 	let search: string = $state('');
 	let debouncedSearch: string = $state('');
 	let selectedStatus: string = $state('');
 	let selectedVendor: string = $state('');
 	let selectedCurrency: string = $state('');
+	let selectedMilestone: string = $state('');
 	let sortBy: string = $state('created_at');
 	let sortDir: string = $state('desc');
 	let page: number = $state(1);
@@ -59,6 +68,7 @@
 		if (selectedStatus) params.status = selectedStatus;
 		if (selectedVendor) params.vendor_id = selectedVendor;
 		if (selectedCurrency) params.currency = selectedCurrency;
+		if (selectedMilestone) params.milestone = selectedMilestone;
 		params.page_size = 200;
 		const result = await listPOs(params);
 		selectedIds = new Set(result.items.map(item => item.id));
@@ -96,7 +106,7 @@
 	let initialized = false;
 	$effect(() => {
 		// Touch all reactive dependencies
-		debouncedSearch; selectedStatus; selectedVendor; selectedCurrency;
+		debouncedSearch; selectedStatus; selectedVendor; selectedCurrency; selectedMilestone;
 		sortBy; sortDir; page; pageSize;
 
 		if (!initialized) {
@@ -109,7 +119,7 @@
 	let selectionClearInitialized = false;
 	$effect(() => {
 		// Touch all context-change dependencies
-		debouncedSearch; selectedStatus; selectedVendor; selectedCurrency;
+		debouncedSearch; selectedStatus; selectedVendor; selectedCurrency; selectedMilestone;
 		sortBy; sortDir; page; pageSize;
 
 		if (!selectionClearInitialized) {
@@ -127,6 +137,7 @@
 		selectedStatus = params.get('status') ?? '';
 		selectedVendor = params.get('vendor_id') ?? '';
 		selectedCurrency = params.get('currency') ?? '';
+		selectedMilestone = params.get('milestone') ?? '';
 		sortBy = params.get('sort_by') ?? 'created_at';
 		sortDir = params.get('sort_dir') ?? 'desc';
 		page = parseInt(params.get('page') ?? '1', 10);
@@ -150,6 +161,7 @@
 			if (selectedStatus) params.status = selectedStatus;
 			if (selectedVendor) params.vendor_id = selectedVendor;
 			if (selectedCurrency) params.currency = selectedCurrency;
+			if (selectedMilestone) params.milestone = selectedMilestone;
 			if (sortBy !== 'created_at') params.sort_by = sortBy;
 			if (sortDir !== 'desc') params.sort_dir = sortDir;
 			if (page > 1) params.page = page;
@@ -282,6 +294,12 @@
 			<option value={c.code}>{c.code} — {c.label}</option>
 		{/each}
 	</select>
+	<select class="select filter-select" bind:value={selectedMilestone} onchange={onFilterChange}>
+		<option value="">All Milestones</option>
+		{#each Object.entries(MILESTONE_LABELS) as [value, label]}
+			<option {value}>{label}</option>
+		{/each}
+	</select>
 </div>
 
 {#if loading}
@@ -342,6 +360,7 @@
 						Total Value {sortBy === 'total_value' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
 					</th>
 					<th>Status</th>
+					<th>Production</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -360,6 +379,11 @@
 						<td>{formatDate(po.required_delivery_date)}</td>
 						<td>{formatValue(po.total_value, po.currency)}</td>
 						<td><StatusPill status={po.status} /></td>
+						<td class="milestone-cell">
+							{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT' && po.current_milestone}
+								{MILESTONE_LABELS[po.current_milestone] ?? po.current_milestone}
+							{/if}
+						</td>
 					</tr>
 				{/each}
 			</tbody>
@@ -468,6 +492,12 @@
 	.checkbox-col {
 		width: 40px;
 		text-align: center;
+	}
+
+	.milestone-cell {
+		font-size: var(--font-size-sm);
+		color: var(--gray-600);
+		white-space: nowrap;
 	}
 
 	.selection-count {

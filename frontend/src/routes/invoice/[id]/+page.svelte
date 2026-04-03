@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
-	import { getInvoice, submitInvoice, approveInvoice, payInvoice, disputeInvoice, resolveInvoice } from '$lib/api';
+	import { getInvoice, submitInvoice, approveInvoice, payInvoice, disputeInvoice, resolveInvoice, downloadInvoicePdf } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import DisputeDialog from '$lib/components/DisputeDialog.svelte';
 	import type { Invoice } from '$lib/types';
@@ -111,6 +111,7 @@
 	</div>
 
 	<div class="actions">
+		<button class="btn btn-secondary" onclick={() => downloadInvoicePdf(id)}>Download PDF</button>
 		{#if invoice.status === 'DRAFT'}
 			<button class="btn btn-primary" onclick={handleSubmit}>Submit</button>
 		{:else if invoice.status === 'SUBMITTED'}

@@ -217,7 +217,7 @@ test('filter bar renders search input and dropdowns', async ({ page }) => {
 	await page.waitForSelector('.filter-bar');
 
 	await expect(page.locator('.filter-bar input[type="text"]')).toBeVisible();
-	await expect(page.locator('.filter-bar select')).toHaveCount(3);
+	await expect(page.locator('.filter-bar select')).toHaveCount(4);
 });
 
 test('pagination controls appear when total exceeds page size', async ({ page }) => {
@@ -260,4 +260,100 @@ test('URL state preserved on navigation', async ({ page }) => {
 
 	await expect(page.locator('.filter-bar input[type="text"]')).toHaveValue('foo');
 	await expect(page.locator('.filter-bar select').first()).toHaveValue('DRAFT');
+});
+
+// ---------------------------------------------------------------------------
+// Iteration 22 — Production column and milestone filter
+// ---------------------------------------------------------------------------
+
+const PO_ACCEPTED_PROCUREMENT = {
+	id: 'uuid-accepted-proc',
+	po_number: 'PO-20260401-0010',
+	status: 'ACCEPTED',
+	po_type: 'PROCUREMENT',
+	vendor_id: 'VENDOR-D',
+	vendor_name: 'Vendor D',
+	vendor_country: 'CN',
+	buyer_name: 'TurboTonic Ltd',
+	buyer_country: 'US',
+	issued_date: '2026-04-01T00:00:00+00:00',
+	required_delivery_date: '2026-05-01T00:00:00+00:00',
+	total_value: '8000',
+	currency: 'USD',
+	current_milestone: 'RAW_MATERIALS',
+};
+
+const PO_DRAFT_NO_MILESTONE = {
+	id: 'uuid-draft-no-ms',
+	po_number: 'PO-20260401-0011',
+	status: 'DRAFT',
+	po_type: 'PROCUREMENT',
+	vendor_id: 'VENDOR-E',
+	vendor_name: 'Vendor E',
+	vendor_country: 'CN',
+	buyer_name: 'TurboTonic Ltd',
+	buyer_country: 'US',
+	issued_date: '2026-04-01T00:00:00+00:00',
+	required_delivery_date: '2026-05-01T00:00:00+00:00',
+	total_value: '1000',
+	currency: 'USD',
+	current_milestone: null,
+};
+
+test('PO list shows production column for accepted procurement PO', async ({ page }) => {
+	await mockCommonRoutes(page);
+	await page.route('**/api/v1/po**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ items: [PO_ACCEPTED_PROCUREMENT], total: 1, page: 1, page_size: 20 })
+		});
+	});
+
+	await page.goto('/po');
+	await page.waitForSelector('table');
+
+	// The Production column header must be present
+	await expect(page.locator('thead')).toContainText('Production');
+	// The milestone label for RAW_MATERIALS must appear in the row
+	await expect(page.locator('tbody')).toContainText('Raw Materials');
+});
+
+test('PO list shows blank production cell for non-accepted PO', async ({ page }) => {
+	await mockCommonRoutes(page);
+	await page.route('**/api/v1/po**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ items: [PO_DRAFT_NO_MILESTONE], total: 1, page: 1, page_size: 20 })
+		});
+	});
+
+	await page.goto('/po');
+	await page.waitForSelector('table');
+
+	// No milestone label text should appear for a DRAFT PO with no milestone
+	await expect(page.locator('tbody .milestone-cell').first()).toContainText('');
+	await expect(page.locator('tbody')).not.toContainText('Raw Materials');
+});
+
+test('milestone filter dropdown exists with milestone options', async ({ page }) => {
+	await mockCommonRoutes(page);
+	await page.route('**/api/v1/po**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ items: [], total: 0, page: 1, page_size: 20 })
+		});
+	});
+
+	await page.goto('/po');
+	await page.waitForSelector('.filter-bar');
+
+	// The filter bar contains a milestone select with known option labels
+	const milestoneSelect = page.locator('.filter-bar select').last();
+	await expect(milestoneSelect).toBeVisible();
+	await expect(milestoneSelect).toContainText('Raw Materials');
+	await expect(milestoneSelect).toContainText('Production Started');
+	await expect(milestoneSelect).toContainText('QC Passed');
 });

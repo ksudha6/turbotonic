@@ -58,6 +58,7 @@ export interface PurchaseOrderListItem {
 	required_delivery_date: string;
 	total_value: string;
 	currency: string;
+	current_milestone: string | null;
 }
 
 export interface PaginatedPOList {
@@ -149,11 +150,26 @@ export interface RecentPO {
 	updated_at: string;
 }
 
+export interface ProductionStageSummary {
+	milestone: string;
+	count: number;
+}
+
+export interface OverduePO {
+	id: string;
+	po_number: string;
+	vendor_name: string;
+	milestone: string;
+	days_since_update: number;
+}
+
 export interface DashboardData {
 	po_summary: POStatusSummary[];
 	vendor_summary: VendorSummary;
 	recent_pos: RecentPO[];
 	invoice_summary: InvoiceStatusSummary[];
+	production_summary: ProductionStageSummary[];
+	overdue_pos: OverduePO[];
 }
 
 export interface BulkTransitionItemResult {
@@ -239,4 +255,11 @@ export interface PaginatedInvoiceList {
 	total: number;
 	page: number;
 	page_size: number;
+}
+
+export type ProductionMilestone = 'RAW_MATERIALS' | 'PRODUCTION_STARTED' | 'QC_PASSED' | 'READY_TO_SHIP' | 'SHIPPED';
+
+export interface MilestoneUpdate {
+	milestone: ProductionMilestone;
+	posted_at: string;
 }

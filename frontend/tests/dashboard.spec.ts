@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
+import type { DashboardData } from '../src/lib/types';
 
-const MOCK_DASHBOARD = {
+const MOCK_DASHBOARD: DashboardData = {
 	po_summary: [
 		{ status: 'DRAFT', count: 3, total_usd: '4500.00' },
 		{ status: 'PENDING', count: 2, total_usd: '12000.00' },
@@ -12,7 +13,6 @@ const MOCK_DASHBOARD = {
 			id: 'uuid-1',
 			po_number: 'PO-20260324-0001',
 			status: 'PENDING',
-			po_type: 'PROCUREMENT',
 			vendor_name: 'Acme Corp',
 			total_value: '5000.00',
 			currency: 'USD',
@@ -22,13 +22,15 @@ const MOCK_DASHBOARD = {
 			id: 'uuid-2',
 			po_number: 'PO-20260324-0002',
 			status: 'DRAFT',
-			po_type: 'PROCUREMENT',
 			vendor_name: 'Widget Inc',
 			total_value: '2500.00',
 			currency: 'EUR',
 			updated_at: '2026-03-24T10:00:00+00:00'
 		}
-	]
+	],
+	invoice_summary: [],
+	production_summary: [],
+	overdue_pos: []
 };
 
 function mockDashboardRoute(page: any, data = MOCK_DASHBOARD) {
@@ -156,6 +158,58 @@ test('recent PO rows link to detail page', async ({ page }) => {
 	expect(page.url()).toContain('/po/uuid-1');
 });
 
+// ---------------------------------------------------------------------------
+// Iteration 22 — Production pipeline and overdue POs
+// ---------------------------------------------------------------------------
+
+test('dashboard shows production pipeline section with milestone labels and counts', async ({ page }) => {
+	const data = {
+		...MOCK_DASHBOARD,
+		production_summary: [
+			{ milestone: 'RAW_MATERIALS', count: 3 },
+			{ milestone: 'PRODUCTION_STARTED', count: 2 },
+		],
+		overdue_pos: [],
+	};
+
+	await mockDashboardRoute(page, data);
+	await page.goto('/dashboard');
+
+	// Section heading
+	await expect(page.getByRole('heading', { name: 'Production Pipeline' })).toBeVisible();
+
+	// Milestone labels and counts must appear in the table
+	await expect(page.locator('body')).toContainText('Raw Materials');
+	await expect(page.locator('body')).toContainText('Production Started');
+
+	const productionSection = page.locator('section').filter({ hasText: 'Production Pipeline' });
+	await expect(productionSection).toContainText('3');
+	await expect(productionSection).toContainText('2');
+});
+
+test('dashboard shows overdue production section with PO number and days', async ({ page }) => {
+	const data = {
+		...MOCK_DASHBOARD,
+		production_summary: [],
+		overdue_pos: [
+			{ id: 'po-1', po_number: 'PO-20260401-0001', vendor_name: 'Acme', milestone: 'RAW_MATERIALS', days_since_update: 10 },
+		],
+	};
+
+	await mockDashboardRoute(page, data);
+	await page.goto('/dashboard');
+
+	// Section heading
+	await expect(page.getByRole('heading', { name: 'Overdue Production' })).toBeVisible();
+
+	// Overdue row: PO number and days count
+	await expect(page.locator('body')).toContainText('PO-20260401-0001');
+	await expect(page.locator('body')).toContainText('10');
+
+	// Milestone label renders correctly
+	await expect(page.locator('body')).toContainText('Raw Materials');
+});
+
 test('empty dashboard shows appropriate messages', async ({ page }) => {
 	await page.route('**/api/v1/dashboard**', (route) => {
 		route.fulfill({
@@ -164,7 +218,10 @@ test('empty dashboard shows appropriate messages', async ({ page }) => {
 			body: JSON.stringify({
 				po_summary: [],
 				vendor_summary: { active: 0, inactive: 0 },
-				recent_pos: []
+				recent_pos: [],
+				invoice_summary: [],
+				production_summary: [],
+				overdue_pos: []
 			})
 		});
 	});

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { listAllInvoices, listVendors } from '$lib/api';
+	import { listAllInvoices, listVendors, downloadBulkInvoicePdf } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import type { InvoiceListItemWithContext, VendorListItem } from '$lib/types';
 
@@ -12,6 +12,8 @@
 	let dateTo: string = $state('');
 	let invoices: InvoiceListItemWithContext[] = $state([]);
 	let loading: boolean = $state(true);
+	let selectedIds: Set<string> = $state(new Set());
+	const allSelected = $derived(invoices.length > 0 && invoices.every(inv => selectedIds.has(inv.id)));
 
 	let page: number = $state(1);
 	let pageSize: number = $state(20);
@@ -58,7 +60,13 @@
 
 	function onFilterChange() {
 		page = 1;
+		selectedIds = new Set();
 		fetchInvoices();
+	}
+
+	async function handleBulkDownload() {
+		await downloadBulkInvoicePdf([...selectedIds]);
+		selectedIds = new Set();
 	}
 
 	function clearFilters() {
@@ -160,6 +168,14 @@
 	{/if}
 </div>
 
+{#if selectedIds.size > 0}
+	<div class="bulk-toolbar">
+		<span class="selection-count">{selectedIds.size} selected</span>
+		<button class="btn btn-secondary" onclick={handleBulkDownload}>Download PDFs</button>
+		<button class="btn-link" onclick={() => { selectedIds = new Set(); }}>Clear</button>
+	</div>
+{/if}
+
 {#if loading}
 	<p>Loading...</p>
 {:else if invoices.length === 0}
@@ -169,6 +185,15 @@
 		<table class="table">
 			<thead>
 				<tr>
+					<th class="checkbox-col">
+						<input type="checkbox" checked={allSelected} onchange={() => {
+							if (allSelected) {
+								selectedIds = new Set();
+							} else {
+								selectedIds = new Set(invoices.map(i => i.id));
+							}
+						}} />
+					</th>
 					<th>Invoice #</th>
 					<th>PO #</th>
 					<th>Vendor</th>
@@ -180,6 +205,13 @@
 			<tbody>
 				{#each invoices as invoice}
 					<tr>
+						<td class="checkbox-col" onclick={(e) => e.stopPropagation()}>
+							<input type="checkbox" checked={selectedIds.has(invoice.id)} onchange={() => {
+								const next = new Set(selectedIds);
+								if (next.has(invoice.id)) { next.delete(invoice.id); } else { next.add(invoice.id); }
+								selectedIds = next;
+							}} />
+						</td>
 						<td><a href="/invoice/{invoice.id}">{invoice.invoice_number}</a></td>
 						<td><a href="/po/{invoice.po_id}">{invoice.po_number}</a></td>
 						<td>{invoice.vendor_name}</td>
@@ -288,5 +320,40 @@
 	.page-size-select {
 		width: auto;
 		font-size: var(--font-size-sm);
+	}
+
+	.checkbox-col {
+		width: 40px;
+		text-align: center;
+	}
+
+	.bulk-toolbar {
+		display: flex;
+		align-items: center;
+		gap: var(--space-3);
+		margin-bottom: var(--space-3);
+		padding: var(--space-3);
+		background-color: var(--gray-50);
+		border-radius: var(--radius);
+	}
+
+	.selection-count {
+		font-size: var(--font-size-sm);
+		color: var(--gray-600);
+		font-weight: 500;
+	}
+
+	.btn-link {
+		background: none;
+		border: none;
+		color: var(--blue-600, #2563eb);
+		cursor: pointer;
+		font-size: var(--font-size-sm);
+		padding: 0;
+		text-decoration: underline;
+	}
+
+	.btn-link:hover {
+		color: var(--blue-800, #1e40af);
 	}
 </style>

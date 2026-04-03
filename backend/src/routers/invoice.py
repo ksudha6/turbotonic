@@ -3,10 +3,12 @@ from __future__ import annotations
 from typing import Annotated, AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException
+from starlette.responses import Response
 
 from src.db import get_db
 from src.domain.invoice import Invoice, InvoiceLineItem
 from src.dto import (
+    BulkInvoicePdfRequest,
     DisputeRequest,
     InvoiceCreate,
     InvoiceListItem,
@@ -22,6 +24,8 @@ from src.dto import (
 )
 from src.invoice_repository import InvoiceRepository
 from src.repository import PurchaseOrderRepository
+from src.services.invoice_pdf import generate_bulk_invoice_pdf, generate_invoice_pdf
+from src.vendor_repository import VendorRepository
 
 router = APIRouter(prefix="/api/v1/invoices", tags=["invoices"])
 
@@ -38,8 +42,15 @@ async def get_po_repo() -> AsyncIterator[PurchaseOrderRepository]:
         yield PurchaseOrderRepository(conn)
 
 
+async def get_vendor_repo() -> AsyncIterator[VendorRepository]:
+    async with get_db() as conn:
+        await conn.execute("PRAGMA foreign_keys = ON")
+        yield VendorRepository(conn)
+
+
 InvoiceRepoDep = Annotated[InvoiceRepository, Depends(get_invoice_repo)]
 PORepoDep = Annotated[PurchaseOrderRepository, Depends(get_po_repo)]
+VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
 
 
 @router.get("/po/{po_id}/remaining", response_model=RemainingQuantityResponse)
@@ -79,11 +90,18 @@ async def create_invoice(
         raise HTTPException(status_code=404, detail="Purchase order not found")
     if po.status.value != "ACCEPTED":
         raise HTTPException(status_code=409, detail="PO must be in ACCEPTED status to create an invoice")
-    if po.po_type.value != "PROCUREMENT":
-        raise HTTPException(status_code=409, detail="Invoice creation is limited to Procurement POs")
 
     invoice_number = await invoice_repo.next_invoice_number()
     invoiced = await invoice_repo.invoiced_quantities(po.id)
+
+    if po.po_type.value == "OPEX":
+        if body.line_items is not None:
+            raise HTTPException(
+                status_code=422,
+                detail="OPEX invoices do not accept line_items; full PO quantity is used automatically",
+            )
+        if any(qty > 0 for qty in invoiced.values()):
+            raise HTTPException(status_code=409, detail="An invoice already exists for this OPEX PO")
 
     po_lines_by_part = {item.part_number: item for item in po.line_items}
 
@@ -193,12 +211,74 @@ async def list_invoices(
     return PaginatedInvoiceList(items=items, total=total, page=page, page_size=page_size)
 
 
+@router.post("/bulk/pdf")
+async def bulk_invoice_pdf(
+    body: BulkInvoicePdfRequest,
+    invoice_repo: InvoiceRepoDep,
+    po_repo: PORepoDep,
+    vendor_repo: VendorRepoDep,
+) -> Response:
+    if not body.invoice_ids:
+        raise HTTPException(status_code=400, detail="invoice_ids must not be empty")
+
+    invoices_with_context: list[tuple] = []
+    for invoice_id in body.invoice_ids:
+        invoice = await invoice_repo.get_by_id(invoice_id)
+        if invoice is None:
+            continue
+        po = await po_repo.get(invoice.po_id)
+        if po is None:
+            continue
+        vendor = await vendor_repo.get_by_id(po.vendor_id)
+        vendor_name = vendor.name if vendor is not None else ""
+        vendor_country = vendor.country if vendor is not None else ""
+        invoices_with_context.append((invoice, po, vendor_name, vendor_country))
+
+    pdf_bytes = generate_bulk_invoice_pdf(invoices_with_context)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=\"invoices-bulk.pdf\""},
+    )
+
+
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
 async def get_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return invoice_to_response(invoice)
+
+
+@router.get("/{invoice_id}/pdf")
+async def get_invoice_pdf(
+    invoice_id: str,
+    invoice_repo: InvoiceRepoDep,
+    po_repo: PORepoDep,
+    vendor_repo: VendorRepoDep,
+) -> Response:
+    invoice = await invoice_repo.get_by_id(invoice_id)
+    if invoice is None:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    po = await po_repo.get(invoice.po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+
+    vendor = await vendor_repo.get_by_id(po.vendor_id)
+    vendor_name = vendor.name if vendor is not None else ""
+    vendor_country = vendor.country if vendor is not None else ""
+
+    # Filename uses invoice_number with date prefix stripped of separators.
+    date_part = invoice.created_at.strftime("%Y%m%d")
+    filename = f"{invoice.invoice_number}-{date_part}.pdf"
+
+    pdf_bytes = generate_invoice_pdf(invoice, po, vendor_name, vendor_country)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+    )
 
 
 @router.post("/{invoice_id}/submit", response_model=InvoiceResponse)

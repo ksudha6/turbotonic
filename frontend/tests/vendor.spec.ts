@@ -30,7 +30,7 @@ test('vendor list loads and displays vendors', async ({ page }) => {
 test('create vendor form submits and redirects', async ({ page }) => {
 	const createdVendor = { id: 'v3', name: 'New Vendor', country: 'JP', status: 'ACTIVE', vendor_type: 'PROCUREMENT' };
 
-	await page.route('**/api/v1/vendors', (route) => {
+	await page.route('**/api/v1/vendors**', (route) => {
 		const method = route.request().method();
 		if (method === 'POST') {
 			route.fulfill({
@@ -47,11 +47,23 @@ test('create vendor form submits and redirects', async ({ page }) => {
 		}
 	});
 
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				currencies: [], incoterms: [], payment_terms: [], ports: [],
+				vendor_types: [], po_types: [],
+				countries: [{ code: 'JP', label: 'Japan' }, { code: 'US', label: 'United States' }],
+			}),
+		});
+	});
+
 	await page.goto('/vendors/new');
 	await page.waitForSelector('form');
 
 	await page.fill('#name', 'New Vendor');
-	await page.fill('#country', 'JP');
+	await page.selectOption('#country', 'JP');
 
 	await page.getByRole('button', { name: 'Create Vendor' }).click();
 	await page.waitForURL('**/vendors');
@@ -212,4 +224,64 @@ test('vendor list shows UUID column', async ({ page }) => {
 	await expect(page.locator('thead')).toContainText('ID');
 	// First 8 chars of vendor ID are shown
 	await expect(page.locator('tbody .vendor-id')).toContainText(VENDOR_ACTIVE.id.slice(0, 8));
+});
+
+// ---------------------------------------------------------------------------
+// Iteration 19 — Vendor country dropdown (reference data)
+// ---------------------------------------------------------------------------
+
+test('vendor create form renders country as select dropdown', async ({ page }) => {
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				currencies: [], incoterms: [], payment_terms: [], ports: [],
+				vendor_types: [], po_types: [],
+				countries: [
+					{ code: 'US', label: 'United States' },
+					{ code: 'CN', label: 'China' },
+					{ code: 'DE', label: 'Germany' },
+				],
+			}),
+		});
+	});
+
+	await page.goto('/vendors/new');
+	await page.waitForSelector('form');
+
+	// #country must be a <select>, not a plain text input
+	const countryEl = page.locator('#country');
+	await expect(countryEl).toBeVisible();
+	const tagName = await countryEl.evaluate((el) => el.tagName.toLowerCase());
+	expect(tagName).toBe('select');
+});
+
+test('vendor create form shows country options from reference data', async ({ page }) => {
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				currencies: [], incoterms: [], payment_terms: [], ports: [],
+				vendor_types: [], po_types: [],
+				countries: [
+					{ code: 'US', label: 'United States' },
+					{ code: 'CN', label: 'China' },
+					{ code: 'DE', label: 'Germany' },
+				],
+			}),
+		});
+	});
+
+	await page.goto('/vendors/new');
+	await page.waitForSelector('form');
+
+	const countrySelect = page.locator('#country');
+	const options = countrySelect.locator('option');
+	// placeholder ("Select country") + 3 countries = 4 total
+	await expect(options).toHaveCount(4);
+	await expect(countrySelect).toContainText('United States');
+	await expect(countrySelect).toContainText('China');
+	await expect(countrySelect).toContainText('Germany');
 });

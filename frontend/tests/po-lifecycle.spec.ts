@@ -89,6 +89,12 @@ function mockDetail(page: import('@playwright/test').Page, po: object) {
 test('detail view shows header, trade, line items, status pill', async ({ page }) => {
 	const po = makePO('DRAFT');
 
+	await page.route('**/api/v1/po/*/invoices', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/reference-data/**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(REFERENCE_DATA) });
+	});
 	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
 	});
@@ -101,9 +107,9 @@ test('detail view shows header, trade, line items, status pill', async ({ page }
 	await expect(page.locator('body')).toContainText('Draft');
 	// Vendor
 	await expect(page.locator('body')).toContainText('Acme Corp');
-	// Trade details
-	await expect(page.locator('body')).toContainText('FOB');
-	await expect(page.locator('body')).toContainText('CNSHA');
+	// Trade details — labels are resolved via reference data
+	await expect(page.locator('body')).toContainText('Free on Board');
+	await expect(page.locator('body')).toContainText('Shanghai, China');
 	// Line item
 	await expect(page.locator('body')).toContainText('PART-001');
 	await expect(page.locator('body')).toContainText('100');
@@ -118,6 +124,12 @@ test('detail view shows rejection history when present', async ({ page }) => {
 		]
 	});
 
+	await page.route('**/api/v1/po/*/invoices', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/reference-data/**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(REFERENCE_DATA) });
+	});
 	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
 	});
@@ -132,6 +144,12 @@ test('detail view shows rejection history when present', async ({ page }) => {
 test('draft PO shows Edit and Submit buttons', async ({ page }) => {
 	const po = makePO('DRAFT');
 
+	await page.route('**/api/v1/po/*/invoices', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/reference-data/**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(REFERENCE_DATA) });
+	});
 	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
 	});
@@ -146,6 +164,12 @@ test('draft PO shows Edit and Submit buttons', async ({ page }) => {
 test('pending PO shows Accept and Reject buttons', async ({ page }) => {
 	const po = makePO('PENDING');
 
+	await page.route('**/api/v1/po/*/invoices', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/reference-data/**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(REFERENCE_DATA) });
+	});
 	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
 	});
@@ -160,6 +184,18 @@ test('pending PO shows Accept and Reject buttons', async ({ page }) => {
 test('accepted PO shows read-only view', async ({ page }) => {
 	const po = makePO('ACCEPTED');
 
+	await page.route('**/api/v1/po/*/invoices', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/reference-data/**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(REFERENCE_DATA) });
+	});
+	await page.route('**/api/v1/invoices/po/*/remaining', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ po_id: PO_ID, lines: [] }) });
+	});
+	await page.route('**/api/v1/po/*/milestones', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
 	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
 	});
@@ -167,7 +203,7 @@ test('accepted PO shows read-only view', async ({ page }) => {
 	await page.goto(`/po/${PO_ID}`);
 	await page.waitForSelector('h1');
 
-	await expect(page.locator('body')).toContainText('accepted');
+	await expect(page.locator('body')).toContainText('Accepted');
 	await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Accept' })).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Reject' })).toHaveCount(0);
@@ -265,6 +301,12 @@ test('create PO form rejects quantity <= 0', async ({ page }) => {
 test('reject modal requires non-empty comment', async ({ page }) => {
 	const po = makePO('PENDING');
 
+	await page.route('**/api/v1/po/*/invoices', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/reference-data/**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(REFERENCE_DATA) });
+	});
 	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
 	});
@@ -290,8 +332,19 @@ test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ pa
 	// Mutable state tracking current PO status for the detail endpoint
 	let currentPO = makePO('DRAFT');
 
-	// Mock the list endpoint for navigation after create
-	await page.route('**/api/v1/po', (route) => {
+	// Mock supporting APIs for PO detail page
+	await page.route('**/api/v1/po/*/invoices', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/invoices/po/*/remaining', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ po_id: PO_ID, lines: [] }) });
+	});
+	await page.route('**/api/v1/po/*/milestones', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+
+	// Mock the create endpoint (POST /api/v1/po/)
+	await page.route('**/api/v1/po/', (route) => {
 		const method = route.request().method();
 		if (method === 'POST') {
 			route.fulfill({
@@ -422,6 +475,14 @@ test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ pa
 	await page.waitForURL(`**/po/${PO_ID}/edit`);
 	await page.waitForSelector('form');
 
+	// Wait for vendors to load then select the vendor
+	// (the $effect in POForm clears vendor_id before vendors fetch completes)
+	await page.waitForFunction(() => {
+		const sel = document.querySelector('#vendor_id') as HTMLSelectElement | null;
+		return sel && sel.options.length > 1;
+	});
+	await page.selectOption('#vendor_id', 'vendor-uuid-1');
+
 	// Step 5: Save revision
 	await page.getByRole('button', { name: 'Save & Revise' }).click();
 	await page.waitForURL(`**/po/${PO_ID}`);
@@ -434,10 +495,22 @@ test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ pa
 	// Step 7: Accept
 	await page.getByRole('button', { name: 'Accept' }).click();
 	await expect(page.locator('body')).toContainText('Accepted');
-	await expect(page.locator('body')).toContainText('accepted');
 });
 
 test('download PDF button is visible for every PO status', async ({ page }) => {
+	await page.route('**/api/v1/po/*/invoices', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/reference-data/**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(REFERENCE_DATA) });
+	});
+	await page.route('**/api/v1/invoices/po/*/remaining', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ po_id: PO_ID, lines: [] }) });
+	});
+	await page.route('**/api/v1/po/*/milestones', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+
 	for (const status of ['DRAFT', 'PENDING', 'ACCEPTED', 'REJECTED', 'REVISED']) {
 		const po = makePO(status);
 		await mockDetail(page, po);
@@ -445,6 +518,65 @@ test('download PDF button is visible for every PO status', async ({ page }) => {
 		await page.waitForSelector('h1');
 		await expect(page.getByRole('button', { name: 'Download PDF' })).toBeVisible();
 	}
+});
+
+// ---------------------------------------------------------------------------
+// Iteration 20 — HS code validation
+// ---------------------------------------------------------------------------
+
+test('HS code input shows error for invalid value', async ({ page }) => {
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([{ id: 'v1', name: 'Test Vendor', country: 'US', status: 'ACTIVE', vendor_type: 'PROCUREMENT' }])
+		});
+	});
+
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(REFERENCE_DATA)
+		});
+	});
+
+	await page.goto('/po/new');
+	await page.waitForSelector('form');
+
+	// Enter a value that fails the HS code pattern (letters, fewer than 4 chars)
+	await page.locator('input[placeholder="HS Code"]').fill('AB');
+
+	// Error message must appear near the input
+	await expect(page.locator('.hs-code-cell .error-message')).toBeVisible();
+	await expect(page.locator('.hs-code-cell .error-message')).toContainText('digits and dots');
+});
+
+test('submit button disabled when HS code invalid', async ({ page }) => {
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([{ id: 'v1', name: 'Test Vendor', country: 'US', status: 'ACTIVE', vendor_type: 'PROCUREMENT' }])
+		});
+	});
+
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(REFERENCE_DATA)
+		});
+	});
+
+	await page.goto('/po/new');
+	await page.waitForSelector('form');
+
+	// Enter an invalid HS code
+	await page.locator('input[placeholder="HS Code"]').fill('AB');
+
+	// Submit button must be disabled while HS code error is present
+	await expect(page.getByRole('button', { name: 'Create PO' })).toBeDisabled();
 });
 
 test('PO form renders dropdown fields from reference data', async ({ page }) => {

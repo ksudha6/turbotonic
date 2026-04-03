@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from decimal import Decimal
 
@@ -9,6 +10,10 @@ from pydantic import BaseModel, field_validator, model_validator
 from src.domain.invoice import Invoice
 from src.domain.invoice import InvoiceLineItem as DomainInvoiceLineItem
 from src.domain.purchase_order import LineItem, PurchaseOrder, RejectionRecord
+
+
+# HS code must contain only digits and dots and be at least 4 characters long.
+_HS_CODE_PATTERN: re.Pattern[str] = re.compile(r"[\d.]+")
 
 
 class LineItemCreate(BaseModel):
@@ -25,6 +30,15 @@ class LineItemCreate(BaseModel):
     def part_number_not_empty(cls, v: str) -> str:
         if not v or not v.strip():
             raise ValueError("part_number must not be empty or whitespace-only")
+        return v
+
+    @field_validator("hs_code")
+    @classmethod
+    def hs_code_valid(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("hs_code must be at least 4 characters and contain only digits and dots")
+        if len(v) < 4 or not _HS_CODE_PATTERN.fullmatch(v):
+            raise ValueError("hs_code must be at least 4 characters and contain only digits and dots")
         return v
 
     @field_validator("quantity")
@@ -215,6 +229,7 @@ class PurchaseOrderListItem(BaseModel):
     required_delivery_date: datetime
     total_value: str
     currency: str
+    current_milestone: str | None = None
 
 
 class PaginatedPOList(BaseModel):
@@ -421,3 +436,7 @@ def invoice_to_list_item(inv: Invoice) -> InvoiceListItem:
         subtotal=str(inv.subtotal),
         created_at=inv.created_at,
     )
+
+
+class BulkInvoicePdfRequest(BaseModel):
+    invoice_ids: list[str]

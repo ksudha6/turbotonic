@@ -21,15 +21,15 @@ Invoicing is currently gated to PROCUREMENT POs only (iteration 12 decision). OP
 ## Tasks
 
 ### Backend
-- [ ] Remove the PROCUREMENT-only guard from the invoice creation endpoint
-- [ ] For OPEX POs, reject the `line_items` request body param with 422
-- [ ] For OPEX POs, enforce one-invoice-per-PO and return 409 on a second attempt
-- [ ] Copy all PO line items at full quantity when creating an OPEX invoice
+- [x] Remove the PROCUREMENT-only guard from the invoice creation endpoint
+- [x] For OPEX POs, reject the `line_items` request body param with 422
+- [x] For OPEX POs, enforce one-invoice-per-PO and return 409 on a second attempt
+- [x] Copy all PO line items at full quantity when creating an OPEX invoice
 
 ### Frontend
-- [ ] Show "Create Invoice" button on ACCEPTED OPEX PO detail page
-- [ ] On click, call the create invoice endpoint directly with no quantity dialog
-- [ ] Display an error message if the endpoint returns 409 (invoice already exists)
+- [x] Show "Create Invoice" button on ACCEPTED OPEX PO detail page
+- [x] On click, call the create invoice endpoint directly with no quantity dialog
+- [x] Display an error message if the endpoint returns 409 (invoice already exists)
 
 ## Tests
 
@@ -50,4 +50,6 @@ Invoicing is currently gated to PROCUREMENT POs only (iteration 12 decision). OP
 - Screenshot: error state when a second invoice is attempted.
 
 ## Notes
+
+OPEX invoice creation reuses the existing code path that copies all PO line items when no `line_items` param is provided. The PROCUREMENT-only guard was replaced with per-type branching: OPEX rejects explicit line_items (422) and enforces one-invoice-per-PO by checking `invoiced_quantities` (409 if any part already has invoiced > 0). Domain model `Invoice.create` now accepts both PROCUREMENT and OPEX po_type values. Frontend shows a direct "Create Invoice" button for OPEX (no quantity dialog) with inline error display on conflict.
 

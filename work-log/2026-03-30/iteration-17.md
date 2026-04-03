@@ -17,18 +17,21 @@ First iteration of the Production Status Tracking module. Vendors post milestone
 - POST endpoint posts the next milestone; rejects duplicates and out-of-order posts
 
 ## Tasks
-- Backend domain: `ProductionMilestone` enum, `MilestoneUpdate` value object (milestone, posted_at), validation (order enforcement, PO must be ACCEPTED PROCUREMENT)
-- Backend persistence: `milestone_updates` table (id, po_id, milestone, posted_at), `MilestoneRepository` (save, list_by_po, latest_for_po)
-- Backend API: `GET /api/v1/po/{po_id}/milestones`, `POST /api/v1/po/{po_id}/milestones` with `{ "milestone": "RAW_MATERIALS" }`
+- [x] Backend domain: `ProductionMilestone` enum, `MilestoneUpdate` value object (milestone, posted_at), validation (order enforcement, PO must be ACCEPTED PROCUREMENT)
+- [x] Backend persistence: `milestone_updates` table (id, po_id, milestone, posted_at), `MilestoneRepository` (save, list_by_po, latest_for_po)
+- [x] Backend API: `GET /api/v1/po/{po_id}/milestones`, `POST /api/v1/po/{po_id}/milestones` with `{ "milestone": "RAW_MATERIALS" }`
 
 ## Tests
-- Post milestone on ACCEPTED PROCUREMENT PO returns 201
-- Reject POST on non-accepted PO (400 or 422)
-- Reject POST on non-PROCUREMENT PO (400 or 422)
-- Reject out-of-order milestone post (e.g. posting SHIPPED before RAW_MATERIALS)
-- Reject duplicate milestone post
-- GET returns milestones in posted order
-- GET returns empty list when no milestones posted
+- [x] Post milestone on ACCEPTED PROCUREMENT PO returns 201
+- [x] Reject POST on non-accepted PO (400 or 422)
+- [x] Reject POST on non-PROCUREMENT PO (400 or 422)
+- [x] Reject out-of-order milestone post (e.g. posting SHIPPED before RAW_MATERIALS)
+- [x] Reject duplicate milestone post
+- [x] GET returns milestones in posted order
+- [x] GET returns empty list when no milestones posted
+- [x] Invalid milestone value returns 422
 
 ## Notes
+
+`ProductionMilestone` enum with `MILESTONE_ORDER` tuple for sequence enforcement. `validate_next_milestone` checks the proposed milestone is the next in sequence after the latest posted one. Router validates PO is ACCEPTED PROCUREMENT before allowing milestone posts. Milestone repo uses the same `aiosqlite` connection pattern as other repos. Schema adds `milestone_updates` table with FK to purchase_orders.
 

@@ -2,11 +2,12 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf, createInvoice, listInvoicesByPO, fetchReferenceData, getRemainingQuantities } from '$lib/api';
+	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf, createInvoice, listInvoicesByPO, fetchReferenceData, getRemainingQuantities, listMilestones, postMilestone } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import RejectDialog from '$lib/components/RejectDialog.svelte';
 	import CreateInvoiceDialog from '$lib/components/CreateInvoiceDialog.svelte';
-	import type { PurchaseOrder, InvoiceListItem, ReferenceData, RemainingLine, InvoiceLineItemCreate } from '$lib/types';
+	import MilestoneTimeline from '$lib/components/MilestoneTimeline.svelte';
+	import type { PurchaseOrder, InvoiceListItem, ReferenceData, RemainingLine, InvoiceLineItemCreate, MilestoneUpdate } from '$lib/types';
 	import { buildLabelResolver } from '$lib/labels';
 
 	let po: PurchaseOrder | null = $state(null);
@@ -18,6 +19,8 @@
 	let remainingMap: Map<string, RemainingLine> = $state(new Map());
 	let showInvoiceDialog: boolean = $state(false);
 	let remainingLines: RemainingLine[] = $state([]);
+	let opexError: string = $state('');
+	let milestones: MilestoneUpdate[] = $state([]);
 
 	const id: string = $page.params.id ?? '';
 
@@ -34,6 +37,7 @@
 			if (po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT') {
 				const resp = await getRemainingQuantities(id);
 				remainingMap = new Map(resp.lines.map((l) => [l.part_number, l]));
+				milestones = await listMilestones(id);
 			}
 		} finally {
 			loading = false;
@@ -80,6 +84,22 @@
 		showInvoiceDialog = false;
 		const invoice = await createInvoice(id, lineItems);
 		goto(`/invoice/${invoice.id}`);
+	}
+
+	async function handlePostMilestone(milestone: string) {
+		await postMilestone(id, milestone);
+		milestones = await listMilestones(id);
+	}
+
+	async function handleCreateOpexInvoice() {
+		opexError = '';
+		try {
+			const invoice = await createInvoice(id);
+			goto(`/invoice/${invoice.id}`);
+		} catch (err: unknown) {
+			const msg = err instanceof Error ? err.message : String(err);
+			opexError = msg || 'Failed to create invoice';
+		}
 	}
 
 	function formatDate(dateStr: string): string {
@@ -225,6 +245,13 @@
 		</table>
 	</div>
 
+	{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT'}
+		<div class="section card">
+			<h2>Production Status</h2>
+			<MilestoneTimeline milestones={milestones} onPost={handlePostMilestone} />
+		</div>
+	{/if}
+
 	{#if po.rejection_history.length > 0}
 		<div class="section card">
 			<h2>Rejection History</h2>
@@ -278,8 +305,11 @@
 		{:else if po.status === 'ACCEPTED'}
 			{#if po.po_type === 'PROCUREMENT'}
 				<button class="btn btn-primary" onclick={handleCreateInvoice}>Create Invoice</button>
-			{:else}
-				<p class="accepted-message">This PO has been accepted.</p>
+			{:else if po.po_type === 'OPEX'}
+				<button class="btn btn-primary" onclick={handleCreateOpexInvoice}>Create Invoice</button>
+				{#if opexError}
+					<p class="error-message">{opexError}</p>
+				{/if}
 			{/if}
 		{/if}
 	</div>
@@ -348,6 +378,12 @@
 
 	.accepted-message {
 		color: var(--gray-600);
+	}
+
+	.error-message {
+		color: var(--red-600);
+		font-size: var(--font-size-sm);
+		margin-top: var(--space-2);
 	}
 
 	.rejection-record {

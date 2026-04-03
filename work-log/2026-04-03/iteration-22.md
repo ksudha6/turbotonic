@@ -24,18 +24,20 @@ Iteration 16 added the invoice PDF backend: `generate_invoice_pdf`, `generate_bu
 ## Tasks
 
 ### Frontend — Invoice detail
-- [ ] Add "Download PDF" button to `/invoice/[id]` page
-- [ ] Add `downloadInvoicePdf(id)` to `api.ts` (opens `/api/v1/invoices/{id}/pdf` in new tab, same as PO PDF)
+- [x] Add "Download PDF" button to `/invoice/[id]` page
+- [x] Add `downloadInvoicePdf(id)` to `api.ts` (opens `/api/v1/invoices/{id}/pdf` in new tab, same as PO PDF)
 
 ### Frontend — Invoice list bulk
-- [ ] Add per-row checkboxes to invoice list page
-- [ ] Track selected invoice IDs in state
-- [ ] Add "Download PDFs" bulk button (visible when selection is non-empty)
-- [ ] Add `downloadBulkInvoicePdf(ids)` to `api.ts` (POST, receive blob, trigger download)
+- [x] Add per-row checkboxes to invoice list page
+- [x] Track selected invoice IDs in state
+- [x] Add "Download PDFs" bulk button (visible when selection is non-empty)
+- [x] Add `downloadBulkInvoicePdf(ids)` to `api.ts` (POST, receive blob, trigger download)
 
 ### Scratch tests (`frontend/tests/scratch/iteration-22/`)
-- [ ] Screenshot: Invoice detail with "Download PDF" button
-- [ ] Screenshot: Invoice list with checkboxes and "Download PDFs" button after selection
+- [ ] Screenshot: Invoice detail with "Download PDF" button (carried forward - scratch)
+- [ ] Screenshot: Invoice list with checkboxes and "Download PDFs" button after selection (carried forward - scratch)
 
 ## Notes
+
+Single invoice PDF uses `window.open` (same as PO pattern). Bulk download uses fetch-as-blob with a transient anchor element because POST can't use `window.open`. Invoice list checkboxes follow the PO list pattern: select-all header checkbox, per-row toggles with `stopPropagation`, bulk toolbar with selection count. Selection clears on filter/page changes and after download.
 

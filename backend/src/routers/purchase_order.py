@@ -122,6 +122,7 @@ async def list_pos(
     search: str | None = None,
     vendor_id: str | None = None,
     currency: str | None = None,
+    milestone: str | None = None,
     sort_by: str = "created_at",
     sort_dir: str = "desc",
     page: int = 1,
@@ -141,11 +142,20 @@ async def list_pos(
         except ValueError:
             raise HTTPException(status_code=422, detail=f"Invalid status value: {status!r}")
 
+    if milestone is not None:
+        from src.domain.milestone import ProductionMilestone  # noqa: PLC0415
+        try:
+            ProductionMilestone(milestone.upper())
+            milestone = milestone.upper()
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"Invalid milestone value: {milestone!r}")
+
     try:
         rows, total = await repo.list_pos_paginated(
             status=po_status,
             vendor_id=vendor_id,
             currency=currency,
+            milestone=milestone,
             search=search,
             sort_by=sort_by,
             sort_dir=sort_dir,
@@ -170,6 +180,7 @@ async def list_pos(
             required_delivery_date=row["required_delivery_date"],
             total_value=str(row["total_value"]),
             currency=row["currency"],
+            current_milestone=row["current_milestone"],
         )
         for row in rows
     ]

@@ -5,6 +5,14 @@
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import type { DashboardData } from '$lib/types';
 
+	const MILESTONE_LABELS: Record<string, string> = {
+		RAW_MATERIALS: 'Raw Materials',
+		PRODUCTION_STARTED: 'Production Started',
+		QC_PASSED: 'QC Passed',
+		READY_TO_SHIP: 'Ready to Ship',
+		SHIPPED: 'Shipped',
+	};
+
 	let data: DashboardData | null = $state(null);
 	let loading: boolean = $state(true);
 
@@ -111,6 +119,62 @@
 			</div>
 		{/if}
 	</section>
+
+	<section class="section">
+		<h2>Production Pipeline</h2>
+		{#if data.production_summary.length === 0}
+			<p class="empty-text">No production activity.</p>
+		{:else}
+			<div class="card">
+				<table class="table">
+					<thead>
+						<tr>
+							<th>Stage</th>
+							<th>POs</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each data.production_summary as s}
+							<tr onclick={() => goto(`/po?status=ACCEPTED&milestone=${s.milestone}`)}>
+								<td>{MILESTONE_LABELS[s.milestone] ?? s.milestone}</td>
+								<td>{s.count}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+	</section>
+
+	<section class="section">
+		<h2>Overdue Production</h2>
+		{#if data.overdue_pos.length === 0}
+			<p class="empty-text">No overdue production orders.</p>
+		{:else}
+			<div class="card">
+				<table class="table">
+					<thead>
+						<tr>
+							<th>PO #</th>
+							<th>Vendor</th>
+							<th>Milestone</th>
+							<th>Days Overdue</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each data.overdue_pos as o}
+							<tr onclick={() => goto(`/po/${o.id}`)}>
+								<td><a href="/po/{o.id}" onclick={(e) => e.stopPropagation()}>{o.po_number}</a></td>
+								<td>{o.vendor_name}</td>
+								<td>{MILESTONE_LABELS[o.milestone] ?? o.milestone}</td>
+								<td class="overdue-days">{o.days_since_update}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+	</section>
 {/if}
 
 <style>
@@ -182,5 +246,10 @@
 
 	tbody tr:hover td {
 		background-color: var(--gray-50);
+	}
+
+	.overdue-days {
+		color: var(--red-600);
+		font-weight: 600;
 	}
 </style>

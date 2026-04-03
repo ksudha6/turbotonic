@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated, Any, AsyncIterator
 
@@ -9,8 +9,10 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from src.db import get_db
+from src.domain.milestone import MILESTONE_ORDER, ProductionMilestone
 from src.domain.reference_data import RATE_TO_USD
 from src.invoice_repository import InvoiceRepository
+from src.milestone_repository import MilestoneRepository
 from src.repository import PurchaseOrderRepository
 from src.schema import init_db
 from src.vendor_repository import VendorRepository
@@ -36,9 +38,16 @@ async def get_invoice_repo() -> AsyncIterator[InvoiceRepository]:
         yield InvoiceRepository(conn)
 
 
+async def get_milestone_repo() -> AsyncIterator[MilestoneRepository]:
+    async with get_db() as conn:
+        await conn.execute("PRAGMA foreign_keys = ON")
+        yield MilestoneRepository(conn)
+
+
 RepoDep = Annotated[PurchaseOrderRepository, Depends(get_repo)]
 VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
 InvoiceRepoDep = Annotated[InvoiceRepository, Depends(get_invoice_repo)]
+MilestoneRepoDep = Annotated[MilestoneRepository, Depends(get_milestone_repo)]
 
 
 class POStatusSummary(BaseModel):
@@ -68,11 +77,36 @@ class RecentPO(BaseModel):
     updated_at: datetime
 
 
+class ProductionStageSummary(BaseModel):
+    milestone: str
+    count: int
+
+
+class OverduePO(BaseModel):
+    id: str
+    po_number: str
+    vendor_name: str
+    milestone: str
+    days_since_update: int
+
+
+# Days before a PO at a given milestone is considered overdue.
+# SHIPPED is never overdue (terminal production milestone).
+_OVERDUE_THRESHOLDS: dict[str, int] = {
+    ProductionMilestone.RAW_MATERIALS.value: 7,
+    ProductionMilestone.PRODUCTION_STARTED.value: 7,
+    ProductionMilestone.QC_PASSED.value: 3,
+    ProductionMilestone.READY_TO_SHIP.value: 3,
+}
+
+
 class DashboardResponse(BaseModel):
     po_summary: list[POStatusSummary]
     vendor_summary: VendorSummary
     recent_pos: list[RecentPO]
     invoice_summary: list[InvoiceStatusSummary]
+    production_summary: list[ProductionStageSummary]
+    overdue_pos: list[OverduePO]
 
 
 @router.get("/", response_model=DashboardResponse)
@@ -80,6 +114,7 @@ async def get_dashboard(
     repo: RepoDep,
     vendor_repo: VendorRepoDep,
     invoice_repo: InvoiceRepoDep,
+    milestone_repo: MilestoneRepoDep,
 ) -> DashboardResponse:
     # PO summary: aggregate by status, convert to USD
     raw_summary = await repo.po_summary_by_status()
@@ -161,9 +196,84 @@ async def get_dashboard(
         for st, data in sorted(inv_agg.items())
     ]
 
+    # Production summary: count of ACCEPTED PROCUREMENT POs at each milestone stage.
+    milestone_repo._conn.row_factory = aiosqlite.Row
+    async with milestone_repo._conn.execute(
+        """
+        SELECT lm.milestone, COUNT(*) AS cnt
+        FROM purchase_orders p
+        INNER JOIN (
+            SELECT mu.po_id, mu.milestone
+            FROM milestone_updates mu
+            INNER JOIN (
+                SELECT po_id, MAX(posted_at) AS max_posted_at
+                FROM milestone_updates
+                GROUP BY po_id
+            ) latest ON mu.po_id = latest.po_id AND mu.posted_at = latest.max_posted_at
+        ) lm ON lm.po_id = p.id
+        WHERE p.status = 'ACCEPTED' AND p.po_type = 'PROCUREMENT'
+        GROUP BY lm.milestone
+        """
+    ) as cursor:
+        prod_rows = await cursor.fetchall()
+
+    prod_counts: dict[str, int] = {row["milestone"]: row["cnt"] for row in prod_rows}
+    # Return summary in MILESTONE_ORDER sequence, omitting stages with zero POs.
+    production_summary = [
+        ProductionStageSummary(milestone=m.value, count=prod_counts[m.value])
+        for m in MILESTONE_ORDER
+        if m.value in prod_counts
+    ]
+
+    # Overdue POs: ACCEPTED PROCUREMENT POs whose latest milestone has been stuck
+    # longer than the per-milestone threshold. SHIPPED is never overdue.
+    now_utc = datetime.now(UTC)
+    async with milestone_repo._conn.execute(
+        """
+        SELECT p.id, p.po_number, p.vendor_id, lm.milestone, lm.max_posted_at
+        FROM purchase_orders p
+        INNER JOIN (
+            SELECT mu.po_id, mu.milestone, mu.posted_at AS max_posted_at
+            FROM milestone_updates mu
+            INNER JOIN (
+                SELECT po_id, MAX(posted_at) AS max_posted_at
+                FROM milestone_updates
+                GROUP BY po_id
+            ) latest ON mu.po_id = latest.po_id AND mu.posted_at = latest.max_posted_at
+        ) lm ON lm.po_id = p.id
+        WHERE p.status = 'ACCEPTED' AND p.po_type = 'PROCUREMENT'
+        """
+    ) as cursor:
+        overdue_rows = await cursor.fetchall()
+
+    overdue_pos: list[OverduePO] = []
+    for row in overdue_rows:
+        milestone_val: str = row["milestone"]
+        threshold = _OVERDUE_THRESHOLDS.get(milestone_val)
+        if threshold is None:
+            # SHIPPED — never overdue
+            continue
+        posted_at_raw: str = row["max_posted_at"]
+        posted_at = datetime.fromisoformat(posted_at_raw)
+        if posted_at.tzinfo is None:
+            posted_at = posted_at.replace(tzinfo=UTC)
+        days_since = (now_utc - posted_at).days
+        if days_since >= threshold:
+            overdue_pos.append(
+                OverduePO(
+                    id=row["id"],
+                    po_number=row["po_number"],
+                    vendor_name=vendor_map.get(row["vendor_id"], ""),
+                    milestone=milestone_val,
+                    days_since_update=days_since,
+                )
+            )
+
     return DashboardResponse(
         po_summary=po_summary,
         vendor_summary=vendor_summary,
         recent_pos=recent_pos,
         invoice_summary=invoice_summary,
+        production_summary=production_summary,
+        overdue_pos=overdue_pos,
     )

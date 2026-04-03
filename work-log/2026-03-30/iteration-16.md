@@ -31,20 +31,22 @@ PO PDF export exists (`generate_po_pdf` in `services/po_pdf.py`, served at `GET 
 ## Tasks
 
 ### Backend — Invoice PDF service
-- [ ] Create `backend/src/services/invoice_pdf.py` with `generate_invoice_pdf(invoice, po, vendor_name, vendor_country) -> bytes`
-- [ ] Handle DISPUTED status: include dispute reason section
-- [ ] Create `generate_bulk_invoice_pdf(invoices_with_context) -> bytes` for multi-invoice PDF
+- [x] Create `backend/src/services/invoice_pdf.py` with `generate_invoice_pdf(invoice, po, vendor_name, vendor_country) -> bytes`
+- [x] Handle DISPUTED status: include dispute reason section
+- [x] Create `generate_bulk_invoice_pdf(invoices_with_context) -> bytes` for multi-invoice PDF
 
 ### Backend — PDF endpoints
-- [ ] Add `GET /api/v1/invoices/{id}/pdf` route
-- [ ] Add `POST /api/v1/invoices/bulk/pdf` route accepting `{ "invoice_ids": [] }`
+- [x] Add `GET /api/v1/invoices/{id}/pdf` route
+- [x] Add `POST /api/v1/invoices/bulk/pdf` route accepting `{ "invoice_ids": [] }`
 
 ### Permanent tests — Backend (`backend/tests/`)
-- [ ] `test_invoice_pdf_returns_bytes` — create invoice, GET PDF, verify content-type and non-empty body
-- [ ] `test_invoice_pdf_not_found` — GET PDF for nonexistent ID returns 404
-- [ ] `test_bulk_invoice_pdf` — create 2 invoices, POST bulk PDF, verify content-type and non-empty body
-- [ ] `test_bulk_invoice_pdf_empty_ids` — POST with empty list returns 400
-- [ ] `test_bulk_invoice_pdf_skips_missing` — POST with mix of valid and missing IDs returns 200
+- [x] `test_invoice_pdf_returns_bytes` — create invoice, GET PDF, verify content-type and non-empty body
+- [x] `test_invoice_pdf_not_found` — GET PDF for nonexistent ID returns 404
+- [x] `test_bulk_invoice_pdf` — create 2 invoices, POST bulk PDF, verify content-type and non-empty body
+- [x] `test_bulk_invoice_pdf_empty_ids` — POST with empty list returns 400
+- [x] `test_bulk_invoice_pdf_skips_missing` — POST with mix of valid and missing IDs returns 200
 
 ## Notes
+
+Invoice PDF service follows the PO PDF pattern: same ReportLab setup, letter size, margins, font styles. The bulk endpoint uses `PageBreak` between invoices. Vendor repo dependency added to the invoice router for name/country resolution. `BulkInvoicePdfRequest` DTO validates non-empty ID list at the endpoint level. Bulk endpoint skips missing IDs rather than failing the whole request.
 

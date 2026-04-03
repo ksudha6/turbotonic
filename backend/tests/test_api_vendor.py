@@ -74,6 +74,17 @@ async def test_create_vendor_rejects_empty_name(client: AsyncClient) -> None:
     assert resp.status_code == 422
 
 
+async def test_create_vendor_with_valid_country_code_returns_201(client: AsyncClient) -> None:
+    resp = await client.post("/api/v1/vendors/", json={"name": "Valid Country Vendor", "country": "DE", "vendor_type": "PROCUREMENT"})
+    assert resp.status_code == 201
+    assert resp.json()["country"] == "DE"
+
+
+async def test_create_vendor_with_invalid_country_code_returns_422(client: AsyncClient) -> None:
+    resp = await client.post("/api/v1/vendors/", json={"name": "Bad Country Vendor", "country": "XX", "vendor_type": "PROCUREMENT"})
+    assert resp.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # Vendor list
 # ---------------------------------------------------------------------------

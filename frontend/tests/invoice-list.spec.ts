@@ -32,13 +32,18 @@ const MOCK_DASHBOARD_WITH_INVOICES = {
 	invoice_summary: [
 		{ status: 'DRAFT', count: 2, total_usd: '1500.00' },
 		{ status: 'SUBMITTED', count: 1, total_usd: '800.00' }
-	]
+	],
+	production_summary: [],
+	overdue_pos: []
 };
 
 async function mockInvoiceListRoute(
 	page: import('@playwright/test').Page,
 	handler: (status: string | null) => object[]
 ) {
+	await page.route('**/api/v1/vendors/**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
 	await page.route('**/api/v1/invoices**', (route) => {
 		const url = new URL(route.request().url());
 		if (
@@ -49,7 +54,7 @@ async function mockInvoiceListRoute(
 			route.fulfill({
 				status: 200,
 				contentType: 'application/json',
-				body: JSON.stringify(handler(status))
+				body: JSON.stringify({ items: handler(status), total: handler(status).length, page: 1, page_size: 20 })
 			});
 		} else {
 			route.continue();
@@ -92,7 +97,7 @@ test('status filter narrows displayed invoices', async ({ page }) => {
 	await page.waitForSelector('table');
 	await expect(page.locator('tbody tr')).toHaveCount(2);
 
-	await page.locator('.filter-bar select').selectOption('DRAFT');
+	await page.locator('.filter-bar select').first().selectOption('DRAFT');
 	await page.waitForSelector('tbody tr');
 
 	await expect(page.locator('tbody tr')).toHaveCount(1);
@@ -113,6 +118,66 @@ test('invoice row links navigate to detail and PO pages', async ({ page }) => {
 	const poLink = page.locator('tbody a[href="/po/po-uuid-alpha"]');
 	await expect(poLink).toBeVisible();
 	await expect(poLink).toContainText('PO-20260401-0001');
+});
+
+// ---------------------------------------------------------------------------
+// Iteration 22 — Invoice list checkboxes and bulk download
+// ---------------------------------------------------------------------------
+
+test('invoice list shows checkboxes in header and rows', async ({ page }) => {
+	await mockInvoiceListRoute(page, () => [INVOICE_DRAFT, INVOICE_SUBMITTED]);
+
+	await page.goto('/invoices');
+	await page.waitForSelector('table');
+
+	// Header checkbox
+	await expect(page.locator('thead input[type="checkbox"]')).toHaveCount(1);
+	// One row checkbox per invoice
+	await expect(page.locator('tbody input[type="checkbox"]')).toHaveCount(2);
+});
+
+test('selecting an invoice row shows bulk toolbar with Download PDFs button', async ({ page }) => {
+	await mockInvoiceListRoute(page, () => [INVOICE_DRAFT, INVOICE_SUBMITTED]);
+
+	await page.goto('/invoices');
+	await page.waitForSelector('table');
+
+	// Click the first row's checkbox
+	await page.locator('tbody input[type="checkbox"]').first().click();
+
+	// Bulk toolbar must appear
+	await expect(page.locator('.bulk-toolbar')).toBeVisible();
+	await expect(page.locator('.bulk-toolbar')).toContainText('1 selected');
+	await expect(page.getByRole('button', { name: 'Download PDFs' })).toBeVisible();
+});
+
+test('invoice detail page shows Download PDF button', async ({ page }) => {
+	const INVOICE_DETAIL = {
+		id: 'inv-1',
+		invoice_number: 'INV-20260401-0001',
+		po_id: 'po-1',
+		status: 'DRAFT',
+		payment_terms: 'TT',
+		currency: 'USD',
+		line_items: [{ part_number: 'PN-001', description: 'Widget', quantity: 100, uom: 'EA', unit_price: '5.00' }],
+		subtotal: '500.00',
+		dispute_reason: '',
+		created_at: '2026-04-01T00:00:00+00:00',
+		updated_at: '2026-04-01T00:00:00+00:00',
+	};
+
+	await page.route('**/api/v1/invoices/inv-1', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(INVOICE_DETAIL),
+		});
+	});
+
+	await page.goto('/invoice/inv-1');
+	await page.waitForSelector('h1');
+
+	await expect(page.getByRole('button', { name: 'Download PDF' })).toBeVisible();
 });
 
 test('dashboard shows invoice summary section', async ({ page }) => {
