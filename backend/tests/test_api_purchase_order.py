@@ -527,7 +527,7 @@ async def test_create_po_invalid_incoterm_returns_422(client: AsyncClient) -> No
 async def test_create_po_invalid_payment_terms_returns_422(client: AsyncClient) -> None:
     vendor_resp = await client.post("/api/v1/vendors/", json={"name": "V", "country": "US", "vendor_type": "PROCUREMENT"})
     vendor_id = vendor_resp.json()["id"]
-    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "payment_terms": "NET90"}
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "payment_terms": "NOPE"}
     resp = await client.post("/api/v1/po/", json=payload)
     assert resp.status_code == 422
 

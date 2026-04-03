@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
+import aiosqlite
 from pydantic import BaseModel, field_validator, model_validator
 
 from src.domain.invoice import Invoice
@@ -327,6 +328,39 @@ class InvoiceListItem(BaseModel):
     status: str
     subtotal: str
     created_at: datetime
+
+
+class InvoiceListItemWithContext(BaseModel):
+    id: str
+    invoice_number: str
+    status: str
+    subtotal: str
+    created_at: datetime
+    po_id: str
+    po_number: str
+    vendor_name: str
+
+
+class PaginatedInvoiceList(BaseModel):
+    items: list[InvoiceListItemWithContext]
+    total: int
+    page: int
+    page_size: int
+
+
+def invoice_row_to_list_item_with_context(row: aiosqlite.Row) -> InvoiceListItemWithContext:
+    raw_subtotal = row["subtotal"]
+    subtotal_str = f"{Decimal(str(raw_subtotal if raw_subtotal is not None else 0)):.2f}"
+    return InvoiceListItemWithContext(
+        id=row["id"],
+        invoice_number=row["invoice_number"],
+        status=row["status"],
+        subtotal=subtotal_str,
+        created_at=row["created_at"],
+        po_id=row["po_id"],
+        po_number=row["po_number"],
+        vendor_name=row["vendor_name"],
+    )
 
 
 class DisputeRequest(BaseModel):

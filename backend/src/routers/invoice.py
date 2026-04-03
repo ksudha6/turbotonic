@@ -10,9 +10,12 @@ from src.dto import (
     DisputeRequest,
     InvoiceCreate,
     InvoiceListItem,
+    InvoiceListItemWithContext,
     InvoiceResponse,
+    PaginatedInvoiceList,
     RemainingLineItem,
     RemainingQuantityResponse,
+    invoice_row_to_list_item_with_context,
     invoice_to_list_item,
     invoice_to_response,
     InvoiceLineItemCreate,
@@ -162,6 +165,32 @@ async def create_invoice(
 
     await invoice_repo.save(invoice)
     return invoice_to_response(invoice)
+
+
+@router.get("/", response_model=PaginatedInvoiceList)
+async def list_invoices(
+    invoice_repo: InvoiceRepoDep,
+    status: str | None = None,
+    po_number: str | None = None,
+    vendor_name: str | None = None,
+    invoice_number: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    page: int = 1,
+    page_size: int = 20,
+) -> PaginatedInvoiceList:
+    rows, total = await invoice_repo.list_all(
+        status=status,
+        po_number=po_number,
+        vendor_name=vendor_name,
+        invoice_number=invoice_number,
+        date_from=date_from,
+        date_to=date_to,
+        page=page,
+        page_size=page_size,
+    )
+    items = [invoice_row_to_list_item_with_context(r) for r in rows]
+    return PaginatedInvoiceList(items=items, total=total, page=page, page_size=page_size)
 
 
 @router.get("/{invoice_id}", response_model=InvoiceResponse)

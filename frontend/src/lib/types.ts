@@ -153,6 +153,7 @@ export interface DashboardData {
 	po_summary: POStatusSummary[];
 	vendor_summary: VendorSummary;
 	recent_pos: RecentPO[];
+	invoice_summary: InvoiceStatusSummary[];
 }
 
 export interface BulkTransitionItemResult {
@@ -182,6 +183,23 @@ export interface InvoiceListItem {
 	status: InvoiceStatus;
 	subtotal: string;
 	created_at: string;
+}
+
+export interface InvoiceListItemWithContext {
+	id: string;
+	invoice_number: string;
+	status: InvoiceStatus;
+	subtotal: string;
+	created_at: string;
+	po_id: string;
+	po_number: string;
+	vendor_name: string;
+}
+
+export interface InvoiceStatusSummary {
+	status: InvoiceStatus;
+	count: number;
+	total_usd: string;
 }
 
 export interface Invoice {
@@ -214,4 +232,11 @@ export interface RemainingQuantityResponse {
 export interface InvoiceLineItemCreate {
 	part_number: string;
 	quantity: number;
+}
+
+export interface PaginatedInvoiceList {
+	items: InvoiceListItemWithContext[];
+	total: number;
+	page: number;
+	page_size: number;
 }

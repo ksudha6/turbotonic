@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { fetchDashboard } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
-	import type { DashboardData, POStatusSummary, RecentPO } from '$lib/types';
+	import type { DashboardData } from '$lib/types';
 
 	let data: DashboardData | null = $state(null);
 	let loading: boolean = $state(true);
@@ -46,6 +46,22 @@
 			{/each}
 			{#if data.po_summary.length === 0}
 				<p class="empty-text">No purchase orders yet.</p>
+			{/if}
+		</div>
+	</section>
+
+	<section class="section">
+		<h2>Invoices</h2>
+		<div class="summary-grid">
+			{#each data.invoice_summary as s}
+				<a href="/invoices?status={s.status}" class="summary-card card">
+					<div class="summary-status"><StatusPill status={s.status} /></div>
+					<div class="summary-count">{s.count}</div>
+					<div class="summary-value">≈ {formatUsd(s.total_usd)}</div>
+				</a>
+			{/each}
+			{#if data.invoice_summary.length === 0}
+				<p class="empty-text">No invoices yet.</p>
 			{/if}
 		</div>
 	</section>

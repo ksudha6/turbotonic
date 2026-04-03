@@ -172,6 +172,79 @@ class InvoiceRepository:
 
         return {row[0]: row[1] for row in rows}
 
+    async def list_all(
+        self,
+        status: str | None = None,
+        po_number: str | None = None,
+        vendor_name: str | None = None,
+        invoice_number: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[aiosqlite.Row], int]:
+        self._conn.row_factory = aiosqlite.Row
+
+        joins = """
+            FROM invoices i
+            JOIN purchase_orders po ON po.id = i.po_id
+            JOIN vendors v ON v.id = po.vendor_id
+        """
+        conditions: list[str] = []
+        params: list[str] = []
+
+        if status is not None:
+            conditions.append("i.status = ?")
+            params.append(status)
+        if po_number is not None:
+            conditions.append("po.po_number LIKE ?")
+            params.append(f"%{po_number}%")
+        if vendor_name is not None:
+            conditions.append("v.name LIKE ?")
+            params.append(f"%{vendor_name}%")
+        if invoice_number is not None:
+            conditions.append("i.invoice_number LIKE ?")
+            params.append(f"%{invoice_number}%")
+        if date_from is not None:
+            conditions.append("i.created_at >= ?")
+            params.append(date_from)
+        if date_to is not None:
+            conditions.append("i.created_at <= ?")
+            params.append(f"{date_to}T23:59:59")
+
+        where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        count_query = f"SELECT COUNT(*) {joins}{where_clause}"
+        async with self._conn.execute(count_query, params) as cursor:
+            count_row = await cursor.fetchone()
+            total: int = count_row[0] if count_row else 0
+
+        offset = (page - 1) * page_size
+        data_query = (
+            f"""
+            SELECT
+                i.id,
+                i.invoice_number,
+                i.status,
+                i.po_id,
+                po.po_number,
+                v.name AS vendor_name,
+                (
+                    SELECT SUM(CAST(quantity AS REAL) * CAST(unit_price AS REAL))
+                    FROM invoice_line_items
+                    WHERE invoice_id = i.id
+                ) AS subtotal,
+                i.created_at
+            {joins}{where_clause}
+            ORDER BY i.created_at DESC
+            LIMIT ? OFFSET ?
+            """
+        )
+        async with self._conn.execute(data_query, [*params, page_size, offset]) as cursor:
+            rows = await cursor.fetchall()
+
+        return rows, total
+
     async def list_by_po(self, po_id: str) -> list[Invoice]:
         self._conn.row_factory = aiosqlite.Row
 

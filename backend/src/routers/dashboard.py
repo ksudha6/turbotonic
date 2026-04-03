@@ -4,11 +4,13 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Any, AsyncIterator
 
+import aiosqlite
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from src.db import get_db
 from src.domain.reference_data import RATE_TO_USD
+from src.invoice_repository import InvoiceRepository
 from src.repository import PurchaseOrderRepository
 from src.schema import init_db
 from src.vendor_repository import VendorRepository
@@ -28,11 +30,24 @@ async def get_vendor_repo() -> AsyncIterator[VendorRepository]:
         yield VendorRepository(conn)
 
 
+async def get_invoice_repo() -> AsyncIterator[InvoiceRepository]:
+    async with get_db() as conn:
+        await conn.execute("PRAGMA foreign_keys = ON")
+        yield InvoiceRepository(conn)
+
+
 RepoDep = Annotated[PurchaseOrderRepository, Depends(get_repo)]
 VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
+InvoiceRepoDep = Annotated[InvoiceRepository, Depends(get_invoice_repo)]
 
 
 class POStatusSummary(BaseModel):
+    status: str
+    count: int
+    total_usd: str
+
+
+class InvoiceStatusSummary(BaseModel):
     status: str
     count: int
     total_usd: str
@@ -57,10 +72,15 @@ class DashboardResponse(BaseModel):
     po_summary: list[POStatusSummary]
     vendor_summary: VendorSummary
     recent_pos: list[RecentPO]
+    invoice_summary: list[InvoiceStatusSummary]
 
 
 @router.get("/", response_model=DashboardResponse)
-async def get_dashboard(repo: RepoDep, vendor_repo: VendorRepoDep) -> DashboardResponse:
+async def get_dashboard(
+    repo: RepoDep,
+    vendor_repo: VendorRepoDep,
+    invoice_repo: InvoiceRepoDep,
+) -> DashboardResponse:
     # PO summary: aggregate by status, convert to USD
     raw_summary = await repo.po_summary_by_status()
     status_agg: dict[str, dict[str, Any]] = {}
@@ -106,8 +126,44 @@ async def get_dashboard(repo: RepoDep, vendor_repo: VendorRepoDep) -> DashboardR
         for po in recent
     ]
 
+    # Invoice summary: aggregate by status and currency, convert to USD
+    invoice_repo._conn.row_factory = aiosqlite.Row
+    async with invoice_repo._conn.execute(
+        """
+        SELECT i.status, i.currency, COUNT(*) as count,
+               COALESCE(SUM(sub.subtotal), 0) as total
+        FROM invoices i
+        LEFT JOIN (
+            SELECT invoice_id, SUM(CAST(quantity AS REAL) * CAST(unit_price AS REAL)) as subtotal
+            FROM invoice_line_items GROUP BY invoice_id
+        ) sub ON sub.invoice_id = i.id
+        GROUP BY i.status, i.currency
+        """
+    ) as cursor:
+        invoice_rows = await cursor.fetchall()
+
+    inv_agg: dict[str, dict[str, Any]] = {}
+    for row in invoice_rows:
+        st = row["status"]
+        rate = RATE_TO_USD.get(row["currency"], Decimal("1"))
+        usd_value = Decimal(str(row["total"])) * rate
+        if st not in inv_agg:
+            inv_agg[st] = {"count": 0, "total_usd": Decimal("0")}
+        inv_agg[st]["count"] += row["count"]
+        inv_agg[st]["total_usd"] += usd_value
+
+    invoice_summary = [
+        InvoiceStatusSummary(
+            status=st,
+            count=data["count"],
+            total_usd=str(data["total_usd"].quantize(Decimal("0.01"))),
+        )
+        for st, data in sorted(inv_agg.items())
+    ]
+
     return DashboardResponse(
         po_summary=po_summary,
         vendor_summary=vendor_summary,
         recent_pos=recent_pos,
+        invoice_summary=invoice_summary,
     )

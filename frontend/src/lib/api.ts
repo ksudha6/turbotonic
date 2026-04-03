@@ -1,4 +1,4 @@
-import type { BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
+import type { BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, PaginatedInvoiceList, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path);
@@ -140,6 +140,29 @@ export function getInvoice(id: string): Promise<Invoice> {
 
 export function listInvoicesByPO(poId: string): Promise<InvoiceListItem[]> {
 	return apiGet<InvoiceListItem[]>(`/api/v1/po/${poId}/invoices`);
+}
+
+export function listAllInvoices(params?: {
+	status?: string;
+	po_number?: string;
+	vendor_name?: string;
+	invoice_number?: string;
+	date_from?: string;
+	date_to?: string;
+	page?: number;
+	page_size?: number;
+}): Promise<PaginatedInvoiceList> {
+	const query = new URLSearchParams();
+	if (params?.status) query.set('status', params.status);
+	if (params?.po_number) query.set('po_number', params.po_number);
+	if (params?.vendor_name) query.set('vendor_name', params.vendor_name);
+	if (params?.invoice_number) query.set('invoice_number', params.invoice_number);
+	if (params?.date_from) query.set('date_from', params.date_from);
+	if (params?.date_to) query.set('date_to', params.date_to);
+	if (params?.page !== undefined) query.set('page', String(params.page));
+	if (params?.page_size !== undefined) query.set('page_size', String(params.page_size));
+	const qs = query.toString();
+	return apiGet<PaginatedInvoiceList>(qs ? `/api/v1/invoices/?${qs}` : '/api/v1/invoices/');
 }
 
 export function submitInvoice(id: string): Promise<Invoice> {

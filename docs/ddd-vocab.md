@@ -56,8 +56,9 @@
 
 | Term | Definition | Bounded Context |
 |------|-----------|-----------------|
-| Dashboard | Read model aggregating PO counts, USD-equivalent totals by status, vendor health metrics (active/inactive counts), and recent PO activity. Not a domain aggregate. | Procurement |
-| Paginated List | A windowed query result containing items, total count, page number, and page size. Backend-enforced to avoid full dataset transfer. | Procurement |
+| Dashboard | Read model aggregating PO counts, USD-equivalent totals by status, invoice counts and totals by status, vendor health metrics (active/inactive counts), and recent PO activity. Not a domain aggregate. | Procurement |
+| Invoice List | Paginated read model listing all invoices with PO and vendor context (po_number, vendor_name). Filterable by status, PO number, vendor name, invoice number, and date range (from/to). Text filters use case-insensitive substring matching. Frontend uses dropdowns for PO#, vendor, and invoice# (populated from available data). Sorted by created_at descending. | Invoicing |
+| Paginated List | A windowed query result containing items, total count, page number, and page size. Backend-enforced to avoid full dataset transfer. Used by both PO list and invoice list. | Procurement |
 | PO Search | Text-based lookup matching against po_number, vendor_name, and buyer_name. Case-insensitive substring match, server-side. | Procurement |
 
 ## Bulk Operations

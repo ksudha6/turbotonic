@@ -4,10 +4,31 @@
 First iteration of the Production Status Tracking module. Vendors post milestone updates against Accepted POs. Milestones are ordered and append-only.
 
 ## JTBD
+1. When a vendor begins production on an accepted PO, I want to post milestone updates (e.g. Raw Materials Received, Production Started, QC Passed, Ready to Ship, Shipped) so the buyer has visibility into manufacturing progress.
+2. When I view a PO, I want to see the current production milestone so I know where the order stands without contacting the vendor.
 
+## Acceptance Criteria
+- Milestones are a fixed ordered enum: RAW_MATERIALS, PRODUCTION_STARTED, QC_PASSED, READY_TO_SHIP, SHIPPED
+- A milestone update is append-only: records who posted it and when
+- Milestones can only be posted on ACCEPTED PROCUREMENT POs
+- Milestones must be posted in order (cannot skip ahead)
+- A PO's current milestone is the latest one posted
+- GET endpoint returns all milestones posted for a PO, in order
+- POST endpoint posts the next milestone; rejects duplicates and out-of-order posts
 
 ## Tasks
+- Backend domain: `ProductionMilestone` enum, `MilestoneUpdate` value object (milestone, posted_at), validation (order enforcement, PO must be ACCEPTED PROCUREMENT)
+- Backend persistence: `milestone_updates` table (id, po_id, milestone, posted_at), `MilestoneRepository` (save, list_by_po, latest_for_po)
+- Backend API: `GET /api/v1/po/{po_id}/milestones`, `POST /api/v1/po/{po_id}/milestones` with `{ "milestone": "RAW_MATERIALS" }`
 
+## Tests
+- Post milestone on ACCEPTED PROCUREMENT PO returns 201
+- Reject POST on non-accepted PO (400 or 422)
+- Reject POST on non-PROCUREMENT PO (400 or 422)
+- Reject out-of-order milestone post (e.g. posting SHIPPED before RAW_MATERIALS)
+- Reject duplicate milestone post
+- GET returns milestones in posted order
+- GET returns empty list when no milestones posted
 
 ## Notes
 
