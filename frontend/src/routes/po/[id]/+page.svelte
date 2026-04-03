@@ -2,10 +2,11 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf, createInvoice, listInvoicesByPO, fetchReferenceData } from '$lib/api';
+	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf, createInvoice, listInvoicesByPO, fetchReferenceData, getRemainingQuantities } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import RejectDialog from '$lib/components/RejectDialog.svelte';
-	import type { PurchaseOrder, InvoiceListItem, ReferenceData } from '$lib/types';
+	import CreateInvoiceDialog from '$lib/components/CreateInvoiceDialog.svelte';
+	import type { PurchaseOrder, InvoiceListItem, ReferenceData, RemainingLine, InvoiceLineItemCreate } from '$lib/types';
 	import { buildLabelResolver } from '$lib/labels';
 
 	let po: PurchaseOrder | null = $state(null);
@@ -14,6 +15,9 @@
 	let invoices: InvoiceListItem[] = $state([]);
 	let refData: ReferenceData | null = $state(null);
 	let resolver: ReturnType<typeof buildLabelResolver> | null = $state(null);
+	let remainingMap: Map<string, RemainingLine> = $state(new Map());
+	let showInvoiceDialog: boolean = $state(false);
+	let remainingLines: RemainingLine[] = $state([]);
 
 	const id: string = $page.params.id ?? '';
 
@@ -27,6 +31,10 @@
 		try {
 			[po, invoices, refData] = await Promise.all([getPO(id), listInvoicesByPO(id), fetchReferenceData()]);
 			resolver = buildLabelResolver(refData);
+			if (po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT') {
+				const resp = await getRemainingQuantities(id);
+				remainingMap = new Map(resp.lines.map((l) => [l.part_number, l]));
+			}
 		} finally {
 			loading = false;
 		}
@@ -58,7 +66,19 @@
 	}
 
 	async function handleCreateInvoice() {
-		const invoice = await createInvoice(id);
+		const resp = await getRemainingQuantities(id);
+		const allInvoiced = resp.lines.every((l) => l.remaining === 0);
+		if (allInvoiced) {
+			alert('All quantities already invoiced');
+			return;
+		}
+		remainingLines = resp.lines;
+		showInvoiceDialog = true;
+	}
+
+	async function handleInvoiceConfirm(lineItems: InvoiceLineItemCreate[]) {
+		showInvoiceDialog = false;
+		const invoice = await createInvoice(id, lineItems);
 		goto(`/invoice/${invoice.id}`);
 	}
 
@@ -174,6 +194,10 @@
 					<th>Part Number</th>
 					<th>Description</th>
 					<th>Qty</th>
+					{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT'}
+						<th>Invoiced</th>
+						<th>Remaining</th>
+					{/if}
 					<th>UoM</th>
 					<th>Unit Price</th>
 					<th>HS Code</th>
@@ -186,6 +210,11 @@
 						<td>{item.part_number}</td>
 						<td>{item.description}</td>
 						<td>{item.quantity}</td>
+						{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT'}
+							{@const r = remainingMap.get(item.part_number)}
+							<td>{r ? r.invoiced : 0}</td>
+							<td>{r ? r.remaining : 0}</td>
+						{/if}
 						<td>{item.uom}</td>
 						<td>{formatPrice(item.unit_price)}</td>
 						<td>{item.hs_code}</td>
@@ -259,6 +288,14 @@
 		<RejectDialog
 			onConfirm={handleReject}
 			onCancel={() => (showRejectDialog = false)}
+		/>
+	{/if}
+
+	{#if showInvoiceDialog}
+		<CreateInvoiceDialog
+			lines={remainingLines}
+			onConfirm={handleInvoiceConfirm}
+			onCancel={() => (showInvoiceDialog = false)}
 		/>
 	{/if}
 {/if}

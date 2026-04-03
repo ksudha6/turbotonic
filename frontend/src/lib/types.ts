@@ -197,3 +197,21 @@ export interface Invoice {
 	created_at: string;
 	updated_at: string;
 }
+
+export interface RemainingLine {
+	part_number: string;
+	description: string;
+	ordered: number;
+	invoiced: number;
+	remaining: number;
+}
+
+export interface RemainingQuantityResponse {
+	po_id: string;
+	lines: RemainingLine[];
+}
+
+export interface InvoiceLineItemCreate {
+	part_number: string;
+	quantity: number;
+}

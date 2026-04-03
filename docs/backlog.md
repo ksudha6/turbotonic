@@ -12,6 +12,8 @@
 - [ ] Live/historical exchange rates for dashboard
 - [ ] Field-level mutability rules tied to lifecycle status
 - [ ] Buyer as first-class entity (currently hardcoded)
+- [ ] Partial PO acceptance (accept/reject at line-item level)
+- [ ] Notifications (in-app alerts for status changes, assignments, deadlines)
 
 ## Post-confirmation modules
 

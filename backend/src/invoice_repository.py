@@ -156,6 +156,22 @@ class InvoiceRepository:
 
         return _reconstruct(inv_row, item_rows)
 
+    async def invoiced_quantities(self, po_id: str) -> dict[str, int]:
+        # Sum quantity per part_number across all non-disputed invoices for this PO.
+        async with self._conn.execute(
+            """
+            SELECT ili.part_number, SUM(ili.quantity) AS total
+            FROM invoice_line_items ili
+            JOIN invoices i ON i.id = ili.invoice_id
+            WHERE i.po_id = ? AND i.status != 'DISPUTED'
+            GROUP BY ili.part_number
+            """,
+            (po_id,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+
+        return {row[0]: row[1] for row in rows}
+
     async def list_by_po(self, po_id: str) -> list[Invoice]:
         self._conn.row_factory = aiosqlite.Row
 

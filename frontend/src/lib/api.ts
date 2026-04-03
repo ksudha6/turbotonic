@@ -1,4 +1,4 @@
-import type { BulkTransitionResult, DashboardData, Invoice, InvoiceListItem, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, ReferenceData, Vendor, VendorInput, VendorListItem } from './types';
+import type { BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path);
@@ -124,8 +124,14 @@ export function bulkTransition(poIds: string[], action: string, comment?: string
 	});
 }
 
-export function createInvoice(poId: string): Promise<Invoice> {
-	return apiPost<Invoice>('/api/v1/invoices/', { po_id: poId });
+export function getRemainingQuantities(poId: string): Promise<RemainingQuantityResponse> {
+	return apiGet<RemainingQuantityResponse>(`/api/v1/invoices/po/${poId}/remaining`);
+}
+
+export function createInvoice(poId: string, lineItems?: InvoiceLineItemCreate[]): Promise<Invoice> {
+	const body: Record<string, unknown> = { po_id: poId };
+	if (lineItems) body.line_items = lineItems;
+	return apiPost<Invoice>('/api/v1/invoices/', body);
 }
 
 export function getInvoice(id: string): Promise<Invoice> {

@@ -11,8 +11,11 @@ from src.dto import (
     InvoiceCreate,
     InvoiceListItem,
     InvoiceResponse,
+    RemainingLineItem,
+    RemainingQuantityResponse,
     invoice_to_list_item,
     invoice_to_response,
+    InvoiceLineItemCreate,
 )
 from src.invoice_repository import InvoiceRepository
 from src.repository import PurchaseOrderRepository
@@ -36,6 +39,32 @@ InvoiceRepoDep = Annotated[InvoiceRepository, Depends(get_invoice_repo)]
 PORepoDep = Annotated[PurchaseOrderRepository, Depends(get_po_repo)]
 
 
+@router.get("/po/{po_id}/remaining", response_model=RemainingQuantityResponse)
+async def get_remaining_quantities(
+    po_id: str,
+    invoice_repo: InvoiceRepoDep,
+    po_repo: PORepoDep,
+) -> RemainingQuantityResponse:
+    po = await po_repo.get(po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+
+    invoiced = await invoice_repo.invoiced_quantities(po_id)
+
+    lines = [
+        RemainingLineItem(
+            part_number=item.part_number,
+            description=item.description,
+            ordered=item.quantity,
+            invoiced=invoiced.get(item.part_number, 0),
+            remaining=item.quantity - invoiced.get(item.part_number, 0),
+        )
+        for item in po.line_items
+    ]
+
+    return RemainingQuantityResponse(po_id=po_id, lines=lines)
+
+
 @router.post("/", response_model=InvoiceResponse, status_code=201)
 async def create_invoice(
     body: InvoiceCreate,
@@ -51,16 +80,72 @@ async def create_invoice(
         raise HTTPException(status_code=409, detail="Invoice creation is limited to Procurement POs")
 
     invoice_number = await invoice_repo.next_invoice_number()
-    line_items = [
-        InvoiceLineItem(
-            part_number=item.part_number,
-            description=item.description,
-            quantity=item.quantity,
-            uom=item.uom,
-            unit_price=item.unit_price,
-        )
-        for item in po.line_items
-    ]
+    invoiced = await invoice_repo.invoiced_quantities(po.id)
+
+    po_lines_by_part = {item.part_number: item for item in po.line_items}
+
+    if body.line_items is not None:
+        requested_by_part: dict[str, int] = {item.part_number: item.quantity for item in body.line_items}
+
+        unknown = [pn for pn in requested_by_part if pn not in po_lines_by_part]
+        if unknown:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown part numbers: {', '.join(unknown)}",
+            )
+
+        active = {pn: qty for pn, qty in requested_by_part.items() if qty > 0}
+        if not active:
+            raise HTTPException(status_code=400, detail="At least one line item must have quantity > 0")
+
+        violations = []
+        for part_number, requested_qty in active.items():
+            po_line = po_lines_by_part[part_number]
+            already_invoiced = invoiced.get(part_number, 0)
+            if already_invoiced + requested_qty > po_line.quantity:
+                violations.append({
+                    "part_number": part_number,
+                    "ordered": po_line.quantity,
+                    "already_invoiced": already_invoiced,
+                    "requested": requested_qty,
+                })
+        if violations:
+            raise HTTPException(status_code=409, detail=violations)
+
+        line_items = [
+            InvoiceLineItem(
+                part_number=part_number,
+                description=po_lines_by_part[part_number].description,
+                quantity=requested_qty,
+                uom=po_lines_by_part[part_number].uom,
+                unit_price=po_lines_by_part[part_number].unit_price,
+            )
+            for part_number, requested_qty in active.items()
+        ]
+    else:
+        violations = []
+        for po_line in po.line_items:
+            already_invoiced = invoiced.get(po_line.part_number, 0)
+            if already_invoiced + po_line.quantity > po_line.quantity:
+                violations.append({
+                    "part_number": po_line.part_number,
+                    "ordered": po_line.quantity,
+                    "already_invoiced": already_invoiced,
+                    "requested": po_line.quantity,
+                })
+        if violations:
+            raise HTTPException(status_code=409, detail=violations)
+
+        line_items = [
+            InvoiceLineItem(
+                part_number=item.part_number,
+                description=item.description,
+                quantity=item.quantity,
+                uom=item.uom,
+                unit_price=item.unit_price,
+            )
+            for item in po.line_items
+        ]
 
     try:
         invoice = Invoice.create(

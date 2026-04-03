@@ -84,6 +84,9 @@
 | Invoice Status | Draft, Submitted, Approved, Paid, Disputed. | Invoicing |
 | Invoice Line Item | A line copied from the PO: part number, description, quantity, UoM, unit price. Child of Invoice. | Invoicing |
 | Dispute Reason | Mandatory text captured when an invoice is disputed. Stored on the invoice. | Invoicing |
+| Invoiced Quantity | Cumulative quantity invoiced per line item across all non-disputed invoices for a PO. Keyed by part_number. | Invoicing |
+| Remaining Quantity | Ordered quantity minus invoiced quantity for a line item. Ceiling for the next invoice's quantity on that line. | Invoicing |
+| Over-invoicing Guard | Validation that rejects invoice creation when cumulative invoiced quantity would exceed the PO's ordered quantity for any line item. Returns 409 with per-line violation detail. | Invoicing |
 
 ### Invoice Lifecycle
 

@@ -290,8 +290,13 @@ def po_to_list_item(po: PurchaseOrder, vendor_name: str = "", vendor_country: st
     )
 
 
+class InvoiceLineItemCreate(BaseModel):
+    part_number: str
+    quantity: int
+
 class InvoiceCreate(BaseModel):
     po_id: str
+    line_items: list[InvoiceLineItemCreate] | None = None
 
 
 class InvoiceLineItemResponse(BaseModel):
@@ -359,6 +364,19 @@ def invoice_to_response(inv: Invoice) -> InvoiceResponse:
         created_at=inv.created_at,
         updated_at=inv.updated_at,
     )
+
+
+class RemainingLineItem(BaseModel):
+    part_number: str
+    description: str
+    ordered: int
+    invoiced: int
+    remaining: int
+
+
+class RemainingQuantityResponse(BaseModel):
+    po_id: str
+    lines: list[RemainingLineItem]
 
 
 def invoice_to_list_item(inv: Invoice) -> InvoiceListItem:
