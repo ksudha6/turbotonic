@@ -217,11 +217,11 @@ export function postMilestone(poId: string, milestone: string): Promise<Mileston
 }
 
 export function fetchActivity(limit: number = 20): Promise<ActivityLogEntry[]> {
-	return apiGet<ActivityLogEntry[]>(`/api/v1/activity?limit=${limit}`);
+	return apiGet<ActivityLogEntry[]>(`/api/v1/activity/?limit=${limit}`);
 }
 
 export function fetchActivityForEntity(entityType: string, entityId: string): Promise<ActivityLogEntry[]> {
-	return apiGet<ActivityLogEntry[]>(`/api/v1/activity?entity_type=${entityType}&entity_id=${entityId}`);
+	return apiGet<ActivityLogEntry[]>(`/api/v1/activity/?entity_type=${entityType}&entity_id=${entityId}`);
 }
 
 export function fetchUnreadCount(): Promise<{ count: number }> {
