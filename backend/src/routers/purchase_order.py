@@ -5,7 +5,9 @@ from typing import Annotated, AsyncIterator
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
+from src.activity_repository import ActivityLogRepository
 from src.db import get_db
+from src.domain.activity import ActivityEvent, EntityType
 from src.domain.purchase_order import LineItem, POStatus, POType, PurchaseOrder
 from src.domain.vendor import VendorStatus
 from src.dto import (
@@ -59,6 +61,15 @@ async def get_invoice_repo() -> AsyncIterator[InvoiceRepository]:
 InvoiceRepoDep = Annotated[InvoiceRepository, Depends(get_invoice_repo)]
 
 
+async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
+    async with get_db() as conn:
+        await conn.execute("PRAGMA foreign_keys = ON")
+        yield ActivityLogRepository(conn)
+
+
+ActivityRepoDep = Annotated[ActivityLogRepository, Depends(get_activity_repo)]
+
+
 def _build_line_items(data: PurchaseOrderCreate | PurchaseOrderUpdate) -> list[LineItem]:
     return [
         LineItem(
@@ -75,7 +86,7 @@ def _build_line_items(data: PurchaseOrderCreate | PurchaseOrderUpdate) -> list[L
 
 
 @router.post("/", response_model=PurchaseOrderResponse, status_code=201)
-async def create_po(body: PurchaseOrderCreate, repo: RepoDep, vendor_repo: VendorRepoDep) -> PurchaseOrderResponse:
+async def create_po(body: PurchaseOrderCreate, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep) -> PurchaseOrderResponse:
     vendor = await vendor_repo.get_by_id(body.vendor_id)
     if vendor is None:
         raise HTTPException(status_code=422, detail="Vendor not found")
@@ -112,6 +123,7 @@ async def create_po(body: PurchaseOrderCreate, repo: RepoDep, vendor_repo: Vendo
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await repo.save(po)
+    await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_CREATED)
     return po_to_response(po, vendor_name=vendor.name, vendor_country=vendor.country)
 
 
@@ -194,6 +206,7 @@ async def bulk_transition(body: BulkTransitionRequest) -> BulkTransitionResult:
         async with get_db() as conn:
             await conn.execute("PRAGMA foreign_keys = ON")
             repo = PurchaseOrderRepository(conn)
+            activity_repo = ActivityLogRepository(conn)
             po = await repo.get(po_id)
             if po is None:
                 results.append(BulkTransitionItemResult(po_id=po_id, success=False, error="Purchase order not found"))
@@ -201,13 +214,20 @@ async def bulk_transition(body: BulkTransitionRequest) -> BulkTransitionResult:
             try:
                 if body.action == "submit":
                     po.submit()
+                    await repo.save(po)
+                    await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_SUBMITTED)
                 elif body.action == "accept":
                     po.accept()
+                    await repo.save(po)
+                    await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_ACCEPTED)
                 elif body.action == "reject":
                     po.reject(body.comment)
+                    await repo.save(po)
+                    await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_REJECTED, detail=body.comment)
                 elif body.action == "resubmit":
                     po.resubmit()
-                await repo.save(po)
+                    await repo.save(po)
+                    await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_SUBMITTED)
                 results.append(BulkTransitionItemResult(po_id=po_id, success=True, new_status=po.status.value))
             except ValueError as exc:
                 results.append(BulkTransitionItemResult(po_id=po_id, success=False, error=str(exc)))
@@ -249,7 +269,7 @@ async def list_po_invoices(po_id: str, invoice_repo: InvoiceRepoDep) -> list[Inv
 
 
 @router.post("/{po_id}/submit", response_model=PurchaseOrderResponse)
-async def submit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep) -> PurchaseOrderResponse:
+async def submit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
@@ -258,6 +278,7 @@ async def submit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep) -> Pu
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await repo.save(po)
+    await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_SUBMITTED)
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vname = vendor.name if vendor else ""
     vcountry = vendor.country if vendor else ""
@@ -265,7 +286,7 @@ async def submit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep) -> Pu
 
 
 @router.post("/{po_id}/accept", response_model=PurchaseOrderResponse)
-async def accept_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep) -> PurchaseOrderResponse:
+async def accept_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
@@ -274,6 +295,7 @@ async def accept_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep) -> Pu
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await repo.save(po)
+    await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_ACCEPTED)
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vname = vendor.name if vendor else ""
     vcountry = vendor.country if vendor else ""
@@ -281,7 +303,7 @@ async def accept_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep) -> Pu
 
 
 @router.post("/{po_id}/reject", response_model=PurchaseOrderResponse)
-async def reject_po(po_id: str, body: RejectRequest, repo: RepoDep, vendor_repo: VendorRepoDep) -> PurchaseOrderResponse:
+async def reject_po(po_id: str, body: RejectRequest, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
@@ -290,6 +312,7 @@ async def reject_po(po_id: str, body: RejectRequest, repo: RepoDep, vendor_repo:
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await repo.save(po)
+    await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_REJECTED, detail=body.comment)
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vname = vendor.name if vendor else ""
     vcountry = vendor.country if vendor else ""
@@ -297,7 +320,7 @@ async def reject_po(po_id: str, body: RejectRequest, repo: RepoDep, vendor_repo:
 
 
 @router.put("/{po_id}", response_model=PurchaseOrderResponse)
-async def update_po(po_id: str, body: PurchaseOrderUpdate, repo: RepoDep, vendor_repo: VendorRepoDep) -> PurchaseOrderResponse:
+async def update_po(po_id: str, body: PurchaseOrderUpdate, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
@@ -334,11 +357,12 @@ async def update_po(po_id: str, body: PurchaseOrderUpdate, repo: RepoDep, vendor
         status_code = 422 if str(exc).startswith("invalid ") else 409
         raise HTTPException(status_code=status_code, detail=str(exc)) from exc
     await repo.save(po)
+    await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_REVISED)
     return po_to_response(po, vendor_name=vendor.name, vendor_country=vendor.country)
 
 
 @router.post("/{po_id}/resubmit", response_model=PurchaseOrderResponse)
-async def resubmit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep) -> PurchaseOrderResponse:
+async def resubmit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
@@ -347,6 +371,7 @@ async def resubmit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep) -> 
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await repo.save(po)
+    await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_SUBMITTED)
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vname = vendor.name if vendor else ""
     vcountry = vendor.country if vendor else ""

@@ -7,6 +7,7 @@
 	import RejectDialog from '$lib/components/RejectDialog.svelte';
 	import CreateInvoiceDialog from '$lib/components/CreateInvoiceDialog.svelte';
 	import MilestoneTimeline from '$lib/components/MilestoneTimeline.svelte';
+	import ActivityTimeline from '$lib/components/ActivityTimeline.svelte';
 	import type { PurchaseOrder, InvoiceListItem, ReferenceData, RemainingLine, InvoiceLineItemCreate, MilestoneUpdate } from '$lib/types';
 	import { buildLabelResolver } from '$lib/labels';
 
@@ -289,6 +290,11 @@
 			</table>
 		</div>
 	{/if}
+
+	<div class="section card">
+		<h2>Activity</h2>
+		<ActivityTimeline entityType="PO" entityId={po.id} />
+	</div>
 
 	<div class="actions">
 		<button class="btn btn-secondary" onclick={() => downloadPoPdf(id)}>Download PDF</button>

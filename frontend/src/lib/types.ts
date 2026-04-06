@@ -263,3 +263,18 @@ export interface MilestoneUpdate {
 	milestone: ProductionMilestone;
 	posted_at: string;
 }
+
+export type NotificationCategory = 'LIVE' | 'ACTION_REQUIRED' | 'DELAYED';
+export type EntityType = 'PO' | 'INVOICE';
+
+export interface ActivityLogEntry {
+	id: string;
+	entity_type: EntityType;
+	entity_id: string;
+	event: string;
+	category: NotificationCategory;
+	target_role: string | null;
+	detail: string | null;
+	read_at: string | null;
+	created_at: string;
+}

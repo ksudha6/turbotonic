@@ -157,6 +157,23 @@ async def init_db(conn: aiosqlite.Connection) -> None:
         """
     )
 
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS activity_log (
+            id          TEXT PRIMARY KEY,
+            entity_type TEXT NOT NULL,
+            entity_id   TEXT NOT NULL,
+            event       TEXT NOT NULL,
+            category    TEXT NOT NULL,
+            target_role TEXT,
+            actor_id    TEXT,
+            detail      TEXT,
+            read_at     TEXT,
+            created_at  TEXT NOT NULL
+        )
+        """
+    )
+
     # Add buyer columns to existing purchase_orders tables.
     for col in ("buyer_name", "buyer_country"):
         try:

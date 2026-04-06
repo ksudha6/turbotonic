@@ -5,7 +5,9 @@ from typing import Annotated, AsyncIterator
 from fastapi import APIRouter, Depends, HTTPException
 from starlette.responses import Response
 
+from src.activity_repository import ActivityLogRepository
 from src.db import get_db
+from src.domain.activity import ActivityEvent, EntityType
 from src.domain.invoice import Invoice, InvoiceLineItem
 from src.dto import (
     BulkInvoicePdfRequest,
@@ -53,6 +55,15 @@ PORepoDep = Annotated[PurchaseOrderRepository, Depends(get_po_repo)]
 VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
 
 
+async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
+    async with get_db() as conn:
+        await conn.execute("PRAGMA foreign_keys = ON")
+        yield ActivityLogRepository(conn)
+
+
+ActivityRepoDep = Annotated[ActivityLogRepository, Depends(get_activity_repo)]
+
+
 @router.get("/po/{po_id}/remaining", response_model=RemainingQuantityResponse)
 async def get_remaining_quantities(
     po_id: str,
@@ -84,6 +95,7 @@ async def create_invoice(
     body: InvoiceCreate,
     invoice_repo: InvoiceRepoDep,
     po_repo: PORepoDep,
+    activity_repo: ActivityRepoDep,
 ) -> InvoiceResponse:
     po = await po_repo.get(body.po_id)
     if po is None:
@@ -182,6 +194,7 @@ async def create_invoice(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     await invoice_repo.save(invoice)
+    await activity_repo.append(EntityType.INVOICE, invoice.id, ActivityEvent.INVOICE_CREATED)
     return invoice_to_response(invoice)
 
 
@@ -282,7 +295,7 @@ async def get_invoice_pdf(
 
 
 @router.post("/{invoice_id}/submit", response_model=InvoiceResponse)
-async def submit_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep) -> InvoiceResponse:
+async def submit_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity_repo: ActivityRepoDep) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -291,11 +304,12 @@ async def submit_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep) -> Invoi
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await invoice_repo.save(invoice)
+    await activity_repo.append(EntityType.INVOICE, invoice.id, ActivityEvent.INVOICE_SUBMITTED)
     return invoice_to_response(invoice)
 
 
 @router.post("/{invoice_id}/approve", response_model=InvoiceResponse)
-async def approve_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep) -> InvoiceResponse:
+async def approve_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity_repo: ActivityRepoDep) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -304,11 +318,12 @@ async def approve_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep) -> Invo
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await invoice_repo.save(invoice)
+    await activity_repo.append(EntityType.INVOICE, invoice.id, ActivityEvent.INVOICE_APPROVED)
     return invoice_to_response(invoice)
 
 
 @router.post("/{invoice_id}/pay", response_model=InvoiceResponse)
-async def pay_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep) -> InvoiceResponse:
+async def pay_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity_repo: ActivityRepoDep) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -317,6 +332,7 @@ async def pay_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep) -> InvoiceR
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await invoice_repo.save(invoice)
+    await activity_repo.append(EntityType.INVOICE, invoice.id, ActivityEvent.INVOICE_PAID)
     return invoice_to_response(invoice)
 
 
@@ -325,6 +341,7 @@ async def dispute_invoice(
     invoice_id: str,
     body: DisputeRequest,
     invoice_repo: InvoiceRepoDep,
+    activity_repo: ActivityRepoDep,
 ) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
@@ -334,11 +351,12 @@ async def dispute_invoice(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await invoice_repo.save(invoice)
+    await activity_repo.append(EntityType.INVOICE, invoice.id, ActivityEvent.INVOICE_DISPUTED, detail=body.reason)
     return invoice_to_response(invoice)
 
 
 @router.post("/{invoice_id}/resolve", response_model=InvoiceResponse)
-async def resolve_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep) -> InvoiceResponse:
+async def resolve_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity_repo: ActivityRepoDep) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -347,4 +365,5 @@ async def resolve_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep) -> Invo
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await invoice_repo.save(invoice)
+    await activity_repo.append(EntityType.INVOICE, invoice.id, ActivityEvent.INVOICE_SUBMITTED)
     return invoice_to_response(invoice)

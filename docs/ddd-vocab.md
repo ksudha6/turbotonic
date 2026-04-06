@@ -123,6 +123,16 @@
 | Current Milestone | The latest posted milestone for a PO. Null when no milestones exist. Exposed on the PO list as a read model field via subquery join. | Production |
 | Overdue Production | A PO whose latest milestone has exceeded its time threshold: 7 days for RAW_MATERIALS and PRODUCTION_STARTED, 3 days for QC_PASSED and READY_TO_SHIP. SHIPPED is never overdue. Surfaced on the dashboard. | Production |
 
+## Activity and Notifications
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| Activity Log Entry | A recorded domain event: PO or invoice status change, milestone post, or overdue detection. Stores entity reference, event type, notification category, target role, optional detail text, and read/unread state. Append-only. | Notifications |
+| Notification Category | Classification of an activity log entry: LIVE (something happened), ACTION_REQUIRED (someone needs to act), DELAYED (entity is overdue). Drives UI presentation and future role-based routing. | Notifications |
+| Target Role | The intended audience for a notification: SM (supply manager) or VENDOR. Nullable until auth is implemented. Stored per entry for future filtering. | Notifications |
+| Milestone Overdue | A DELAYED activity entry generated when a production milestone exceeds its time threshold. One entry per PO per milestone, idempotent. Generated on dashboard load using existing overdue thresholds. | Notifications |
+| Event Metadata | Static mapping from each ActivityEvent to its NotificationCategory and TargetRole. Determines how events are categorized and routed. | Notifications |
+
 ## Compliance (deferred)
 
 | Term | Definition | Bounded Context |

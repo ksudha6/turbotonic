@@ -6,7 +6,9 @@ from typing import Annotated, AsyncIterator
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from src.activity_repository import ActivityLogRepository
 from src.db import get_db
+from src.domain.activity import ActivityEvent, EntityType
 from src.domain.milestone import (
     MilestoneUpdate,
     ProductionMilestone,
@@ -32,6 +34,15 @@ async def get_po_repo() -> AsyncIterator[PurchaseOrderRepository]:
 
 MilestoneRepoDep = Annotated[MilestoneRepository, Depends(get_milestone_repo)]
 PORepoDep = Annotated[PurchaseOrderRepository, Depends(get_po_repo)]
+
+
+async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
+    async with get_db() as conn:
+        await conn.execute("PRAGMA foreign_keys = ON")
+        yield ActivityLogRepository(conn)
+
+
+ActivityRepoDep = Annotated[ActivityLogRepository, Depends(get_activity_repo)]
 
 
 class MilestonePostRequest(BaseModel):
@@ -66,6 +77,7 @@ async def post_milestone(
     body: MilestonePostRequest,
     milestone_repo: MilestoneRepoDep,
     po_repo: PORepoDep,
+    activity_repo: ActivityRepoDep,
 ) -> MilestoneResponse:
     # Reject empty or whitespace-only milestone values before enum lookup.
     if not body.milestone or not body.milestone.strip():
@@ -98,5 +110,6 @@ async def post_milestone(
 
     update = MilestoneUpdate(milestone=proposed, posted_at=datetime.now(UTC))
     await milestone_repo.save(po_id, update)
+    await activity_repo.append(EntityType.PO, po_id, ActivityEvent.MILESTONE_POSTED, detail=update.milestone.value)
 
     return MilestoneResponse(milestone=update.milestone.value, posted_at=update.posted_at)

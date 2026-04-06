@@ -8,7 +8,9 @@ import aiosqlite
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
+from src.activity_repository import ActivityLogRepository
 from src.db import get_db
+from src.domain.activity import ActivityEvent, EntityType
 from src.domain.milestone import MILESTONE_ORDER, ProductionMilestone
 from src.domain.reference_data import RATE_TO_USD
 from src.invoice_repository import InvoiceRepository
@@ -44,10 +46,17 @@ async def get_milestone_repo() -> AsyncIterator[MilestoneRepository]:
         yield MilestoneRepository(conn)
 
 
+async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
+    async with get_db() as conn:
+        await conn.execute("PRAGMA foreign_keys = ON")
+        yield ActivityLogRepository(conn)
+
+
 RepoDep = Annotated[PurchaseOrderRepository, Depends(get_repo)]
 VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
 InvoiceRepoDep = Annotated[InvoiceRepository, Depends(get_invoice_repo)]
 MilestoneRepoDep = Annotated[MilestoneRepository, Depends(get_milestone_repo)]
+ActivityRepoDep = Annotated[ActivityLogRepository, Depends(get_activity_repo)]
 
 
 class POStatusSummary(BaseModel):
@@ -115,6 +124,7 @@ async def get_dashboard(
     vendor_repo: VendorRepoDep,
     invoice_repo: InvoiceRepoDep,
     milestone_repo: MilestoneRepoDep,
+    activity_repo: ActivityRepoDep,
 ) -> DashboardResponse:
     # PO summary: aggregate by status, convert to USD
     raw_summary = await repo.po_summary_by_status()
@@ -267,6 +277,15 @@ async def get_dashboard(
                     milestone=milestone_val,
                     days_since_update=days_since,
                 )
+            )
+
+    for overdue in overdue_pos:
+        if not await activity_repo.has_delayed_entry(overdue.id, overdue.milestone):
+            await activity_repo.append(
+                EntityType.PO,
+                overdue.id,
+                ActivityEvent.MILESTONE_OVERDUE,
+                detail=f"{overdue.milestone} overdue by {overdue.days_since_update} days",
             )
 
     return DashboardResponse(

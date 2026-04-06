@@ -4,6 +4,7 @@
 	import { getInvoice, submitInvoice, approveInvoice, payInvoice, disputeInvoice, resolveInvoice, downloadInvoicePdf } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import DisputeDialog from '$lib/components/DisputeDialog.svelte';
+	import ActivityTimeline from '$lib/components/ActivityTimeline.svelte';
 	import type { Invoice } from '$lib/types';
 
 	let invoice: Invoice | null = $state(null);
@@ -108,6 +109,11 @@
 				{/each}
 			</tbody>
 		</table>
+	</div>
+
+	<div class="section card">
+		<h2>Activity</h2>
+		<ActivityTimeline entityType="INVOICE" entityId={invoice.id} />
 	</div>
 
 	<div class="actions">

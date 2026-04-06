@@ -1,6 +1,7 @@
 <script lang="ts">
 	import favicon from '$lib/assets/favicon.svg';
 	import '$lib/styles/global.css';
+	import NotificationBell from '$lib/components/NotificationBell.svelte';
 
 	let { children } = $props();
 </script>
@@ -18,6 +19,9 @@
 			<li><a href="/invoices">Invoices</a></li>
 			<li><a href="/vendors">Vendors</a></li>
 		</ul>
+		<div class="nav-actions">
+			<NotificationBell />
+		</div>
 	</div>
 </nav>
 
@@ -67,5 +71,9 @@
 
 	.nav-links a:hover {
 		color: var(--gray-900);
+	}
+
+	.nav-actions {
+		margin-left: auto;
 	}
 </style>

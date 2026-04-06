@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.db import get_db
-from src.routers import dashboard, invoice, milestone, purchase_order, reference_data, vendor
+from src.routers import activity, dashboard, invoice, milestone, purchase_order, reference_data, vendor
 from src.schema import init_db
 
 
@@ -34,6 +34,7 @@ app.include_router(vendor.router)
 app.include_router(dashboard.router)
 app.include_router(invoice.router)
 app.include_router(milestone.router)
+app.include_router(activity.router)
 
 
 @app.get("/health")

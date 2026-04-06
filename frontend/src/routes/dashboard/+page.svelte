@@ -1,9 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { fetchDashboard } from '$lib/api';
+	import { fetchDashboard, fetchActivity } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
-	import type { DashboardData } from '$lib/types';
+	import type { ActivityLogEntry, DashboardData } from '$lib/types';
 
 	const MILESTONE_LABELS: Record<string, string> = {
 		RAW_MATERIALS: 'Raw Materials',
@@ -14,26 +14,54 @@
 	};
 
 	let data: DashboardData | null = $state(null);
+	let activity: ActivityLogEntry[] = $state([]);
 	let loading: boolean = $state(true);
 
 	onMount(async () => {
 		try {
-			data = await fetchDashboard();
+			[data, activity] = await Promise.all([fetchDashboard(), fetchActivity(20)]);
 		} finally {
 			loading = false;
 		}
 	});
 
+	const EVENT_LABELS: Record<string, string> = {
+		PO_CREATED: 'PO created',
+		PO_SUBMITTED: 'PO submitted',
+		PO_ACCEPTED: 'PO accepted',
+		PO_REJECTED: 'PO rejected',
+		PO_REVISED: 'PO revised',
+		INVOICE_CREATED: 'Invoice created',
+		INVOICE_SUBMITTED: 'Invoice submitted',
+		INVOICE_APPROVED: 'Invoice approved',
+		INVOICE_PAID: 'Invoice paid',
+		INVOICE_DISPUTED: 'Invoice disputed',
+		MILESTONE_POSTED: 'Milestone posted',
+		MILESTONE_OVERDUE: 'Milestone overdue',
+	};
+
+	function relativeTime(dateStr: string): string {
+		const diffMs = Date.now() - new Date(dateStr).getTime();
+		const diffMin = Math.floor(diffMs / 60000);
+		if (diffMin < 1) return 'just now';
+		if (diffMin < 60) return `${diffMin}m ago`;
+		const diffHr = Math.floor(diffMin / 60);
+		if (diffHr < 24) return `${diffHr}h ago`;
+		return `${Math.floor(diffHr / 24)}d ago`;
+	}
+
+	function entityLink(entry: ActivityLogEntry): string {
+		return entry.entity_type === 'PO' ? `/po/${entry.entity_id}` : `/invoice/${entry.entity_id}`;
+	}
+
+	function categoryClass(category: string): string {
+		if (category === 'ACTION_REQUIRED') return 'cat-action';
+		if (category === 'DELAYED') return 'cat-delayed';
+		return 'cat-live';
+	}
+
 	function formatUsd(value: string): string {
 		return parseFloat(value).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 });
-	}
-
-	function formatValue(value: string, currency: string): string {
-		return `${parseFloat(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
-	}
-
-	function formatDate(dateStr: string): string {
-		return new Date(dateStr).toLocaleDateString();
 	}
 </script>
 
@@ -90,32 +118,22 @@
 
 	<section class="section">
 		<h2>Recent Activity</h2>
-		{#if data.recent_pos.length === 0}
+		{#if activity.length === 0}
 			<p class="empty-text">No recent activity.</p>
 		{:else}
-			<div class="card">
-				<table class="table">
-					<thead>
-						<tr>
-							<th>PO Number</th>
-							<th>Vendor</th>
-							<th>Status</th>
-							<th>Total Value</th>
-							<th>Updated</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each data.recent_pos as po}
-							<tr onclick={() => goto(`/po/${po.id}`)}>
-								<td>{po.po_number}</td>
-								<td>{po.vendor_name}</td>
-								<td><StatusPill status={po.status} /></td>
-								<td>{formatValue(po.total_value, po.currency)}</td>
-								<td>{formatDate(po.updated_at)}</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+			<div class="card feed">
+				{#each activity as entry}
+					<div class="feed-item" onclick={() => goto(entityLink(entry))}>
+						<span class="cat-dot {categoryClass(entry.category)}"></span>
+						<div class="feed-content">
+							<span class="feed-event">{EVENT_LABELS[entry.event] ?? entry.event}</span>
+							{#if entry.detail}
+								<span class="feed-detail">{entry.detail}</span>
+							{/if}
+						</div>
+						<span class="feed-time">{relativeTime(entry.created_at)}</span>
+					</div>
+				{/each}
 			</div>
 		{/if}
 	</section>
@@ -251,5 +269,72 @@
 	.overdue-days {
 		color: var(--red-600);
 		font-weight: 600;
+	}
+
+	.feed {
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+	}
+
+	.feed-item {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-3);
+		padding: var(--space-3) var(--space-4);
+		cursor: pointer;
+		border-bottom: 1px solid var(--gray-100);
+	}
+
+	.feed-item:last-child {
+		border-bottom: none;
+	}
+
+	.feed-item:hover {
+		background-color: var(--gray-50);
+	}
+
+	.cat-dot {
+		flex-shrink: 0;
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		margin-top: 5px;
+	}
+
+	.cat-live {
+		background-color: #3b82f6;
+	}
+
+	.cat-action {
+		background-color: #f59e0b;
+	}
+
+	.cat-delayed {
+		background-color: var(--red-600);
+	}
+
+	.feed-content {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-1);
+	}
+
+	.feed-event {
+		font-size: var(--font-size-sm);
+		font-weight: 500;
+	}
+
+	.feed-detail {
+		font-size: var(--font-size-xs);
+		color: var(--gray-500);
+	}
+
+	.feed-time {
+		flex-shrink: 0;
+		font-size: var(--font-size-xs);
+		color: var(--gray-500);
+		white-space: nowrap;
 	}
 </style>

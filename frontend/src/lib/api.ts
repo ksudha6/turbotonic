@@ -1,4 +1,4 @@
-import type { BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PaginatedInvoiceList, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PaginatedInvoiceList, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path);
@@ -214,4 +214,21 @@ export function listMilestones(poId: string): Promise<MilestoneUpdate[]> {
 
 export function postMilestone(poId: string, milestone: string): Promise<MilestoneUpdate> {
 	return apiPost<MilestoneUpdate>(`/api/v1/po/${poId}/milestones`, { milestone });
+}
+
+export function fetchActivity(limit: number = 20): Promise<ActivityLogEntry[]> {
+	return apiGet<ActivityLogEntry[]>(`/api/v1/activity?limit=${limit}`);
+}
+
+export function fetchActivityForEntity(entityType: string, entityId: string): Promise<ActivityLogEntry[]> {
+	return apiGet<ActivityLogEntry[]>(`/api/v1/activity?entity_type=${entityType}&entity_id=${entityId}`);
+}
+
+export function fetchUnreadCount(): Promise<{ count: number }> {
+	return apiGet<{ count: number }>('/api/v1/activity/unread-count');
+}
+
+export function markActivityRead(eventIds?: string[]): Promise<{ marked: number }> {
+	const body = eventIds ? { event_ids: eventIds } : { all: true };
+	return apiPost<{ marked: number }>('/api/v1/activity/mark-read', body);
 }
