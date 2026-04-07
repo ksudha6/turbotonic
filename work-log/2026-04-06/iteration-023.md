@@ -2,7 +2,7 @@
 
 ## Context
 
-No event history exists in the system. Status changes on POs and invoices, milestone posts, and invoice creation are fire-and-forget: only the current state is stored. The dashboard's "Recent Activity" is just the 10 most recently updated POs, not a real event feed.
+Status changes on POs and invoices, milestone posts, and invoice creation are fire-and-forget: only the current state is stored. The dashboard's "Recent Activity" is just the 10 most recently updated POs, not a real event feed.
 
 This iteration adds a domain event log that records what happened, when, and to what. Actor (`who`) is left nullable until auth lands. Three notification categories exist from the start: **live** (something happened), **action_required** (someone needs to act), and **delayed** (entity is overdue). Categories map to future role-based routing (SM vs vendor). Delayed notifications are generated on dashboard load from existing overdue milestone thresholds. The dashboard feed replaces the current placeholder.
 
@@ -79,4 +79,8 @@ This iteration adds a domain event log that records what happened, when, and to 
 - [ ] Each feed entry links to the correct PO or invoice detail page (carried forward)
 
 ### Tests (scratch)
-- [ ] Screenshot: dashboard with activity feed showing mixed event types (carried forward)
+- [x] Screenshot: dashboard with activity feed showing mixed event types
+
+## Notes
+
+Activity log uses a single `activity_log` table with `entity_type`+`entity_id` for polymorphic linking to POs and invoices. Event-to-category/target_role mapping is a static dict (`EVENT_METADATA`) in the domain layer, not stored redundantly on each row but derived at insert time. Delayed notifications for overdue milestones are generated on dashboard load rather than by a background job, with idempotency via `has_delayed_entry` check. CORS was extended to port 5174 for the dev Makefile. Permanent frontend Playwright tests carried forward.

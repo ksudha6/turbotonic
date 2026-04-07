@@ -62,6 +62,11 @@ Iteration 23 added the `activity_log` table, event recording on all PO/invoice/m
 - [ ] Invoice detail page shows activity timeline section (carried forward)
 
 ### Tests (scratch)
-- [ ] Screenshot: notification bell with unread badge (carried forward)
-- [ ] Screenshot: PO detail with activity timeline (carried forward)
-- [ ] Screenshot: invoice detail with activity timeline (carried forward)
+- [x] Screenshot: notification bell with unread badge
+- [x] Screenshot: bell dropdown open with events listed
+- [x] Screenshot: PO detail with activity timeline
+- [x] Screenshot: invoice detail with activity timeline
+
+## Notes
+
+Bell component uses click-outside overlay pattern (transparent fixed div) rather than a global event listener. Unread count fetches on mount only; no polling. The `read_at` and `mark_read` backend was built in iteration 23's schema pass to avoid a second migration. ActivityTimeline component is reused on both PO and invoice detail pages via `entityType`+`entityId` props. The `.badge` CSS class collided with StatusPill's existing `.badge` class in scratch tests; selectors scoped to `.bell-wrapper .badge` resolved it. Permanent frontend Playwright tests carried forward.
