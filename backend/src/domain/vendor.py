@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 from enum import Enum
 from uuid import uuid4
 
+from src.domain.reference_data import VALID_COUNTRIES
+
 
 class VendorStatus(Enum):
     ACTIVE = "ACTIVE"
@@ -52,6 +54,8 @@ class Vendor:
             raise ValueError("name must not be empty or whitespace-only")
         if not country or not country.strip():
             raise ValueError("country must not be empty or whitespace-only")
+        if country not in VALID_COUNTRIES:
+            raise ValueError(f"invalid country: {country!r}")
         now = datetime.now(UTC)
         return cls(
             id=str(uuid4()),

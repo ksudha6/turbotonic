@@ -46,6 +46,16 @@ def test_create_vendor_rejects_whitespace_country() -> None:
         Vendor.create(name="Acme Corp", country="   ", vendor_type=VendorType.PROCUREMENT)
 
 
+def test_create_vendor_rejects_invalid_country_code() -> None:
+    with pytest.raises(ValueError, match="invalid country"):
+        Vendor.create(name="Acme Corp", country="INVALID", vendor_type=VendorType.PROCUREMENT)
+
+
+def test_create_vendor_accepts_valid_country_code() -> None:
+    vendor = Vendor.create(name="Acme Corp", country="CN", vendor_type=VendorType.PROCUREMENT)
+    assert vendor.country == "CN"
+
+
 # ---------------------------------------------------------------------------
 # Vendor.deactivate
 # ---------------------------------------------------------------------------
