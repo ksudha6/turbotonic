@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 from unittest.mock import patch
@@ -580,7 +581,7 @@ async def test_list_invoices_filter_by_invoice_number(client: AsyncClient) -> No
 
 async def test_list_invoices_filter_by_date_range(client: AsyncClient) -> None:
     # GET /api/v1/invoices/?date_from=X&date_to=Y must return invoices within the date range.
-    today = "2026-04-03"
+    today = datetime.date.today().isoformat()
     future_date = "2099-01-01"
     past_date = "2000-01-01"
 
