@@ -1,6 +1,22 @@
 import { test, expect } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
+// Activity mocks — NotificationBell calls unread-count on every page load;
+// detail pages with ActivityTimeline call the entity activity endpoint.
+// ---------------------------------------------------------------------------
+
+test.beforeEach(async ({ page }) => {
+	// Register catch-all first (lower LIFO priority), then specific route after
+	// (higher LIFO priority). Playwright evaluates routes in reverse registration order.
+	await page.route('**/api/v1/activity/**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/activity/unread-count', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ count: 0 }) });
+	});
+});
+
+// ---------------------------------------------------------------------------
 // Shared fixture data
 // ---------------------------------------------------------------------------
 

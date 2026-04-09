@@ -1,6 +1,18 @@
 import { test, expect } from '@playwright/test';
 import type { DashboardData } from '../src/lib/types';
 
+// NotificationBell calls unread-count on every page load;
+// dashboard calls fetchActivity(20) for the feed.
+test.beforeEach(async ({ page }) => {
+	// Catch-all first (lower LIFO priority), specific unread-count after (higher priority).
+	await page.route('**/api/v1/activity/**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/activity/unread-count', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ count: 0 }) });
+	});
+});
+
 const MOCK_DASHBOARD: DashboardData = {
 	po_summary: [
 		{ status: 'DRAFT', count: 3, total_usd: '4500.00' },
@@ -59,10 +71,10 @@ test('dashboard page loads and renders all sections', async ({ page }) => {
 	await expect(page.locator('body')).toContainText('8'); // active
 	await expect(page.locator('body')).toContainText('2'); // inactive
 
-	// Recent POs table
-	await expect(page.locator('tbody tr')).toHaveCount(2);
-	await expect(page.locator('tbody')).toContainText('PO-20260324-0001');
-	await expect(page.locator('tbody')).toContainText('Acme Corp');
+	// Recent Activity section (replaced recent_pos table in iteration 23)
+	await expect(page.getByRole('heading', { name: 'Recent Activity' })).toBeVisible();
+	// Activity mocked to empty list, so the empty-state message shows
+	await expect(page.locator('body')).toContainText('No recent activity');
 });
 
 test('status cards show count and USD total', async ({ page }) => {
@@ -121,42 +133,9 @@ test('clicking status card navigates to filtered PO list', async ({ page }) => {
 	expect(page.url()).toContain('/po?status=DRAFT');
 });
 
-test('recent PO rows link to detail page', async ({ page }) => {
-	await mockDashboardRoute(page);
-
-	// Mock the detail page API
-	await page.route('**/api/v1/po/uuid-1', (route) => {
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({
-				...MOCK_DASHBOARD.recent_pos[0],
-				vendor_id: 'v1',
-				buyer_name: 'TurboTonic',
-				buyer_country: 'US',
-				vendor_country: 'CN',
-				ship_to_address: '',
-				payment_terms: 'TT',
-				terms_and_conditions: '',
-				incoterm: 'FOB',
-				port_of_loading: 'CNSHA',
-				port_of_discharge: 'USLAX',
-				country_of_origin: 'CN',
-				country_of_destination: 'US',
-				line_items: [],
-				rejection_history: [],
-				created_at: '2026-03-24T00:00:00+00:00',
-				po_type: 'PROCUREMENT'
-			})
-		});
-	});
-
-	await page.goto('/dashboard');
-	await page.locator('tbody tr').first().click();
-
-	await page.waitForURL('**/po/uuid-1');
-	expect(page.url()).toContain('/po/uuid-1');
-});
+// NOTE: The recent_pos table was replaced by the activity feed in iteration 23.
+// Navigation from the activity feed to PO and invoice detail pages is covered
+// by dashboard-activity.spec.ts.
 
 // ---------------------------------------------------------------------------
 // Iteration 22 — Production pipeline and overdue POs

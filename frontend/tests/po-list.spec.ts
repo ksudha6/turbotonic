@@ -1,5 +1,16 @@
 import { test, expect } from '@playwright/test';
 
+// NotificationBell calls unread-count on every page load.
+test.beforeEach(async ({ page }) => {
+	// Catch-all first (lower LIFO priority), specific unread-count after (higher priority).
+	await page.route('**/api/v1/activity/**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/activity/unread-count', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ count: 0 }) });
+	});
+});
+
 const PO_DRAFT = {
 	id: 'uuid-draft',
 	po_number: 'PO-20260316-0001',
