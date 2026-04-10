@@ -278,3 +278,23 @@ export interface ActivityLogEntry {
 	read_at: string | null;
 	created_at: string;
 }
+
+export interface ProductListItem {
+	id: string;
+	vendor_id: string;
+	part_number: string;
+	description: string;
+	requires_certification: boolean;
+}
+
+export interface Product extends ProductListItem {
+	created_at: string;
+	updated_at: string;
+}
+
+export interface ProductInput {
+	vendor_id: string;
+	part_number: string;
+	description: string;
+	requires_certification: boolean;
+}

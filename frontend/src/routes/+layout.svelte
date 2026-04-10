@@ -18,6 +18,7 @@
 			<li><a href="/po">Purchase Orders</a></li>
 			<li><a href="/invoices">Invoices</a></li>
 			<li><a href="/vendors">Vendors</a></li>
+			<li><a href="/products">Products</a></li>
 		</ul>
 		<div class="nav-actions">
 			<NotificationBell />

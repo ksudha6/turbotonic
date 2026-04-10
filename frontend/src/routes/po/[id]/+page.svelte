@@ -2,13 +2,13 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf, createInvoice, listInvoicesByPO, fetchReferenceData, getRemainingQuantities, listMilestones, postMilestone } from '$lib/api';
+	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf, createInvoice, listInvoicesByPO, fetchReferenceData, getRemainingQuantities, listMilestones, postMilestone, listProducts } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import RejectDialog from '$lib/components/RejectDialog.svelte';
 	import CreateInvoiceDialog from '$lib/components/CreateInvoiceDialog.svelte';
 	import MilestoneTimeline from '$lib/components/MilestoneTimeline.svelte';
 	import ActivityTimeline from '$lib/components/ActivityTimeline.svelte';
-	import type { PurchaseOrder, InvoiceListItem, ReferenceData, RemainingLine, InvoiceLineItemCreate, MilestoneUpdate } from '$lib/types';
+	import type { PurchaseOrder, InvoiceListItem, ReferenceData, RemainingLine, InvoiceLineItemCreate, MilestoneUpdate, ProductListItem } from '$lib/types';
 	import { buildLabelResolver } from '$lib/labels';
 
 	let po: PurchaseOrder | null = $state(null);
@@ -22,6 +22,7 @@
 	let remainingLines: RemainingLine[] = $state([]);
 	let opexError: string = $state('');
 	let milestones: MilestoneUpdate[] = $state([]);
+	let certRequired: Set<string> = $state(new Set());
 
 	const id: string = $page.params.id ?? '';
 
@@ -35,6 +36,8 @@
 		try {
 			[po, invoices, refData] = await Promise.all([getPO(id), listInvoicesByPO(id), fetchReferenceData()]);
 			resolver = buildLabelResolver(refData);
+			const products = await listProducts({ vendor_id: po.vendor_id });
+			certRequired = new Set(products.filter((p) => p.requires_certification).map((p) => p.part_number));
 			if (po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT') {
 				const resp = await getRemainingQuantities(id);
 				remainingMap = new Map(resp.lines.map((l) => [l.part_number, l]));
@@ -223,6 +226,7 @@
 					<th>Unit Price</th>
 					<th>HS Code</th>
 					<th>Origin</th>
+					<th>Cert</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -240,6 +244,11 @@
 						<td>{formatPrice(item.unit_price)}</td>
 						<td>{item.hs_code}</td>
 						<td>{resolve('countries', item.country_of_origin)}</td>
+						<td>
+							{#if certRequired.has(item.part_number)}
+								<span class="badge badge-cert">Required</span>
+							{/if}
+						</td>
 					</tr>
 				{/each}
 			</tbody>
@@ -409,5 +418,10 @@
 	.rejection-date {
 		font-size: var(--font-size-sm);
 		color: var(--gray-500);
+	}
+
+	.badge-cert {
+		background-color: var(--amber-100);
+		color: var(--amber-800);
 	}
 </style>

@@ -117,6 +117,21 @@ async def init_db(conn: aiosqlite.Connection) -> None:
 
     await conn.execute(
         """
+        CREATE TABLE IF NOT EXISTS products (
+            id                      TEXT PRIMARY KEY,
+            vendor_id               TEXT NOT NULL REFERENCES vendors(id),
+            part_number             TEXT NOT NULL,
+            description             TEXT NOT NULL DEFAULT '',
+            requires_certification  INTEGER NOT NULL DEFAULT 0,
+            created_at              TEXT NOT NULL,
+            updated_at              TEXT NOT NULL,
+            UNIQUE(vendor_id, part_number)
+        )
+        """
+    )
+
+    await conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS invoices (
             id              TEXT PRIMARY KEY,
             invoice_number  TEXT UNIQUE NOT NULL,

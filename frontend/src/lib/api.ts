@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PaginatedInvoiceList, PaginatedPOList, PurchaseOrder, PurchaseOrderInput, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PaginatedInvoiceList, PaginatedPOList, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path);
@@ -231,4 +231,31 @@ export function fetchUnreadCount(): Promise<{ count: number }> {
 export function markActivityRead(eventIds?: string[]): Promise<{ marked: number }> {
 	const body = eventIds ? { event_ids: eventIds } : { all: true };
 	return apiPost<{ marked: number }>('/api/v1/activity/mark-read', body);
+}
+
+export function listProducts(params?: { vendor_id?: string }): Promise<ProductListItem[]> {
+	const query = new URLSearchParams();
+	if (params?.vendor_id) query.set('vendor_id', params.vendor_id);
+	const qs = query.toString();
+	return apiGet<ProductListItem[]>(qs ? `/api/v1/products/?${qs}` : '/api/v1/products/');
+}
+
+export function getProduct(id: string): Promise<Product> {
+	return apiGet<Product>(`/api/v1/products/${id}`);
+}
+
+export function createProduct(data: ProductInput): Promise<Product> {
+	return apiPost<Product>('/api/v1/products/', data);
+}
+
+export async function updateProduct(id: string, data: { description?: string; requires_certification?: boolean }): Promise<Product> {
+	const res = await fetch(`/api/v1/products/${id}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(data)
+	});
+	if (!res.ok) {
+		throw new Error(`PATCH /api/v1/products/${id} failed: ${res.status} ${res.statusText}`);
+	}
+	return res.json() as Promise<Product>;
 }

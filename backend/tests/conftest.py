@@ -32,8 +32,10 @@ from src.routers.purchase_order import get_activity_repo as po_get_activity_repo
 from src.routers.purchase_order import get_invoice_repo as po_get_invoice_repo
 from src.routers.purchase_order import get_repo
 from src.routers.purchase_order import get_vendor_repo as po_get_vendor_repo
+from src.routers.product import get_product_repo as product_get_product_repo
 from src.routers.vendor import get_vendor_repo as vendor_get_vendor_repo
 from src.schema import init_db
+from src.product_repository import ProductRepository
 from src.vendor_repository import VendorRepository
 
 
@@ -64,6 +66,10 @@ async def client() -> AsyncIterator[AsyncClient]:
             await conn.execute("PRAGMA foreign_keys = ON")
             yield ActivityLogRepository(conn)
 
+        async def override_get_product_repo() -> AsyncIterator[ProductRepository]:
+            await conn.execute("PRAGMA foreign_keys = ON")
+            yield ProductRepository(conn)
+
         # bulk_transition calls get_db() directly; patch it in the router module
         # so it yields the same in-memory connection used by the rest of the test.
         @asynccontextmanager
@@ -88,6 +94,7 @@ async def client() -> AsyncIterator[AsyncClient]:
         app.dependency_overrides[milestone_get_po_repo] = override_get_repo
         app.dependency_overrides[milestone_get_activity_repo] = override_get_activity_repo
         app.dependency_overrides[activity_get_activity_repo] = override_get_activity_repo
+        app.dependency_overrides[product_get_product_repo] = override_get_product_repo
 
         transport = ASGITransport(app=app)
         with patch("src.routers.purchase_order.get_db", _test_get_db):
