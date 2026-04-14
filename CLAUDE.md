@@ -10,9 +10,10 @@ Be concise. No sycophancy. No pandering. Challenge ideas with rationale and veri
 
 # Iteration flow
 When I say "let's start a new iteration":
-1. Create `work-log/YYYY-MM-DD/` if it doesn't exist
-2. All work logs for that day go in this folder
-3. Prepare `iteration-NNN.md` and close the turn
+1. Read `work-log/iterations-summary.md` for full project context. Do not read individual iteration docs unless explicitly asked
+2. Create `work-log/YYYY-MM-DD/` if it doesn't exist
+3. All work logs for that day go in this folder
+4. Prepare `iteration-NNN.md` and close the turn
 
 
 ## Rules for the Iteration documents
@@ -26,6 +27,7 @@ When I say "let's start a new iteration":
 6. When I say "let's close this iteration":
     1. Mark incomplete tasks as carried forward (not dropped)
     2. Write a one-paragraph summary in `## Notes` — decisions made, not actions taken
+    3. Update `work-log/iterations-summary.md`: append to the iteration log table, and update any other sections that changed (domain model, routes, API surface, "what exists" / "what does not exist yet")
 
 # Testing
 

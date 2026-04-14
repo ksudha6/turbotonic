@@ -40,39 +40,45 @@ PO acceptance is all-or-nothing: the vendor accepts or rejects the entire PO. In
 
 ## Tasks
 
+All tasks carried forward. No implementation was started.
+
 ### Backend — Schema
-- [ ] Add `status` column to `line_items` table (TEXT, default 'PENDING')
-- [ ] Add `LineItemStatus` enum to domain (PENDING, ACCEPTED, REJECTED)
+- [ ] *(carried forward)* Add `status` column to `line_items` table (TEXT, default 'PENDING')
+- [ ] *(carried forward)* Add `LineItemStatus` enum to domain (PENDING, ACCEPTED, REJECTED)
 
 ### Backend — Domain
-- [ ] Add `status` field to `LineItem` dataclass
-- [ ] Add `accept_lines()` method to PurchaseOrder
-- [ ] Validate all lines are addressed (no omissions)
-- [ ] Transition rules: all accepted -> ACCEPTED, any rejected -> REJECTED with comment
-- [ ] Existing `accept()` sets all lines to ACCEPTED
+- [ ] *(carried forward)* Add `status` field to `LineItem` dataclass
+- [ ] *(carried forward)* Add `accept_lines()` method to PurchaseOrder
+- [ ] *(carried forward)* Validate all lines are addressed (no omissions)
+- [ ] *(carried forward)* Transition rules: all accepted -> ACCEPTED, any rejected -> REJECTED with comment
+- [ ] *(carried forward)* Existing `accept()` sets all lines to ACCEPTED
 
 ### Backend — API
-- [ ] `POST /api/v1/po/{po_id}/accept-lines` endpoint
-- [ ] Update PO response to include line item status
-- [ ] Update invoicing to exclude REJECTED lines from remaining quantities
+- [ ] *(carried forward)* `POST /api/v1/po/{po_id}/accept-lines` endpoint
+- [ ] *(carried forward)* Update PO response to include line item status
+- [ ] *(carried forward)* Update invoicing to exclude REJECTED lines from remaining quantities
 
 ### Backend — Repository
-- [ ] Persist line item status on save
-- [ ] Read line item status on reconstruction
+- [ ] *(carried forward)* Persist line item status on save
+- [ ] *(carried forward)* Read line item status on reconstruction
 
 ### Frontend
-- [ ] Per-line accept/reject toggles on PENDING PO detail
-- [ ] Submit Response button
-- [ ] Per-line status pills on PO detail (after response)
+- [ ] *(carried forward)* Per-line accept/reject toggles on PENDING PO detail
+- [ ] *(carried forward)* Submit Response button
+- [ ] *(carried forward)* Per-line status pills on PO detail (after response)
 
 ### Tests (permanent backend)
-- [ ] Accept all lines via accept-lines: PO becomes ACCEPTED, all lines ACCEPTED
-- [ ] Reject one line: PO becomes REJECTED, comment recorded, line statuses correct
-- [ ] Omitting a line item returns 422
-- [ ] Existing accept() still works (backward compat)
-- [ ] Invoicing excludes REJECTED lines from remaining quantities
-- [ ] accept-lines on non-PENDING PO returns 409
+- [ ] *(carried forward)* Accept all lines via accept-lines: PO becomes ACCEPTED, all lines ACCEPTED
+- [ ] *(carried forward)* Reject one line: PO becomes REJECTED, comment recorded, line statuses correct
+- [ ] *(carried forward)* Omitting a line item returns 422
+- [ ] *(carried forward)* Existing accept() still works (backward compat)
+- [ ] *(carried forward)* Invoicing excludes REJECTED lines from remaining quantities
+- [ ] *(carried forward)* accept-lines on non-PENDING PO returns 409
 
 ### Tests (scratch)
-- [ ] Screenshot: PENDING PO with per-line accept/reject toggles
-- [ ] Screenshot: PO detail after partial acceptance showing line statuses
+- [ ] *(carried forward)* Screenshot: PENDING PO with per-line accept/reject toggles
+- [ ] *(carried forward)* Screenshot: PO detail after partial acceptance showing line statuses
+
+## Notes
+
+Iteration scoped on 2026-04-06 but no implementation work started. All tasks carried forward for a future iteration. The PO acceptance model remains all-or-nothing until this is picked up.
