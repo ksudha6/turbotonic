@@ -1,7 +1,7 @@
 # Iterations Summary
 
 > Single-file context for future conversations. Replaces reading 29 individual iteration docs.
-> Last updated: 2026-04-15 (iterations 029a, 030, 031 closed).
+> Last updated: 2026-04-16 (iteration 032 closed).
 
 ---
 
@@ -94,6 +94,7 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 | 29a | 2026-04-15 | Postgres migration: replaced aiosqlite with asyncpg connection pool, all repos use $N placeholders, test isolation via rolled-back transactions, seed script for demo data |
 | 030 | 2026-04-15 | User entity (6 roles, 3 statuses), WebAuthn passkey registration/login, cookie sessions, session middleware, bootstrap/invite flows, critical-path integration test |
 | 031 | 2026-04-15 | API role guards: require_role/require_auth on all 30+ endpoints, ADMIN bypass, bulk transition fine-grained action check, authenticated_client test fixture, dev-login endpoint |
+| 032 | 2026-04-16 | Vendor-scoped data access: VENDOR users see only their vendor's POs, invoices, milestones, activity, and dashboard data. check_vendor_access helper, 404 on ownership mismatch, bulk ops skip non-owned entities |
 
 ---
 
@@ -118,11 +119,12 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - Bootstrap flow (first user becomes ADMIN), invite-only registration
 - API role guards on all endpoints (ADMIN bypass, per-role access control)
 - Dev-login endpoint for local development (`GET /api/v1/auth/dev-login`)
+- Vendor-scoped data access: VENDOR users see only their vendor's POs, invoices, milestones, activity, and dashboard data (check_vendor_access helper, 404 on ownership mismatch)
 
 ## What does not exist yet
 
 ### From the backlog (PO confirmation module)
-- Roles: SM vs Vendor views (same data, different controls) — in progress (iter 032-034)
+- Roles: SM vs Vendor views (same data, different controls) — backend scoping done (iter 032), frontend auth flow (iter 033) and role-conditional rendering (iter 034) pending
 - Overdue PO status (time-based trigger past required delivery date)
 - Mobile layout
 - Custom value approval for reference data dropdowns
@@ -148,6 +150,8 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 ### From the backlog (UX)
 - Error handling across all users and workflows: define and surface user-facing error states for every endpoint (validation errors, conflict errors, not-found, auth failures). Currently errors are ad hoc per endpoint with no consistent frontend treatment.
 - Recent activity redesign: club PO and invoice activity into a unified feed (currently separate activity streams). Needs discussion on grouping, filtering, and presentation.
+- Deep link preservation on register/bootstrap: if an invited user opens a deep link (e.g. `/po/123`) and lands on `/register`, the original path is lost. After registration they go to `/dashboard`, not the deep link. Same for `/setup`. Low priority since registration is a one-time event.
+- Session cookie path/domain audit: verify the session cookie is set with `path=/` and appropriate domain/SameSite attributes for production deployment behind a reverse proxy. Currently works in dev via Vite proxy.
 
 ### From the backlog (infrastructure)
 - HTTPS for non-localhost deployment (WebAuthn requires HTTPS or localhost; needed before first external demo)
@@ -206,3 +210,4 @@ These are the product differentiators. The CRUD workflow (items 1-3, 5, 7-10) is
 | 29 | Product, RequiresCertification |
 | 030 | User, UserRole (6 values), UserStatus (3 values), WebAuthnCredential, SessionCookie, Bootstrap |
 | 031 | RoleGuard, RequireRole, RequireAuth |
+| 032 | VendorScopedAccess |

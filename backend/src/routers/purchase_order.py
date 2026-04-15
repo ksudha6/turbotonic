@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
 from src.activity_repository import ActivityLogRepository
-from src.auth.dependencies import require_auth, require_role
+from src.auth.dependencies import check_vendor_access, require_auth, require_role
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType
 from src.domain.purchase_order import LineItem, POStatus, POType, PurchaseOrder
@@ -137,8 +137,10 @@ async def list_pos(
     sort_dir: str = "desc",
     page: int = 1,
     page_size: int = 20,
-    _user: User = require_auth,
+    user: User = require_auth,
 ) -> PaginatedPOList:
+    if user.role is UserRole.VENDOR:
+        vendor_id = user.vendor_id
     if page < 1:
         raise HTTPException(status_code=422, detail="page must be >= 1")
     if not (1 <= page_size <= 200):
@@ -211,6 +213,9 @@ async def bulk_transition(body: BulkTransitionRequest, user: User = require_role
             if po is None:
                 results.append(BulkTransitionItemResult(po_id=po_id, success=False, error="Purchase order not found"))
                 continue
+            if user.role is UserRole.VENDOR and po.vendor_id != user.vendor_id:
+                results.append(BulkTransitionItemResult(po_id=po_id, success=False, error="Not found"))
+                continue
             try:
                 if body.action == "submit":
                     po.submit()
@@ -235,10 +240,11 @@ async def bulk_transition(body: BulkTransitionRequest, user: User = require_role
 
 
 @router.get("/{po_id}", response_model=PurchaseOrderResponse)
-async def get_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, _user: User = require_auth) -> PurchaseOrderResponse:
+async def get_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, user: User = require_auth) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vname = vendor.name if vendor else ""
     vcountry = vendor.country if vendor else ""
@@ -246,10 +252,11 @@ async def get_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, _user: U
 
 
 @router.get("/{po_id}/pdf")
-async def get_po_pdf(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, _user: User = require_auth) -> Response:
+async def get_po_pdf(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, user: User = require_auth) -> Response:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vname = vendor.name if vendor else ""
     vcountry = vendor.country if vendor else ""
@@ -263,16 +270,21 @@ async def get_po_pdf(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, _use
 
 
 @router.get("/{po_id}/invoices", response_model=list[InvoiceListItem])
-async def list_po_invoices(po_id: str, invoice_repo: InvoiceRepoDep, _user: User = require_role(UserRole.SM, UserRole.VENDOR)) -> list[InvoiceListItem]:
+async def list_po_invoices(po_id: str, repo: RepoDep, invoice_repo: InvoiceRepoDep, user: User = require_role(UserRole.SM, UserRole.VENDOR)) -> list[InvoiceListItem]:
+    po = await repo.get(po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
     invoices = await invoice_repo.list_by_po(po_id)
     return [invoice_to_list_item(inv) for inv in invoices]
 
 
 @router.post("/{po_id}/submit", response_model=PurchaseOrderResponse)
-async def submit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, _user: User = require_role(UserRole.SM)) -> PurchaseOrderResponse:
+async def submit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, user: User = require_role(UserRole.SM)) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
     try:
         po.submit()
     except ValueError as exc:
@@ -286,10 +298,11 @@ async def submit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activ
 
 
 @router.post("/{po_id}/accept", response_model=PurchaseOrderResponse)
-async def accept_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, _user: User = require_role(UserRole.VENDOR, UserRole.SM)) -> PurchaseOrderResponse:
+async def accept_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, user: User = require_role(UserRole.VENDOR, UserRole.SM)) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
     try:
         po.accept()
     except ValueError as exc:
@@ -303,10 +316,11 @@ async def accept_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activ
 
 
 @router.post("/{po_id}/reject", response_model=PurchaseOrderResponse)
-async def reject_po(po_id: str, body: RejectRequest, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, _user: User = require_role(UserRole.VENDOR, UserRole.SM)) -> PurchaseOrderResponse:
+async def reject_po(po_id: str, body: RejectRequest, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, user: User = require_role(UserRole.VENDOR, UserRole.SM)) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
     try:
         po.reject(body.comment)
     except ValueError as exc:
@@ -320,10 +334,11 @@ async def reject_po(po_id: str, body: RejectRequest, repo: RepoDep, vendor_repo:
 
 
 @router.put("/{po_id}", response_model=PurchaseOrderResponse)
-async def update_po(po_id: str, body: PurchaseOrderUpdate, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, _user: User = require_role(UserRole.SM)) -> PurchaseOrderResponse:
+async def update_po(po_id: str, body: PurchaseOrderUpdate, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, user: User = require_role(UserRole.SM)) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
     vendor = await vendor_repo.get_by_id(body.vendor_id)
     if vendor is None:
         raise HTTPException(status_code=422, detail="Vendor not found")
@@ -362,10 +377,11 @@ async def update_po(po_id: str, body: PurchaseOrderUpdate, repo: RepoDep, vendor
 
 
 @router.post("/{po_id}/resubmit", response_model=PurchaseOrderResponse)
-async def resubmit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, _user: User = require_role(UserRole.SM)) -> PurchaseOrderResponse:
+async def resubmit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, user: User = require_role(UserRole.SM)) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
     try:
         po.resubmit()
     except ValueError as exc:

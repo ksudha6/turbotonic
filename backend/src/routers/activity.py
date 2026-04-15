@@ -10,7 +10,7 @@ from src.activity_repository import ActivityLogRepository
 from src.auth.dependencies import require_auth
 from src.db import get_db
 from src.domain.activity import EntityType
-from src.domain.user import User
+from src.domain.user import User, UserRole
 
 router = APIRouter(prefix="/api/v1/activity", tags=["activity"])
 
@@ -55,8 +55,9 @@ def _entry_to_response(entry) -> ActivityLogResponse:
 
 
 @router.get("/unread-count")
-async def get_unread_count(activity_repo: ActivityRepoDep, _user: User = require_auth) -> dict[str, int]:
-    count = await activity_repo.unread_count()
+async def get_unread_count(activity_repo: ActivityRepoDep, user: User = require_auth) -> dict[str, int]:
+    vendor_id = user.vendor_id if user.role is UserRole.VENDOR else None
+    count = await activity_repo.unread_count(vendor_id=vendor_id)
     return {"count": count}
 
 
@@ -66,13 +67,14 @@ async def list_activity(
     limit: int = 20,
     entity_type: str | None = None,
     entity_id: str | None = None,
-    _user: User = require_auth,
+    user: User = require_auth,
 ) -> list[ActivityLogResponse]:
+    vendor_id = user.vendor_id if user.role is UserRole.VENDOR else None
     if entity_type is not None and entity_id is not None:
         et = EntityType(entity_type.upper())
-        entries = await activity_repo.list_for_entity(et, entity_id)
+        entries = await activity_repo.list_for_entity(et, entity_id, vendor_id=vendor_id)
     else:
-        entries = await activity_repo.list_recent(limit)
+        entries = await activity_repo.list_recent(limit, vendor_id=vendor_id)
     return [_entry_to_response(e) for e in entries]
 
 

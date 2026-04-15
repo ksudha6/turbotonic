@@ -343,16 +343,29 @@ class PurchaseOrderRepository:
 
         return result
 
-    async def po_summary_by_status(self) -> list[dict[str, Any]]:
-        rows = await self._conn.fetch(
-            """
-            SELECT p.status, p.currency, COUNT(DISTINCT p.id) as po_count,
-                   COALESCE(SUM(li.quantity * CAST(li.unit_price AS REAL)), 0) as total_value
-            FROM purchase_orders p
-            LEFT JOIN line_items li ON li.po_id = p.id
-            GROUP BY p.status, p.currency
-            """
-        )
+    async def po_summary_by_status(self, vendor_id: str | None = None) -> list[dict[str, Any]]:
+        if vendor_id is not None:
+            rows = await self._conn.fetch(
+                """
+                SELECT p.status, p.currency, COUNT(DISTINCT p.id) as po_count,
+                       COALESCE(SUM(li.quantity * CAST(li.unit_price AS REAL)), 0) as total_value
+                FROM purchase_orders p
+                LEFT JOIN line_items li ON li.po_id = p.id
+                WHERE p.vendor_id = $1
+                GROUP BY p.status, p.currency
+                """,
+                vendor_id,
+            )
+        else:
+            rows = await self._conn.fetch(
+                """
+                SELECT p.status, p.currency, COUNT(DISTINCT p.id) as po_count,
+                       COALESCE(SUM(li.quantity * CAST(li.unit_price AS REAL)), 0) as total_value
+                FROM purchase_orders p
+                LEFT JOIN line_items li ON li.po_id = p.id
+                GROUP BY p.status, p.currency
+                """
+            )
         return [
             {
                 "status": row["status"],
@@ -363,11 +376,18 @@ class PurchaseOrderRepository:
             for row in rows
         ]
 
-    async def recent_pos(self, limit: int = 10) -> list[PurchaseOrder]:
-        po_rows = await self._conn.fetch(
-            "SELECT * FROM purchase_orders ORDER BY updated_at DESC LIMIT $1",
-            limit,
-        )
+    async def recent_pos(self, limit: int = 10, vendor_id: str | None = None) -> list[PurchaseOrder]:
+        if vendor_id is not None:
+            po_rows = await self._conn.fetch(
+                "SELECT * FROM purchase_orders WHERE vendor_id = $1 ORDER BY updated_at DESC LIMIT $2",
+                vendor_id,
+                limit,
+            )
+        else:
+            po_rows = await self._conn.fetch(
+                "SELECT * FROM purchase_orders ORDER BY updated_at DESC LIMIT $1",
+                limit,
+            )
 
         result: list[PurchaseOrder] = []
         for po_row in po_rows:

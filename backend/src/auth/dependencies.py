@@ -7,6 +7,12 @@ from fastapi import Depends, HTTPException, Request
 from src.domain.user import User, UserRole
 
 
+def check_vendor_access(user: User, vendor_id: str) -> None:
+    """Raise 404 if VENDOR user doesn't own this entity. Non-VENDOR roles pass through."""
+    if user.role is UserRole.VENDOR and user.vendor_id != vendor_id:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 async def get_current_user(request: Request) -> User:
     user = getattr(request.state, "current_user", None)
     if user is None:

@@ -157,6 +157,7 @@ class InvoiceRepository:
         date_to: str | None = None,
         page: int = 1,
         page_size: int = 20,
+        vendor_id: str | None = None,
     ) -> tuple[list[asyncpg.Record], int]:
         joins = """
             FROM invoices i
@@ -190,6 +191,10 @@ class InvoiceRepository:
         if date_to is not None:
             conditions.append(f"i.created_at <= ${counter}")
             params.append(f"{date_to}T23:59:59")
+            counter += 1
+        if vendor_id is not None:
+            conditions.append(f"po.vendor_id = ${counter}")
+            params.append(vendor_id)
             counter += 1
 
         where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""

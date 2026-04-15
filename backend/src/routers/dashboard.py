@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from src.activity_repository import ActivityLogRepository
 from src.auth.dependencies import require_auth
+from src.domain.user import UserRole
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType
 from src.domain.user import User
@@ -120,10 +121,12 @@ async def get_dashboard(
     invoice_repo: InvoiceRepoDep,
     milestone_repo: MilestoneRepoDep,
     activity_repo: ActivityRepoDep,
-    _user: User = require_auth,
+    user: User = require_auth,
 ) -> DashboardResponse:
+    vendor_id = user.vendor_id if user.role is UserRole.VENDOR else None
+
     # PO summary: aggregate by status, convert to USD
-    raw_summary = await repo.po_summary_by_status()
+    raw_summary = await repo.po_summary_by_status(vendor_id=vendor_id)
     status_agg: dict[str, dict[str, Any]] = {}
     for row in raw_summary:
         st = row["status"]
@@ -151,7 +154,7 @@ async def get_dashboard(
     )
 
     # Recent POs with vendor names
-    recent = await repo.recent_pos(10)
+    recent = await repo.recent_pos(10, vendor_id=vendor_id)
     vendors = await vendor_repo.list_vendors()
     vendor_map: dict[str, str] = {v.id: v.name for v in vendors}
     recent_pos = [
@@ -168,18 +171,35 @@ async def get_dashboard(
     ]
 
     # Invoice summary: aggregate by status and currency, convert to USD
-    invoice_rows = await invoice_repo._conn.fetch(
-        """
-        SELECT i.status, i.currency, COUNT(*) as count,
-               COALESCE(SUM(sub.subtotal), 0) as total
-        FROM invoices i
-        LEFT JOIN (
-            SELECT invoice_id, SUM(CAST(quantity AS REAL) * CAST(unit_price AS REAL)) as subtotal
-            FROM invoice_line_items GROUP BY invoice_id
-        ) sub ON sub.invoice_id = i.id
-        GROUP BY i.status, i.currency
-        """
-    )
+    if vendor_id is not None:
+        invoice_rows = await invoice_repo._conn.fetch(
+            """
+            SELECT i.status, i.currency, COUNT(*) as count,
+                   COALESCE(SUM(sub.subtotal), 0) as total
+            FROM invoices i
+            JOIN purchase_orders po ON i.po_id = po.id
+            LEFT JOIN (
+                SELECT invoice_id, SUM(CAST(quantity AS REAL) * CAST(unit_price AS REAL)) as subtotal
+                FROM invoice_line_items GROUP BY invoice_id
+            ) sub ON sub.invoice_id = i.id
+            WHERE po.vendor_id = $1
+            GROUP BY i.status, i.currency
+            """,
+            vendor_id,
+        )
+    else:
+        invoice_rows = await invoice_repo._conn.fetch(
+            """
+            SELECT i.status, i.currency, COUNT(*) as count,
+                   COALESCE(SUM(sub.subtotal), 0) as total
+            FROM invoices i
+            LEFT JOIN (
+                SELECT invoice_id, SUM(CAST(quantity AS REAL) * CAST(unit_price AS REAL)) as subtotal
+                FROM invoice_line_items GROUP BY invoice_id
+            ) sub ON sub.invoice_id = i.id
+            GROUP BY i.status, i.currency
+            """
+        )
 
     inv_agg: dict[str, dict[str, Any]] = {}
     for row in invoice_rows:
@@ -201,23 +221,43 @@ async def get_dashboard(
     ]
 
     # Production summary: count of ACCEPTED PROCUREMENT POs at each milestone stage.
-    prod_rows = await milestone_repo._conn.fetch(
-        """
-        SELECT lm.milestone, COUNT(*) AS cnt
-        FROM purchase_orders p
-        INNER JOIN (
-            SELECT mu.po_id, mu.milestone
-            FROM milestone_updates mu
+    if vendor_id is not None:
+        prod_rows = await milestone_repo._conn.fetch(
+            """
+            SELECT lm.milestone, COUNT(*) AS cnt
+            FROM purchase_orders p
             INNER JOIN (
-                SELECT po_id, MAX(posted_at) AS max_posted_at
-                FROM milestone_updates
-                GROUP BY po_id
-            ) latest ON mu.po_id = latest.po_id AND mu.posted_at = latest.max_posted_at
-        ) lm ON lm.po_id = p.id
-        WHERE p.status = 'ACCEPTED' AND p.po_type = 'PROCUREMENT'
-        GROUP BY lm.milestone
-        """
-    )
+                SELECT mu.po_id, mu.milestone
+                FROM milestone_updates mu
+                INNER JOIN (
+                    SELECT po_id, MAX(posted_at) AS max_posted_at
+                    FROM milestone_updates
+                    GROUP BY po_id
+                ) latest ON mu.po_id = latest.po_id AND mu.posted_at = latest.max_posted_at
+            ) lm ON lm.po_id = p.id
+            WHERE p.status = 'ACCEPTED' AND p.po_type = 'PROCUREMENT' AND p.vendor_id = $1
+            GROUP BY lm.milestone
+            """,
+            vendor_id,
+        )
+    else:
+        prod_rows = await milestone_repo._conn.fetch(
+            """
+            SELECT lm.milestone, COUNT(*) AS cnt
+            FROM purchase_orders p
+            INNER JOIN (
+                SELECT mu.po_id, mu.milestone
+                FROM milestone_updates mu
+                INNER JOIN (
+                    SELECT po_id, MAX(posted_at) AS max_posted_at
+                    FROM milestone_updates
+                    GROUP BY po_id
+                ) latest ON mu.po_id = latest.po_id AND mu.posted_at = latest.max_posted_at
+            ) lm ON lm.po_id = p.id
+            WHERE p.status = 'ACCEPTED' AND p.po_type = 'PROCUREMENT'
+            GROUP BY lm.milestone
+            """
+        )
 
     prod_counts: dict[str, int] = {row["milestone"]: row["cnt"] for row in prod_rows}
     # Return summary in MILESTONE_ORDER sequence, omitting stages with zero POs.
@@ -230,22 +270,41 @@ async def get_dashboard(
     # Overdue POs: ACCEPTED PROCUREMENT POs whose latest milestone has been stuck
     # longer than the per-milestone threshold. SHIPPED is never overdue.
     now_utc = datetime.now(UTC)
-    overdue_rows = await milestone_repo._conn.fetch(
-        """
-        SELECT p.id, p.po_number, p.vendor_id, lm.milestone, lm.max_posted_at
-        FROM purchase_orders p
-        INNER JOIN (
-            SELECT mu.po_id, mu.milestone, mu.posted_at AS max_posted_at
-            FROM milestone_updates mu
+    if vendor_id is not None:
+        overdue_rows = await milestone_repo._conn.fetch(
+            """
+            SELECT p.id, p.po_number, p.vendor_id, lm.milestone, lm.max_posted_at
+            FROM purchase_orders p
             INNER JOIN (
-                SELECT po_id, MAX(posted_at) AS max_posted_at
-                FROM milestone_updates
-                GROUP BY po_id
-            ) latest ON mu.po_id = latest.po_id AND mu.posted_at = latest.max_posted_at
-        ) lm ON lm.po_id = p.id
-        WHERE p.status = 'ACCEPTED' AND p.po_type = 'PROCUREMENT'
-        """
-    )
+                SELECT mu.po_id, mu.milestone, mu.posted_at AS max_posted_at
+                FROM milestone_updates mu
+                INNER JOIN (
+                    SELECT po_id, MAX(posted_at) AS max_posted_at
+                    FROM milestone_updates
+                    GROUP BY po_id
+                ) latest ON mu.po_id = latest.po_id AND mu.posted_at = latest.max_posted_at
+            ) lm ON lm.po_id = p.id
+            WHERE p.status = 'ACCEPTED' AND p.po_type = 'PROCUREMENT' AND p.vendor_id = $1
+            """,
+            vendor_id,
+        )
+    else:
+        overdue_rows = await milestone_repo._conn.fetch(
+            """
+            SELECT p.id, p.po_number, p.vendor_id, lm.milestone, lm.max_posted_at
+            FROM purchase_orders p
+            INNER JOIN (
+                SELECT mu.po_id, mu.milestone, mu.posted_at AS max_posted_at
+                FROM milestone_updates mu
+                INNER JOIN (
+                    SELECT po_id, MAX(posted_at) AS max_posted_at
+                    FROM milestone_updates
+                    GROUP BY po_id
+                ) latest ON mu.po_id = latest.po_id AND mu.posted_at = latest.max_posted_at
+            ) lm ON lm.po_id = p.id
+            WHERE p.status = 'ACCEPTED' AND p.po_type = 'PROCUREMENT'
+            """
+        )
 
     overdue_pos: list[OverduePO] = []
     for row in overdue_rows:

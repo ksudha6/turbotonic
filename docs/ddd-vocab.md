@@ -133,6 +133,12 @@
 | Milestone Overdue | A DELAYED activity entry generated when a production milestone exceeds its time threshold. One entry per PO per milestone, idempotent. Generated on dashboard load using existing overdue thresholds. | Notifications |
 | Event Metadata | Static mapping from each ActivityEvent to its NotificationCategory and TargetRole. Determines how events are categorized and routed. | Notifications |
 
+## Access Control
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| Vendor-Scoped Access | Query-level filtering that restricts VENDOR users to data belonging to their vendor. Applied to PO lists/details, invoices, milestones, activity, and dashboard. Non-VENDOR roles pass through unfiltered. Uses 404 (not 403) on ownership mismatch to avoid leaking entity existence. | Auth |
+
 ## Compliance (deferred)
 
 | Term | Definition | Bounded Context |

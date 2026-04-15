@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from src.activity_repository import ActivityLogRepository
-from src.auth.dependencies import require_auth, require_role
+from src.auth.dependencies import check_vendor_access, require_auth, require_role
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType
 from src.domain.user import User, UserRole
@@ -58,11 +58,12 @@ async def list_milestones(
     po_id: str,
     milestone_repo: MilestoneRepoDep,
     po_repo: PORepoDep,
-    _user: User = require_auth,
+    user: User = require_auth,
 ) -> list[MilestoneResponse]:
     po = await po_repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
 
     updates = await milestone_repo.list_by_po(po_id)
     return [
@@ -78,7 +79,7 @@ async def post_milestone(
     milestone_repo: MilestoneRepoDep,
     po_repo: PORepoDep,
     activity_repo: ActivityRepoDep,
-    _user: User = require_role(UserRole.VENDOR, UserRole.SM),
+    user: User = require_role(UserRole.VENDOR, UserRole.SM),
 ) -> MilestoneResponse:
     # Reject empty or whitespace-only milestone values before enum lookup.
     if not body.milestone or not body.milestone.strip():
@@ -95,6 +96,7 @@ async def post_milestone(
     po = await po_repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
 
     if po.status.value != "ACCEPTED" or po.po_type.value != "PROCUREMENT":
         raise HTTPException(

@@ -55,16 +55,60 @@ class ActivityLogRepository:
             _iso(now),
         )
 
-    async def list_recent(self, limit: int = 20) -> list[ActivityLogEntry]:
-        rows = await self._conn.fetch(
-            "SELECT * FROM activity_log ORDER BY created_at DESC LIMIT $1",
-            limit,
-        )
+    async def list_recent(self, limit: int = 20, vendor_id: str | None = None) -> list[ActivityLogEntry]:
+        if vendor_id is not None:
+            rows = await self._conn.fetch(
+                """
+                SELECT * FROM activity_log
+                WHERE (
+                    (entity_type = 'PO' AND entity_id IN (
+                        SELECT id FROM purchase_orders WHERE vendor_id = $2
+                    ))
+                    OR (entity_type = 'INVOICE' AND entity_id IN (
+                        SELECT i.id FROM invoices i
+                        JOIN purchase_orders po ON i.po_id = po.id
+                        WHERE po.vendor_id = $2
+                    ))
+                )
+                ORDER BY created_at DESC LIMIT $1
+                """,
+                limit,
+                vendor_id,
+            )
+        else:
+            rows = await self._conn.fetch(
+                "SELECT * FROM activity_log ORDER BY created_at DESC LIMIT $1",
+                limit,
+            )
         return [_row_to_entry(row) for row in rows]
 
     async def list_for_entity(
-        self, entity_type: EntityType, entity_id: str
+        self, entity_type: EntityType, entity_id: str, vendor_id: str | None = None
     ) -> list[ActivityLogEntry]:
+        if vendor_id is not None:
+            if entity_type is EntityType.PO:
+                # Check the PO belongs to the vendor.
+                belongs = await self._conn.fetchval(
+                    "SELECT 1 FROM purchase_orders WHERE id = $1 AND vendor_id = $2",
+                    entity_id,
+                    vendor_id,
+                )
+                if not belongs:
+                    return []
+            elif entity_type is EntityType.INVOICE:
+                # Check the invoice's PO belongs to the vendor.
+                belongs = await self._conn.fetchval(
+                    """
+                    SELECT 1 FROM invoices i
+                    JOIN purchase_orders po ON i.po_id = po.id
+                    WHERE i.id = $1 AND po.vendor_id = $2
+                    """,
+                    entity_id,
+                    vendor_id,
+                )
+                if not belongs:
+                    return []
+
         rows = await self._conn.fetch(
             """
             SELECT * FROM activity_log
@@ -75,10 +119,29 @@ class ActivityLogRepository:
         )
         return [_row_to_entry(row) for row in rows]
 
-    async def unread_count(self) -> int:
-        val = await self._conn.fetchval(
-            "SELECT COUNT(*) FROM activity_log WHERE read_at IS NULL"
-        )
+    async def unread_count(self, vendor_id: str | None = None) -> int:
+        if vendor_id is not None:
+            val = await self._conn.fetchval(
+                """
+                SELECT COUNT(*) FROM activity_log
+                WHERE read_at IS NULL
+                AND (
+                    (entity_type = 'PO' AND entity_id IN (
+                        SELECT id FROM purchase_orders WHERE vendor_id = $1
+                    ))
+                    OR (entity_type = 'INVOICE' AND entity_id IN (
+                        SELECT i.id FROM invoices i
+                        JOIN purchase_orders po ON i.po_id = po.id
+                        WHERE po.vendor_id = $1
+                    ))
+                )
+                """,
+                vendor_id,
+            )
+        else:
+            val = await self._conn.fetchval(
+                "SELECT COUNT(*) FROM activity_log WHERE read_at IS NULL"
+            )
         return val or 0
 
     async def mark_read(

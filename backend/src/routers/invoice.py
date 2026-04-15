@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from starlette.responses import Response
 
 from src.activity_repository import ActivityLogRepository
-from src.auth.dependencies import require_auth, require_role
+from src.auth.dependencies import check_vendor_access, require_auth, require_role
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType
 from src.domain.invoice import Invoice, InvoiceLineItem
@@ -67,11 +67,12 @@ async def get_remaining_quantities(
     po_id: str,
     invoice_repo: InvoiceRepoDep,
     po_repo: PORepoDep,
-    _user: User = require_role(UserRole.SM, UserRole.VENDOR),
+    user: User = require_role(UserRole.SM, UserRole.VENDOR),
 ) -> RemainingQuantityResponse:
     po = await po_repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
 
     invoiced = await invoice_repo.invoiced_quantities(po_id)
 
@@ -95,11 +96,12 @@ async def create_invoice(
     invoice_repo: InvoiceRepoDep,
     po_repo: PORepoDep,
     activity_repo: ActivityRepoDep,
-    _user: User = require_role(UserRole.VENDOR, UserRole.SM),
+    user: User = require_role(UserRole.VENDOR, UserRole.SM),
 ) -> InvoiceResponse:
     po = await po_repo.get(body.po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
     if po.status.value != "ACCEPTED":
         raise HTTPException(status_code=409, detail="PO must be in ACCEPTED status to create an invoice")
 
@@ -209,8 +211,9 @@ async def list_invoices(
     date_to: str | None = None,
     page: int = 1,
     page_size: int = 20,
-    _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
+    user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
 ) -> PaginatedInvoiceList:
+    scoped_vendor_id = user.vendor_id if user.role is UserRole.VENDOR else None
     rows, total = await invoice_repo.list_all(
         status=status,
         po_number=po_number,
@@ -220,6 +223,7 @@ async def list_invoices(
         date_to=date_to,
         page=page,
         page_size=page_size,
+        vendor_id=scoped_vendor_id,
     )
     items = [invoice_row_to_list_item_with_context(r) for r in rows]
     return PaginatedInvoiceList(items=items, total=total, page=page, page_size=page_size)
@@ -231,7 +235,7 @@ async def bulk_invoice_pdf(
     invoice_repo: InvoiceRepoDep,
     po_repo: PORepoDep,
     vendor_repo: VendorRepoDep,
-    _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
+    user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
 ) -> Response:
     if not body.invoice_ids:
         raise HTTPException(status_code=400, detail="invoice_ids must not be empty")
@@ -243,6 +247,9 @@ async def bulk_invoice_pdf(
             continue
         po = await po_repo.get(invoice.po_id)
         if po is None:
+            continue
+        # VENDOR users only see invoices on their own POs; skip others silently.
+        if user.role is UserRole.VENDOR and user.vendor_id != po.vendor_id:
             continue
         vendor = await vendor_repo.get_by_id(po.vendor_id)
         vendor_name = vendor.name if vendor is not None else ""
@@ -258,10 +265,19 @@ async def bulk_invoice_pdf(
 
 
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
-async def get_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER)) -> InvoiceResponse:
+async def get_invoice(
+    invoice_id: str,
+    invoice_repo: InvoiceRepoDep,
+    po_repo: PORepoDep,
+    user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
+) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    po = await po_repo.get(invoice.po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
     return invoice_to_response(invoice)
 
 
@@ -271,7 +287,7 @@ async def get_invoice_pdf(
     invoice_repo: InvoiceRepoDep,
     po_repo: PORepoDep,
     vendor_repo: VendorRepoDep,
-    _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
+    user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
 ) -> Response:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
@@ -280,6 +296,7 @@ async def get_invoice_pdf(
     po = await po_repo.get(invoice.po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
 
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vendor_name = vendor.name if vendor is not None else ""
@@ -298,10 +315,20 @@ async def get_invoice_pdf(
 
 
 @router.post("/{invoice_id}/submit", response_model=InvoiceResponse)
-async def submit_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity_repo: ActivityRepoDep, _user: User = require_role(UserRole.VENDOR, UserRole.SM)) -> InvoiceResponse:
+async def submit_invoice(
+    invoice_id: str,
+    invoice_repo: InvoiceRepoDep,
+    po_repo: PORepoDep,
+    activity_repo: ActivityRepoDep,
+    user: User = require_role(UserRole.VENDOR, UserRole.SM),
+) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    po = await po_repo.get(invoice.po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
     try:
         invoice.submit()
     except ValueError as exc:
