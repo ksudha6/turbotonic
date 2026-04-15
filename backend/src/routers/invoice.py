@@ -6,9 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from starlette.responses import Response
 
 from src.activity_repository import ActivityLogRepository
+from src.auth.dependencies import require_auth, require_role
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType
 from src.domain.invoice import Invoice, InvoiceLineItem
+from src.domain.user import User, UserRole
 from src.dto import (
     BulkInvoicePdfRequest,
     DisputeRequest,
@@ -34,19 +36,16 @@ router = APIRouter(prefix="/api/v1/invoices", tags=["invoices"])
 
 async def get_invoice_repo() -> AsyncIterator[InvoiceRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield InvoiceRepository(conn)
 
 
 async def get_po_repo() -> AsyncIterator[PurchaseOrderRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield PurchaseOrderRepository(conn)
 
 
 async def get_vendor_repo() -> AsyncIterator[VendorRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield VendorRepository(conn)
 
 
@@ -57,7 +56,6 @@ VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
 
 async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield ActivityLogRepository(conn)
 
 
@@ -69,6 +67,7 @@ async def get_remaining_quantities(
     po_id: str,
     invoice_repo: InvoiceRepoDep,
     po_repo: PORepoDep,
+    _user: User = require_role(UserRole.SM, UserRole.VENDOR),
 ) -> RemainingQuantityResponse:
     po = await po_repo.get(po_id)
     if po is None:
@@ -96,6 +95,7 @@ async def create_invoice(
     invoice_repo: InvoiceRepoDep,
     po_repo: PORepoDep,
     activity_repo: ActivityRepoDep,
+    _user: User = require_role(UserRole.VENDOR, UserRole.SM),
 ) -> InvoiceResponse:
     po = await po_repo.get(body.po_id)
     if po is None:
@@ -209,6 +209,7 @@ async def list_invoices(
     date_to: str | None = None,
     page: int = 1,
     page_size: int = 20,
+    _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
 ) -> PaginatedInvoiceList:
     rows, total = await invoice_repo.list_all(
         status=status,
@@ -230,6 +231,7 @@ async def bulk_invoice_pdf(
     invoice_repo: InvoiceRepoDep,
     po_repo: PORepoDep,
     vendor_repo: VendorRepoDep,
+    _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
 ) -> Response:
     if not body.invoice_ids:
         raise HTTPException(status_code=400, detail="invoice_ids must not be empty")
@@ -256,7 +258,7 @@ async def bulk_invoice_pdf(
 
 
 @router.get("/{invoice_id}", response_model=InvoiceResponse)
-async def get_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep) -> InvoiceResponse:
+async def get_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER)) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -269,6 +271,7 @@ async def get_invoice_pdf(
     invoice_repo: InvoiceRepoDep,
     po_repo: PORepoDep,
     vendor_repo: VendorRepoDep,
+    _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
 ) -> Response:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
@@ -295,7 +298,7 @@ async def get_invoice_pdf(
 
 
 @router.post("/{invoice_id}/submit", response_model=InvoiceResponse)
-async def submit_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity_repo: ActivityRepoDep) -> InvoiceResponse:
+async def submit_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity_repo: ActivityRepoDep, _user: User = require_role(UserRole.VENDOR, UserRole.SM)) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -309,7 +312,7 @@ async def submit_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity
 
 
 @router.post("/{invoice_id}/approve", response_model=InvoiceResponse)
-async def approve_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity_repo: ActivityRepoDep) -> InvoiceResponse:
+async def approve_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity_repo: ActivityRepoDep, _user: User = require_role(UserRole.SM)) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -323,7 +326,7 @@ async def approve_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activit
 
 
 @router.post("/{invoice_id}/pay", response_model=InvoiceResponse)
-async def pay_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity_repo: ActivityRepoDep) -> InvoiceResponse:
+async def pay_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity_repo: ActivityRepoDep, _user: User = require_role(UserRole.SM)) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -342,6 +345,7 @@ async def dispute_invoice(
     body: DisputeRequest,
     invoice_repo: InvoiceRepoDep,
     activity_repo: ActivityRepoDep,
+    _user: User = require_role(UserRole.SM),
 ) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
@@ -356,7 +360,7 @@ async def dispute_invoice(
 
 
 @router.post("/{invoice_id}/resolve", response_model=InvoiceResponse)
-async def resolve_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity_repo: ActivityRepoDep) -> InvoiceResponse:
+async def resolve_invoice(invoice_id: str, invoice_repo: InvoiceRepoDep, activity_repo: ActivityRepoDep, _user: User = require_role(UserRole.SM)) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
     if invoice is None:
         raise HTTPException(status_code=404, detail="Invoice not found")

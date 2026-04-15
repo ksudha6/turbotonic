@@ -7,8 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from src.activity_repository import ActivityLogRepository
+from src.auth.dependencies import require_auth, require_role
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType
+from src.domain.user import User, UserRole
 from src.domain.milestone import (
     MilestoneUpdate,
     ProductionMilestone,
@@ -22,13 +24,11 @@ router = APIRouter(prefix="/api/v1/po", tags=["milestones"])
 
 async def get_milestone_repo() -> AsyncIterator[MilestoneRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield MilestoneRepository(conn)
 
 
 async def get_po_repo() -> AsyncIterator[PurchaseOrderRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield PurchaseOrderRepository(conn)
 
 
@@ -38,7 +38,6 @@ PORepoDep = Annotated[PurchaseOrderRepository, Depends(get_po_repo)]
 
 async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield ActivityLogRepository(conn)
 
 
@@ -59,6 +58,7 @@ async def list_milestones(
     po_id: str,
     milestone_repo: MilestoneRepoDep,
     po_repo: PORepoDep,
+    _user: User = require_auth,
 ) -> list[MilestoneResponse]:
     po = await po_repo.get(po_id)
     if po is None:
@@ -78,6 +78,7 @@ async def post_milestone(
     milestone_repo: MilestoneRepoDep,
     po_repo: PORepoDep,
     activity_repo: ActivityRepoDep,
+    _user: User = require_role(UserRole.VENDOR, UserRole.SM),
 ) -> MilestoneResponse:
     # Reject empty or whitespace-only milestone values before enum lookup.
     if not body.milestone or not body.milestone.strip():

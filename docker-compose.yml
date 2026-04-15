@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: turbo-tonic-postgres
+    environment:
+      POSTGRES_USER: turbo_tonic
+      POSTGRES_PASSWORD: turbo_tonic
+      POSTGRES_DB: turbo_tonic
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init-test-db.sh:/docker-entrypoint-initdb.d/init-test-db.sh
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U turbo_tonic -d turbo_tonic"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

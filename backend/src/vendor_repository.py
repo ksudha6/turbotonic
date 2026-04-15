@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-import aiosqlite
+import asyncpg
 
 from src.domain.vendor import Vendor, VendorStatus, VendorType
 
@@ -20,73 +20,68 @@ def _parse_dt(value: str) -> datetime:
 
 
 class VendorRepository:
-    def __init__(self, conn: aiosqlite.Connection) -> None:
+    def __init__(self, conn: asyncpg.Connection) -> None:
         self._conn = conn
 
     async def save(self, vendor: Vendor) -> None:
         # Check if vendor exists
-        async with self._conn.execute(
-            "SELECT COUNT(*) FROM vendors WHERE id = ?", (vendor.id,)
-        ) as cursor:
-            row = await cursor.fetchone()
-            exists = (row[0] if row else 0) > 0
+        count = await self._conn.fetchval(
+            "SELECT COUNT(*) FROM vendors WHERE id = $1", vendor.id
+        )
+        exists = (count or 0) > 0
 
         if not exists:
             await self._conn.execute(
                 """
                 INSERT INTO vendors (id, name, country, status, vendor_type, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 """,
-                (vendor.id, vendor.name, vendor.country, vendor.status.value,
-                 vendor.vendor_type.value, _iso(vendor.created_at), _iso(vendor.updated_at)),
+                vendor.id, vendor.name, vendor.country, vendor.status.value,
+                vendor.vendor_type.value, _iso(vendor.created_at), _iso(vendor.updated_at),
             )
         else:
             await self._conn.execute(
                 """
-                UPDATE vendors SET name = ?, country = ?, status = ?, vendor_type = ?, updated_at = ?
-                WHERE id = ?
+                UPDATE vendors SET name = $1, country = $2, status = $3, vendor_type = $4, updated_at = $5
+                WHERE id = $6
                 """,
-                (vendor.name, vendor.country, vendor.status.value,
-                 vendor.vendor_type.value, _iso(vendor.updated_at), vendor.id),
+                vendor.name, vendor.country, vendor.status.value,
+                vendor.vendor_type.value, _iso(vendor.updated_at), vendor.id,
             )
-        await self._conn.commit()
 
     async def get_by_id(self, vendor_id: str) -> Vendor | None:
-        self._conn.row_factory = aiosqlite.Row
-        async with self._conn.execute(
-            "SELECT * FROM vendors WHERE id = ?", (vendor_id,)
-        ) as cursor:
-            row = await cursor.fetchone()
+        row = await self._conn.fetchrow(
+            "SELECT * FROM vendors WHERE id = $1", vendor_id
+        )
         if row is None:
             return None
         return _reconstruct(row)
 
     async def list_vendors(self, status: VendorStatus | None = None, *, vendor_type: VendorType | None = None) -> list[Vendor]:
-        self._conn.row_factory = aiosqlite.Row
         where_clauses: list[str] = []
         params: list[str] = []
+        counter = 1
         if status is not None:
-            where_clauses.append("status = ?")
+            where_clauses.append(f"status = ${counter}")
             params.append(status.value)
+            counter += 1
         if vendor_type is not None:
-            where_clauses.append("vendor_type = ?")
+            where_clauses.append(f"vendor_type = ${counter}")
             params.append(vendor_type.value)
+            counter += 1
         where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
         query = f"SELECT * FROM vendors {where_sql}"
-        async with self._conn.execute(query, params) as cursor:
-            rows = await cursor.fetchall()
+        rows = await self._conn.fetch(query, *params)
         return [_reconstruct(row) for row in rows]
 
     async def vendor_count_by_status(self) -> dict[str, int]:
-        self._conn.row_factory = aiosqlite.Row
-        async with self._conn.execute(
+        rows = await self._conn.fetch(
             "SELECT status, COUNT(*) as cnt FROM vendors GROUP BY status"
-        ) as cursor:
-            rows = await cursor.fetchall()
+        )
         return {row["status"]: row["cnt"] for row in rows}
 
 
-def _reconstruct(row: aiosqlite.Row) -> Vendor:
+def _reconstruct(row: asyncpg.Record) -> Vendor:
     return Vendor(
         id=row["id"],
         name=row["name"],

@@ -4,7 +4,9 @@ from typing import Annotated, AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from src.auth.dependencies import require_role
 from src.db import get_db
+from src.domain.user import User, UserRole
 from src.domain.vendor import Vendor, VendorStatus, VendorType
 from src.vendor_dto import (
     VendorCreate,
@@ -20,7 +22,6 @@ router = APIRouter(prefix="/api/v1/vendors", tags=["vendors"])
 
 async def get_vendor_repo() -> AsyncIterator[VendorRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield VendorRepository(conn)
 
 
@@ -28,7 +29,7 @@ VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
 
 
 @router.post("/", response_model=VendorResponse, status_code=201)
-async def create_vendor(body: VendorCreate, repo: VendorRepoDep) -> VendorResponse:
+async def create_vendor(body: VendorCreate, repo: VendorRepoDep, _user: User = require_role(UserRole.SM)) -> VendorResponse:
     vendor_type = VendorType(body.vendor_type)
     vendor = Vendor.create(name=body.name, country=body.country, vendor_type=vendor_type)
     await repo.save(vendor)
@@ -40,6 +41,7 @@ async def list_vendors(
     repo: VendorRepoDep,
     status: str | None = None,
     vendor_type: str | None = None,
+    _user: User = require_role(UserRole.SM),
 ) -> list[VendorListItem]:
     vendor_status: VendorStatus | None = None
     if status is not None:
@@ -58,7 +60,7 @@ async def list_vendors(
 
 
 @router.get("/{vendor_id}", response_model=VendorResponse)
-async def get_vendor(vendor_id: str, repo: VendorRepoDep) -> VendorResponse:
+async def get_vendor(vendor_id: str, repo: VendorRepoDep, _user: User = require_role(UserRole.SM)) -> VendorResponse:
     vendor = await repo.get_by_id(vendor_id)
     if vendor is None:
         raise HTTPException(status_code=404, detail="Vendor not found")
@@ -66,7 +68,7 @@ async def get_vendor(vendor_id: str, repo: VendorRepoDep) -> VendorResponse:
 
 
 @router.post("/{vendor_id}/deactivate", response_model=VendorResponse)
-async def deactivate_vendor(vendor_id: str, repo: VendorRepoDep) -> VendorResponse:
+async def deactivate_vendor(vendor_id: str, repo: VendorRepoDep, _user: User = require_role(UserRole.SM)) -> VendorResponse:
     vendor = await repo.get_by_id(vendor_id)
     if vendor is None:
         raise HTTPException(status_code=404, detail="Vendor not found")
@@ -79,7 +81,7 @@ async def deactivate_vendor(vendor_id: str, repo: VendorRepoDep) -> VendorRespon
 
 
 @router.post("/{vendor_id}/reactivate", response_model=VendorResponse)
-async def reactivate_vendor(vendor_id: str, repo: VendorRepoDep) -> VendorResponse:
+async def reactivate_vendor(vendor_id: str, repo: VendorRepoDep, _user: User = require_role(UserRole.SM)) -> VendorResponse:
     vendor = await repo.get_by_id(vendor_id)
     if vendor is None:
         raise HTTPException(status_code=404, detail="Vendor not found")

@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from decimal import Decimal
 
-import aiosqlite
+import asyncpg
 from pydantic import BaseModel, field_validator, model_validator
 
 from src.domain.invoice import Invoice
@@ -363,7 +363,7 @@ class PaginatedInvoiceList(BaseModel):
     page_size: int
 
 
-def invoice_row_to_list_item_with_context(row: aiosqlite.Row) -> InvoiceListItemWithContext:
+def invoice_row_to_list_item_with_context(row: asyncpg.Record) -> InvoiceListItemWithContext:
     raw_subtotal = row["subtotal"]
     subtotal_str = f"{Decimal(str(raw_subtotal if raw_subtotal is not None else 0)):.2f}"
     return InvoiceListItemWithContext(

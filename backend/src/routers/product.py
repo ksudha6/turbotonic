@@ -4,8 +4,10 @@ from typing import Annotated, AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from src.auth.dependencies import require_role
 from src.db import get_db
 from src.domain.product import Product
+from src.domain.user import User, UserRole
 from src.product_dto import (
     ProductCreate,
     ProductListItem,
@@ -21,7 +23,6 @@ router = APIRouter(prefix="/api/v1/products", tags=["products"])
 
 async def get_product_repo() -> AsyncIterator[ProductRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield ProductRepository(conn)
 
 
@@ -29,7 +30,7 @@ ProductRepoDep = Annotated[ProductRepository, Depends(get_product_repo)]
 
 
 @router.post("/", response_model=ProductResponse, status_code=201)
-async def create_product(body: ProductCreate, repo: ProductRepoDep) -> ProductResponse:
+async def create_product(body: ProductCreate, repo: ProductRepoDep, _user: User = require_role(UserRole.SM)) -> ProductResponse:
     existing = await repo.get_by_vendor_and_part_number(body.vendor_id, body.part_number)
     if existing is not None:
         raise HTTPException(
@@ -56,14 +57,14 @@ async def create_product(body: ProductCreate, repo: ProductRepoDep) -> ProductRe
 
 @router.get("/", response_model=list[ProductListItem])
 async def list_products(
-    repo: ProductRepoDep, vendor_id: str | None = None
+    repo: ProductRepoDep, vendor_id: str | None = None, _user: User = require_role(UserRole.SM, UserRole.QUALITY_LAB)
 ) -> list[ProductListItem]:
     products = await repo.list_products(vendor_id)
     return [product_to_list_item(p) for p in products]
 
 
 @router.get("/{product_id}", response_model=ProductResponse)
-async def get_product(product_id: str, repo: ProductRepoDep) -> ProductResponse:
+async def get_product(product_id: str, repo: ProductRepoDep, _user: User = require_role(UserRole.SM, UserRole.QUALITY_LAB)) -> ProductResponse:
     product = await repo.get_by_id(product_id)
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -72,7 +73,7 @@ async def get_product(product_id: str, repo: ProductRepoDep) -> ProductResponse:
 
 @router.patch("/{product_id}", response_model=ProductResponse)
 async def update_product(
-    product_id: str, body: ProductUpdate, repo: ProductRepoDep
+    product_id: str, body: ProductUpdate, repo: ProductRepoDep, _user: User = require_role(UserRole.SM)
 ) -> ProductResponse:
     product = await repo.get_by_id(product_id)
     if product is None:

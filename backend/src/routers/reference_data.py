@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
+from src.auth.dependencies import require_auth
 from src.domain.reference_data import (
     COUNTRIES,
     CURRENCIES,
@@ -11,6 +12,7 @@ from src.domain.reference_data import (
     PORTS,
     VENDOR_TYPES,
 )
+from src.domain.user import User
 
 router = APIRouter(prefix="/api/v1/reference-data", tags=["reference-data"])
 
@@ -20,7 +22,7 @@ def _to_list(data: tuple[tuple[str, str], ...]) -> list[dict[str, str]]:
 
 
 @router.get("/")
-async def get_reference_data() -> dict[str, list[dict[str, str]]]:
+async def get_reference_data(_user: User = require_auth) -> dict[str, list[dict[str, str]]]:
     return {
         "currencies": _to_list(CURRENCIES),
         "incoterms": _to_list(INCOTERMS),

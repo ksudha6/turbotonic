@@ -138,18 +138,22 @@ Session middleware (iter 030) populates `request.state.current_user` on every re
   - SM cannot call POST /api/v1/users/invite (returns 403)
 
 ### Tests (scratch)
-- [ ] Use httpie or curl to verify 401/403 responses for representative endpoints
+- [x] Verified 401/403 via dev-login endpoint and curl
 
 ## Acceptance criteria
-- [ ] `require_role()` dependency returns 401 for unauthenticated requests
-- [ ] `require_role()` dependency returns 403 for wrong-role requests
-- [ ] ADMIN passes every role check automatically
-- [ ] All 30+ endpoints have explicit auth guards (no endpoint is unguarded except /health and /api/v1/auth/*)
-- [ ] SM can: create/edit/submit/resubmit PO, accept/reject PO, approve/pay/dispute/resolve invoice, create/submit invoice, CRUD vendors, CRUD products, post milestones
-- [ ] VENDOR can: accept/reject PO, create/submit invoice, post milestone
-- [ ] FREIGHT_MANAGER can: view all POs, view/manage invoices (OpEx scope deferred to 032), view dashboard, view activity
-- [ ] QUALITY_LAB can: list/view products, view dashboard, view activity
-- [ ] Bulk transition enforces action-level role checks (SM: submit/resubmit/accept/reject, VENDOR: accept/reject only)
-- [ ] Only ADMIN can invite new users
-- [ ] All pre-existing backend tests pass with the authenticated_client fixture
-- [ ] `make test` passes with all new and existing tests
+- [x] `require_role()` dependency returns 401 for unauthenticated requests
+- [x] `require_role()` dependency returns 403 for wrong-role requests
+- [x] ADMIN passes every role check automatically
+- [x] All 30+ endpoints have explicit auth guards (no endpoint is unguarded except /health and /api/v1/auth/*)
+- [x] SM can: create/edit/submit/resubmit PO, accept/reject PO, approve/pay/dispute/resolve invoice, create/submit invoice, CRUD vendors, CRUD products, post milestones
+- [x] VENDOR can: accept/reject PO, create/submit invoice, post milestone
+- [x] FREIGHT_MANAGER can: view all POs, view/manage invoices (OpEx scope deferred to 032), view dashboard, view activity
+- [x] QUALITY_LAB can: list/view products, view dashboard, view activity
+- [x] Bulk transition enforces action-level role checks (SM: submit/resubmit/accept/reject, VENDOR: accept/reject only)
+- [x] Only ADMIN can invite new users
+- [x] All pre-existing backend tests pass with the authenticated_client fixture
+- [x] `make test` passes with all new and existing tests (252 backend, 59 Playwright)
+
+## Notes
+
+Added `require_role(*roles)` and `require_auth` FastAPI dependencies in `auth/dependencies.py`. ADMIN bypasses all role checks. Applied guards to all 8 non-auth routers (30+ endpoints). Bulk transition has a fine-grained action check: VENDOR is blocked from submit/resubmit. Existing tests updated to use `authenticated_client` fixture (ADMIN session cookie). Added `dev-login` endpoint (`GET /api/v1/auth/dev-login`) to set session cookie via browser for local development; the Vite proxy means visiting `/api/v1/auth/dev-login` on the frontend port sets the cookie correctly. Carried forward: user management CRUD endpoints (list, get, update, deactivate, reactivate) listed in tasks but not implemented; only invite exists.

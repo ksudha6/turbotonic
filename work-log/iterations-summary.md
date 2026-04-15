@@ -1,7 +1,7 @@
 # Iterations Summary
 
 > Single-file context for future conversations. Replaces reading 29 individual iteration docs.
-> Last updated: 2026-04-15 (backlog cleanup, Phase 2 planning corrections).
+> Last updated: 2026-04-15 (iterations 029a, 030, 031 closed).
 
 ---
 
@@ -11,7 +11,7 @@ Turbo Tonic is a vendor portal for purchase order confirmation, invoicing, produ
 
 ## Tech stack
 
-Python 3.13, FastAPI, Postgres (asyncpg; migrated from SQLite in iter 029a), WebAuthn/passkeys + cookie sessions. Frontend: SvelteKit 2 + Svelte 5, adapter-static. Package manager: uv (backend), npm (frontend), nvm for Node. Local dev: Docker Compose for Postgres.
+Python 3.13, FastAPI, Postgres 16 (asyncpg, connection pool), WebAuthn/passkeys + cookie sessions. Frontend: SvelteKit 2 + Svelte 5, adapter-static. Package manager: uv (backend), npm (frontend), nvm for Node. Local dev: Postgres via Homebrew (docker-compose.yml available for Docker environments).
 
 ## Current domain model (as of iteration 029)
 
@@ -91,7 +91,9 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 | 27 | 2026-04-06 | Field-level mutability rules: which PO fields are editable in which status |
 | 28 | 2026-04-06 | Partial PO acceptance (line-item level accept/reject) — scoped but not started |
 | 29 | 2026-04-09 | Product master: vendor-scoped product catalog with requires_certification flag |
-| 29a | -- | Postgres migration (planned, not implemented). SQLite remains in use. |
+| 29a | 2026-04-15 | Postgres migration: replaced aiosqlite with asyncpg connection pool, all repos use $N placeholders, test isolation via rolled-back transactions, seed script for demo data |
+| 030 | 2026-04-15 | User entity (6 roles, 3 statuses), WebAuthn passkey registration/login, cookie sessions, session middleware, bootstrap/invite flows, critical-path integration test |
+| 031 | 2026-04-15 | API role guards: require_role/require_auth on all 30+ endpoints, ADMIN bypass, bulk transition fine-grained action check, authenticated_client test fixture, dev-login endpoint |
 
 ---
 
@@ -109,12 +111,18 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - Reference data for all dropdowns
 - Bulk actions on PO list
 - Dashboard with summary cards, production pipeline, overdue alerts
+- Postgres 16 with asyncpg connection pool (migrated from SQLite in 029a)
+- Seed script for demo data (`tools/seed_data.py`)
+- User entity with 6 roles (ADMIN, SM, VENDOR, FREIGHT_MANAGER, QUALITY_LAB, PROCUREMENT_MANAGER) and 3 statuses (ACTIVE, INACTIVE, PENDING)
+- WebAuthn passkey registration/login, cookie sessions (itsdangerous), session middleware
+- Bootstrap flow (first user becomes ADMIN), invite-only registration
+- API role guards on all endpoints (ADMIN bypass, per-role access control)
+- Dev-login endpoint for local development (`GET /api/v1/auth/dev-login`)
 
 ## What does not exist yet
 
 ### From the backlog (PO confirmation module)
-- Auth and sessions (WebAuthn/passkeys) — in progress (iter 030-033)
-- Roles: SM vs Vendor views (same data, different controls) — in progress (iter 031-034)
+- Roles: SM vs Vendor views (same data, different controls) — in progress (iter 032-034)
 - Overdue PO status (time-based trigger past required delivery date)
 - Mobile layout
 - Custom value approval for reference data dropdowns
@@ -127,7 +135,8 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - Multiple passkeys per user (register backup device for recovery)
 - Admin re-invite flow for lost device (reset to PENDING, user registers new passkey)
 - Credential reset endpoint: `POST /api/v1/users/{id}/reset-credentials` (revoke all passkeys, reset to PENDING)
-- User management frontend page (`/users`) — list, invite, deactivate, reset credentials (API exists in 031, UI deferred)
+- User management CRUD endpoints: list, get, update, deactivate, reactivate (iter 031 only implemented invite)
+- User management frontend page (`/users`) — list, invite, deactivate, reset credentials
 - VENDOR user's vendor gets deactivated — make vendor-scoped data read-only
 - Stale PENDING user cleanup (invited but never registered)
 - Proxy access for internal leave coverage (delegation table, time-bounded, audit trail)
@@ -136,15 +145,16 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - Invite token security: replace `/register?username=<name>` with `/register?token=<uuid>`. Add invite_token column to users table, set on invite, cleared after registration. Prevents guessable registration URLs.
 - Welcome email on invite: send registration link via email when admin invites a user. Currently manual link sharing.
 
+### From the backlog (UX)
+- Error handling across all users and workflows: define and surface user-facing error states for every endpoint (validation errors, conflict errors, not-found, auth failures). Currently errors are ad hoc per endpoint with no consistent frontend treatment.
+- Recent activity redesign: club PO and invoice activity into a unified feed (currently separate activity streams). Needs discussion on grouping, filtering, and presentation.
+
 ### From the backlog (infrastructure)
 - HTTPS for non-localhost deployment (WebAuthn requires HTTPS or localhost; needed before first external demo)
-- Postgres migration from SQLite (iter 029a planned, not implemented)
 - Database migration tool (alembic or similar; needed once real data exists that can't be dropped and recreated)
 - Session revocation ("log out all devices"; currently relies on cookie expiry + user status check)
 - Self-service vendor onboarding (currently invite-only; needed if vendors should sign up without admin)
-- Pre-commit hook: run `make test-backend` on every commit to enforce "no broken code on main"
-- Unified `make test` target: single command that runs both backend (pytest) and frontend (Playwright) test suites
-- Critical-path integration test: single backend test exercising full PO lifecycle (vendor -> PO -> submit -> accept -> invoice -> milestone) as regression safety net
+- Remove dev-login endpoint before production deployment
 
 ### From the roadmap (post-confirmation)
 1. **Quality labs** — certificate management, lab results, product-level cert requirements
@@ -194,3 +204,5 @@ These are the product differentiators. The CRUD workflow (items 1-3, 5, 7-10) is
 | 25 | VendorCountryValidation |
 | 27 | FieldImmutability (mutable-by-status rules) |
 | 29 | Product, RequiresCertification |
+| 030 | User, UserRole (6 values), UserStatus (3 values), WebAuthnCredential, SessionCookie, Bootstrap |
+| 031 | RoleGuard, RequireRole, RequireAuth |

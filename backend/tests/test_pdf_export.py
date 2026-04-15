@@ -66,7 +66,8 @@ async def _create_po(client: AsyncClient, payload: dict | None = None) -> dict:
 # ---------------------------------------------------------------------------
 
 
-async def test_pdf_endpoint_returns_pdf(client: AsyncClient) -> None:
+async def test_pdf_endpoint_returns_pdf(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     po = await _create_po(client)
     po_id = po["id"]
     po_number = po["po_number"]
@@ -79,7 +80,8 @@ async def test_pdf_endpoint_returns_pdf(client: AsyncClient) -> None:
     assert po_number in resp.headers["content-disposition"]
 
 
-async def test_pdf_endpoint_404_for_nonexistent_po(client: AsyncClient) -> None:
+async def test_pdf_endpoint_404_for_nonexistent_po(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     nonexistent_id = str(uuid.uuid4())
     resp = await client.get(f"/api/v1/po/{nonexistent_id}/pdf")
     assert resp.status_code == 404
@@ -90,7 +92,8 @@ async def test_pdf_endpoint_404_for_nonexistent_po(client: AsyncClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_pdf_exports_for_every_status(client: AsyncClient) -> None:
+async def test_pdf_exports_for_every_status(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # DRAFT: create only
     po_draft = await _create_po(client)
     assert po_draft["status"] == POStatus.DRAFT.value
@@ -144,7 +147,8 @@ async def test_pdf_exports_for_every_status(client: AsyncClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_pdf_contains_resolved_labels(client: AsyncClient) -> None:
+async def test_pdf_contains_resolved_labels(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # Reference codes used in _PO_PAYLOAD and their expected resolved labels
     currency_code = "USD"
     port_of_loading_code = "USLAX"
@@ -172,7 +176,8 @@ async def test_pdf_contains_resolved_labels(client: AsyncClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_pdf_excludes_rejection_history(client: AsyncClient) -> None:
+async def test_pdf_excludes_rejection_history(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     rejection_comment = "UNIQUE_REJECTION_MARKER_12345"
 
     po = await _create_po(client)
@@ -194,7 +199,8 @@ async def test_pdf_excludes_rejection_history(client: AsyncClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_pdf_currency_in_header_not_line_items(client: AsyncClient) -> None:
+async def test_pdf_currency_in_header_not_line_items(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # The PO uses USD. The PDF should state currency once in the header/trade
     # details section. Line item cells must not repeat the currency code.
     currency_code = "USD"

@@ -51,7 +51,8 @@ async def _create_po(
 
 
 @pytest.mark.asyncio
-async def test_dashboard_empty_state(client: AsyncClient) -> None:
+async def test_dashboard_empty_state(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     resp = await client.get("/api/v1/dashboard/")
     assert resp.status_code == 200
     data = resp.json()
@@ -61,7 +62,8 @@ async def test_dashboard_empty_state(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_po_counts_by_status(client: AsyncClient) -> None:
+async def test_dashboard_po_counts_by_status(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     vendor_id = vendor["id"]
 
@@ -86,7 +88,8 @@ async def test_dashboard_po_counts_by_status(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_usd_conversion(client: AsyncClient) -> None:
+async def test_dashboard_usd_conversion(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     vendor_id = vendor["id"]
 
@@ -114,7 +117,8 @@ async def test_dashboard_usd_conversion(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_multi_currency_same_status(client: AsyncClient) -> None:
+async def test_dashboard_multi_currency_same_status(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     vendor_id = vendor["id"]
 
@@ -156,7 +160,8 @@ async def test_dashboard_multi_currency_same_status(client: AsyncClient) -> None
 
 
 @pytest.mark.asyncio
-async def test_dashboard_vendor_counts(client: AsyncClient) -> None:
+async def test_dashboard_vendor_counts(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # Create 2 active vendors
     v1 = await _create_vendor(client, name="Vendor One")
     v2 = await _create_vendor(client, name="Vendor Two")
@@ -174,7 +179,8 @@ async def test_dashboard_vendor_counts(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_recent_pos_limit(client: AsyncClient) -> None:
+async def test_dashboard_recent_pos_limit(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     vendor_id = vendor["id"]
 
@@ -190,7 +196,8 @@ async def test_dashboard_recent_pos_limit(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_recent_pos_order(client: AsyncClient) -> None:
+async def test_dashboard_recent_pos_order(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     vendor_id = vendor["id"]
 
@@ -211,7 +218,8 @@ async def test_dashboard_recent_pos_order(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_recent_pos_has_vendor_name(client: AsyncClient) -> None:
+async def test_dashboard_recent_pos_has_vendor_name(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor_name = "Acme Corp"
     vendor = await _create_vendor(client, name=vendor_name)
     vendor_id = vendor["id"]

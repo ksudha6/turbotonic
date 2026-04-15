@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from decimal import Decimal
 
-import aiosqlite
+import os
+
+import asyncpg
 import pytest
 import pytest_asyncio
 
@@ -15,6 +17,11 @@ from src.domain.purchase_order import (
 )
 from src.repository import PurchaseOrderRepository
 from src.schema import init_db
+
+TEST_DATABASE_URL = os.environ.get(
+    "TEST_DATABASE_URL",
+    "postgresql://turbo_tonic@localhost:5432/turbo_tonic_test",
+)
 
 # ---------------------------------------------------------------------------
 # Shared test data
@@ -88,10 +95,16 @@ def make_po(po_number: str = "PO-TEST-0001", **overrides: object) -> PurchaseOrd
 
 
 @pytest_asyncio.fixture
-async def repo() -> aiosqlite.Connection:
-    async with aiosqlite.connect(":memory:") as conn:
-        await init_db(conn)
+async def repo() -> asyncpg.Connection:
+    conn = await asyncpg.connect(TEST_DATABASE_URL)
+    await init_db(conn)
+    tx = conn.transaction()
+    await tx.start()
+    try:
         yield PurchaseOrderRepository(conn)
+    finally:
+        await tx.rollback()
+        await conn.close()
 
 
 # ---------------------------------------------------------------------------

@@ -1,53 +1,9 @@
 from __future__ import annotations
 
-import aiosqlite
+import asyncpg
 
 
-async def _migrate_vendors(conn: aiosqlite.Connection) -> None:
-    """Create Vendor records from existing free-text vendor_id values on POs."""
-    # Only run if vendors table is empty
-    async with conn.execute("SELECT COUNT(*) FROM vendors") as cursor:
-        row = await cursor.fetchone()
-        if row[0] > 0:
-            return
-
-    # Get distinct vendor_id values from existing POs
-    async with conn.execute(
-        "SELECT DISTINCT vendor_id FROM purchase_orders"
-    ) as cursor:
-        rows = await cursor.fetchall()
-
-    if not rows:
-        return
-
-    from datetime import UTC, datetime
-    from uuid import uuid4
-
-    now = datetime.now(UTC).isoformat()
-
-    for (old_vendor_id,) in rows:
-        new_id = str(uuid4())
-        # Create a vendor record using the old vendor_id as the name; type defaults to PROCUREMENT
-        await conn.execute(
-            """
-            INSERT INTO vendors (id, name, country, status, vendor_type, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (new_id, old_vendor_id, "", "ACTIVE", "PROCUREMENT", now, now),
-        )
-        # Update all POs that referenced this vendor_id string to use the new UUID
-        await conn.execute(
-            "UPDATE purchase_orders SET vendor_id = ? WHERE vendor_id = ?",
-            (new_id, old_vendor_id),
-        )
-
-    await conn.commit()
-
-
-async def init_db(conn: aiosqlite.Connection) -> None:
-    # Foreign key enforcement is per-connection in SQLite.
-    await conn.execute("PRAGMA foreign_keys = ON")
-
+async def init_db(conn: asyncpg.Connection) -> None:
     await conn.execute(
         """
         CREATE TABLE IF NOT EXISTS purchase_orders (
@@ -67,6 +23,8 @@ async def init_db(conn: aiosqlite.Connection) -> None:
             port_of_discharge     TEXT,
             country_of_origin     TEXT,
             country_of_destination TEXT,
+            buyer_name            TEXT NOT NULL DEFAULT '',
+            buyer_country         TEXT NOT NULL DEFAULT '',
             created_at            TEXT NOT NULL,
             updated_at            TEXT NOT NULL
         )
@@ -189,36 +147,28 @@ async def init_db(conn: aiosqlite.Connection) -> None:
         """
     )
 
-    # Add buyer columns to existing purchase_orders tables.
-    for col in ("buyer_name", "buyer_country"):
-        try:
-            await conn.execute(
-                f"ALTER TABLE purchase_orders ADD COLUMN {col} TEXT NOT NULL DEFAULT ''"
-            )
-        except Exception as exc:
-            if "duplicate column name" not in str(exc).lower():
-                raise
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id           TEXT PRIMARY KEY,
+            username     TEXT UNIQUE NOT NULL,
+            display_name TEXT NOT NULL,
+            role         TEXT NOT NULL,
+            status       TEXT NOT NULL,
+            vendor_id    TEXT REFERENCES vendors(id),
+            created_at   TEXT NOT NULL
+        )
+        """
+    )
 
-    # Add vendor_type to vendors table.
-    for col, default in [("vendor_type", "PROCUREMENT")]:
-        try:
-            await conn.execute(
-                f"ALTER TABLE vendors ADD COLUMN {col} TEXT NOT NULL DEFAULT '{default}'"
-            )
-        except Exception as exc:
-            if "duplicate column name" not in str(exc).lower():
-                raise
-
-    # Add po_type to purchase_orders table.
-    for col, default in [("po_type", "PROCUREMENT")]:
-        try:
-            await conn.execute(
-                f"ALTER TABLE purchase_orders ADD COLUMN {col} TEXT NOT NULL DEFAULT '{default}'"
-            )
-        except Exception as exc:
-            if "duplicate column name" not in str(exc).lower():
-                raise
-
-    await conn.commit()
-
-    await _migrate_vendors(conn)
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS webauthn_credentials (
+            credential_id TEXT PRIMARY KEY,
+            user_id       TEXT NOT NULL REFERENCES users(id),
+            public_key    BYTEA NOT NULL,
+            sign_count    INTEGER NOT NULL DEFAULT 0,
+            created_at    TEXT NOT NULL
+        )
+        """
+    )

@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
-import aiosqlite
+import asyncpg
 
 from src.domain.invoice import Invoice, InvoiceLineItem, InvoiceStatus
 
@@ -23,50 +23,42 @@ def _parse_dt(value: str) -> datetime:
 
 
 class InvoiceRepository:
-    def __init__(self, conn: aiosqlite.Connection) -> None:
+    def __init__(self, conn: asyncpg.Connection) -> None:
         self._conn = conn
 
     async def next_invoice_number(self) -> str:
         today = datetime.now(UTC).strftime("%Y%m%d")
-        async with self._conn.execute(
-            "SELECT COUNT(*) FROM invoices WHERE invoice_number LIKE ?",
-            (f"INV-{today}-%",),
-        ) as cursor:
-            row = await cursor.fetchone()
-            count: int = row[0] if row else 0
-        return f"INV-{today}-{count + 1:04d}"
+        count = await self._conn.fetchval(
+            "SELECT COUNT(*) FROM invoices WHERE invoice_number LIKE $1",
+            f"INV-{today}-%",
+        )
+        return f"INV-{today}-{(count or 0) + 1:04d}"
 
     async def save(self, invoice: Invoice) -> None:
         # Determine whether the invoice already exists in the database.
-        async with self._conn.execute(
-            "SELECT COUNT(*) FROM invoices WHERE id = ?", (invoice.id,)
-        ) as cursor:
-            row = await cursor.fetchone()
-            exists: bool = (row[0] if row else 0) > 0
+        count = await self._conn.fetchval(
+            "SELECT COUNT(*) FROM invoices WHERE id = $1", invoice.id
+        )
+        exists: bool = (count or 0) > 0
 
-        async with self._conn.execute("BEGIN"):
-            pass
-
-        try:
+        async with self._conn.transaction():
             if not exists:
                 await self._conn.execute(
                     """
                     INSERT INTO invoices (
                         id, invoice_number, po_id, status, payment_terms, currency,
                         dispute_reason, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                     """,
-                    (
-                        invoice.id,
-                        invoice.invoice_number,
-                        invoice.po_id,
-                        invoice.status.value,
-                        invoice.payment_terms,
-                        invoice.currency,
-                        invoice.dispute_reason,
-                        _iso(invoice.created_at),
-                        _iso(invoice.updated_at),
-                    ),
+                    invoice.id,
+                    invoice.invoice_number,
+                    invoice.po_id,
+                    invoice.status.value,
+                    invoice.payment_terms,
+                    invoice.currency,
+                    invoice.dispute_reason,
+                    _iso(invoice.created_at),
+                    _iso(invoice.updated_at),
                 )
 
                 for sort_order, item in enumerate(invoice.line_items):
@@ -75,41 +67,37 @@ class InvoiceRepository:
                         INSERT INTO invoice_line_items (
                             id, invoice_id, part_number, description, quantity,
                             uom, unit_price, sort_order
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                         """,
-                        (
-                            str(uuid4()),
-                            invoice.id,
-                            item.part_number,
-                            item.description,
-                            item.quantity,
-                            item.uom,
-                            str(item.unit_price),
-                            sort_order,
-                        ),
+                        str(uuid4()),
+                        invoice.id,
+                        item.part_number,
+                        item.description,
+                        item.quantity,
+                        item.uom,
+                        str(item.unit_price),
+                        sort_order,
                     )
 
             else:
                 await self._conn.execute(
                     """
                     UPDATE invoices SET
-                        status = ?, payment_terms = ?, currency = ?,
-                        dispute_reason = ?, updated_at = ?
-                    WHERE id = ?
+                        status = $1, payment_terms = $2, currency = $3,
+                        dispute_reason = $4, updated_at = $5
+                    WHERE id = $6
                     """,
-                    (
-                        invoice.status.value,
-                        invoice.payment_terms,
-                        invoice.currency,
-                        invoice.dispute_reason,
-                        _iso(invoice.updated_at),
-                        invoice.id,
-                    ),
+                    invoice.status.value,
+                    invoice.payment_terms,
+                    invoice.currency,
+                    invoice.dispute_reason,
+                    _iso(invoice.updated_at),
+                    invoice.id,
                 )
 
                 # Replace all line items; sort_order is authoritative.
                 await self._conn.execute(
-                    "DELETE FROM invoice_line_items WHERE invoice_id = ?", (invoice.id,)
+                    "DELETE FROM invoice_line_items WHERE invoice_id = $1", invoice.id
                 )
                 for sort_order, item in enumerate(invoice.line_items):
                     await self._conn.execute(
@@ -117,58 +105,45 @@ class InvoiceRepository:
                         INSERT INTO invoice_line_items (
                             id, invoice_id, part_number, description, quantity,
                             uom, unit_price, sort_order
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                         """,
-                        (
-                            str(uuid4()),
-                            invoice.id,
-                            item.part_number,
-                            item.description,
-                            item.quantity,
-                            item.uom,
-                            str(item.unit_price),
-                            sort_order,
-                        ),
+                        str(uuid4()),
+                        invoice.id,
+                        item.part_number,
+                        item.description,
+                        item.quantity,
+                        item.uom,
+                        str(item.unit_price),
+                        sort_order,
                     )
 
-            await self._conn.commit()
-
-        except Exception:
-            await self._conn.rollback()
-            raise
-
     async def get_by_id(self, invoice_id: str) -> Invoice | None:
-        self._conn.row_factory = aiosqlite.Row
-
-        async with self._conn.execute(
-            "SELECT * FROM invoices WHERE id = ?", (invoice_id,)
-        ) as cursor:
-            inv_row = await cursor.fetchone()
+        inv_row = await self._conn.fetchrow(
+            "SELECT * FROM invoices WHERE id = $1", invoice_id
+        )
 
         if inv_row is None:
             return None
 
-        async with self._conn.execute(
-            "SELECT * FROM invoice_line_items WHERE invoice_id = ? ORDER BY sort_order",
-            (invoice_id,),
-        ) as cursor:
-            item_rows = await cursor.fetchall()
+        item_rows = await self._conn.fetch(
+            "SELECT * FROM invoice_line_items WHERE invoice_id = $1 ORDER BY sort_order",
+            invoice_id,
+        )
 
         return _reconstruct(inv_row, item_rows)
 
     async def invoiced_quantities(self, po_id: str) -> dict[str, int]:
         # Sum quantity per part_number across all non-disputed invoices for this PO.
-        async with self._conn.execute(
+        rows = await self._conn.fetch(
             """
             SELECT ili.part_number, SUM(ili.quantity) AS total
             FROM invoice_line_items ili
             JOIN invoices i ON i.id = ili.invoice_id
-            WHERE i.po_id = ? AND i.status != 'DISPUTED'
+            WHERE i.po_id = $1 AND i.status != 'DISPUTED'
             GROUP BY ili.part_number
             """,
-            (po_id,),
-        ) as cursor:
-            rows = await cursor.fetchall()
+            po_id,
+        )
 
         return {row[0]: row[1] for row in rows}
 
@@ -182,9 +157,7 @@ class InvoiceRepository:
         date_to: str | None = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> tuple[list[aiosqlite.Row], int]:
-        self._conn.row_factory = aiosqlite.Row
-
+    ) -> tuple[list[asyncpg.Record], int]:
         joins = """
             FROM invoices i
             JOIN purchase_orders po ON po.id = i.po_id
@@ -192,32 +165,37 @@ class InvoiceRepository:
         """
         conditions: list[str] = []
         params: list[str] = []
+        counter = 1
 
         if status is not None:
-            conditions.append("i.status = ?")
+            conditions.append(f"i.status = ${counter}")
             params.append(status)
+            counter += 1
         if po_number is not None:
-            conditions.append("po.po_number LIKE ?")
+            conditions.append(f"po.po_number LIKE ${counter}")
             params.append(f"%{po_number}%")
+            counter += 1
         if vendor_name is not None:
-            conditions.append("v.name LIKE ?")
+            conditions.append(f"v.name LIKE ${counter}")
             params.append(f"%{vendor_name}%")
+            counter += 1
         if invoice_number is not None:
-            conditions.append("i.invoice_number LIKE ?")
+            conditions.append(f"i.invoice_number LIKE ${counter}")
             params.append(f"%{invoice_number}%")
+            counter += 1
         if date_from is not None:
-            conditions.append("i.created_at >= ?")
+            conditions.append(f"i.created_at >= ${counter}")
             params.append(date_from)
+            counter += 1
         if date_to is not None:
-            conditions.append("i.created_at <= ?")
+            conditions.append(f"i.created_at <= ${counter}")
             params.append(f"{date_to}T23:59:59")
+            counter += 1
 
         where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""
 
         count_query = f"SELECT COUNT(*) {joins}{where_clause}"
-        async with self._conn.execute(count_query, params) as cursor:
-            count_row = await cursor.fetchone()
-            total: int = count_row[0] if count_row else 0
+        total: int = await self._conn.fetchval(count_query, *params) or 0
 
         offset = (page - 1) * page_size
         data_query = (
@@ -237,32 +215,27 @@ class InvoiceRepository:
                 i.created_at
             {joins}{where_clause}
             ORDER BY i.created_at DESC
-            LIMIT ? OFFSET ?
+            LIMIT ${counter} OFFSET ${counter + 1}
             """
         )
-        async with self._conn.execute(data_query, [*params, page_size, offset]) as cursor:
-            rows = await cursor.fetchall()
+        rows = await self._conn.fetch(data_query, *params, page_size, offset)
 
         return rows, total
 
     async def list_by_po(self, po_id: str) -> list[Invoice]:
-        self._conn.row_factory = aiosqlite.Row
-
-        async with self._conn.execute(
-            "SELECT * FROM invoices WHERE po_id = ? ORDER BY created_at",
-            (po_id,),
-        ) as cursor:
-            inv_rows = await cursor.fetchall()
+        inv_rows = await self._conn.fetch(
+            "SELECT * FROM invoices WHERE po_id = $1 ORDER BY created_at",
+            po_id,
+        )
 
         result: list[Invoice] = []
         for inv_row in inv_rows:
             invoice_id = inv_row["id"]
 
-            async with self._conn.execute(
-                "SELECT * FROM invoice_line_items WHERE invoice_id = ? ORDER BY sort_order",
-                (invoice_id,),
-            ) as cursor:
-                item_rows = await cursor.fetchall()
+            item_rows = await self._conn.fetch(
+                "SELECT * FROM invoice_line_items WHERE invoice_id = $1 ORDER BY sort_order",
+                invoice_id,
+            )
 
             result.append(_reconstruct(inv_row, item_rows))
 
@@ -270,8 +243,8 @@ class InvoiceRepository:
 
 
 def _reconstruct(
-    inv_row: aiosqlite.Row,
-    item_rows: list[aiosqlite.Row],
+    inv_row: asyncpg.Record,
+    item_rows: list[asyncpg.Record],
 ) -> Invoice:
     line_items = [
         InvoiceLineItem(

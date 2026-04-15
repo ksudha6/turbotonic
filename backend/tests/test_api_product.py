@@ -44,7 +44,8 @@ async def _create_product(
 # ---------------------------------------------------------------------------
 
 
-async def test_create_product_returns_201(client: AsyncClient) -> None:
+async def test_create_product_returns_201(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     resp = await client.post(
         "/api/v1/products/",
@@ -66,14 +67,16 @@ async def test_create_product_returns_201(client: AsyncClient) -> None:
     assert "updated_at" in data
 
 
-async def test_create_product_defaults(client: AsyncClient) -> None:
+async def test_create_product_defaults(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     product = await _create_product(client, vendor["id"])
     assert product["description"] == ""
     assert product["requires_certification"] is False
 
 
-async def test_create_product_rejects_empty_part_number(client: AsyncClient) -> None:
+async def test_create_product_rejects_empty_part_number(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     resp = await client.post(
         "/api/v1/products/",
@@ -82,7 +85,8 @@ async def test_create_product_rejects_empty_part_number(client: AsyncClient) -> 
     assert resp.status_code == 422
 
 
-async def test_create_product_rejects_empty_vendor_id(client: AsyncClient) -> None:
+async def test_create_product_rejects_empty_vendor_id(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     resp = await client.post(
         "/api/v1/products/",
         json={"vendor_id": "", "part_number": "PN-001"},
@@ -90,7 +94,8 @@ async def test_create_product_rejects_empty_vendor_id(client: AsyncClient) -> No
     assert resp.status_code == 422
 
 
-async def test_duplicate_vendor_part_number_returns_409(client: AsyncClient) -> None:
+async def test_duplicate_vendor_part_number_returns_409(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     await _create_product(client, vendor["id"], part_number="PN-DUP")
     resp = await client.post(
@@ -100,7 +105,8 @@ async def test_duplicate_vendor_part_number_returns_409(client: AsyncClient) -> 
     assert resp.status_code == 409
 
 
-async def test_same_part_number_different_vendors_ok(client: AsyncClient) -> None:
+async def test_same_part_number_different_vendors_ok(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     v1 = await _create_vendor(client, name="Vendor A")
     v2 = await _create_vendor(client, name="Vendor B")
     p1 = await _create_product(client, v1["id"], part_number="PN-SHARED")
@@ -113,7 +119,8 @@ async def test_same_part_number_different_vendors_ok(client: AsyncClient) -> Non
 # ---------------------------------------------------------------------------
 
 
-async def test_get_product_by_id(client: AsyncClient) -> None:
+async def test_get_product_by_id(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     created = await _create_product(client, vendor["id"], description="Detail test")
     resp = await client.get(f"/api/v1/products/{created['id']}")
@@ -123,7 +130,8 @@ async def test_get_product_by_id(client: AsyncClient) -> None:
     assert data["description"] == "Detail test"
 
 
-async def test_get_nonexistent_product_returns_404(client: AsyncClient) -> None:
+async def test_get_nonexistent_product_returns_404(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     resp = await client.get("/api/v1/products/fake-id")
     assert resp.status_code == 404
 
@@ -133,7 +141,8 @@ async def test_get_nonexistent_product_returns_404(client: AsyncClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_list_products_returns_array(client: AsyncClient) -> None:
+async def test_list_products_returns_array(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     await _create_product(client, vendor["id"], part_number="PN-A")
     await _create_product(client, vendor["id"], part_number="PN-B")
@@ -144,7 +153,8 @@ async def test_list_products_returns_array(client: AsyncClient) -> None:
     assert len(data) == 2
 
 
-async def test_list_products_filters_by_vendor_id(client: AsyncClient) -> None:
+async def test_list_products_filters_by_vendor_id(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     v1 = await _create_vendor(client, name="Vendor 1")
     v2 = await _create_vendor(client, name="Vendor 2")
     await _create_product(client, v1["id"], part_number="PN-V1")
@@ -163,7 +173,8 @@ async def test_list_products_filters_by_vendor_id(client: AsyncClient) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_update_requires_certification(client: AsyncClient) -> None:
+async def test_update_requires_certification(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     product = await _create_product(client, vendor["id"])
     assert product["requires_certification"] is False
@@ -177,7 +188,8 @@ async def test_update_requires_certification(client: AsyncClient) -> None:
     assert data["requires_certification"] is True
 
 
-async def test_update_description(client: AsyncClient) -> None:
+async def test_update_description(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     product = await _create_product(client, vendor["id"])
     resp = await client.patch(
@@ -188,7 +200,8 @@ async def test_update_description(client: AsyncClient) -> None:
     assert resp.json()["description"] == "Updated desc"
 
 
-async def test_update_nonexistent_product_returns_404(client: AsyncClient) -> None:
+async def test_update_nonexistent_product_returns_404(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     resp = await client.patch(
         "/api/v1/products/fake-id",
         json={"description": "x"},
@@ -196,7 +209,8 @@ async def test_update_nonexistent_product_returns_404(client: AsyncClient) -> No
     assert resp.status_code == 404
 
 
-async def test_partial_update_preserves_other_fields(client: AsyncClient) -> None:
+async def test_partial_update_preserves_other_fields(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     vendor = await _create_vendor(client)
     product = await _create_product(
         client, vendor["id"], description="Original", requires_certification=True,

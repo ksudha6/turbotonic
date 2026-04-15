@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from uuid import uuid4
 
-import aiosqlite
+import asyncpg
 
 from src.domain.milestone import MilestoneUpdate, ProductionMilestone
 
@@ -22,25 +22,23 @@ def _parse_dt(value: str) -> datetime:
 
 
 class MilestoneRepository:
-    def __init__(self, conn: aiosqlite.Connection) -> None:
+    def __init__(self, conn: asyncpg.Connection) -> None:
         self._conn = conn
 
     async def save(self, po_id: str, update: MilestoneUpdate) -> None:
         await self._conn.execute(
             """
             INSERT INTO milestone_updates (id, po_id, milestone, posted_at)
-            VALUES (?, ?, ?, ?)
+            VALUES ($1, $2, $3, $4)
             """,
-            (str(uuid4()), po_id, update.milestone.value, _iso(update.posted_at)),
+            str(uuid4()), po_id, update.milestone.value, _iso(update.posted_at),
         )
-        await self._conn.commit()
 
     async def list_by_po(self, po_id: str) -> list[MilestoneUpdate]:
-        async with self._conn.execute(
-            "SELECT milestone, posted_at FROM milestone_updates WHERE po_id = ? ORDER BY posted_at",
-            (po_id,),
-        ) as cursor:
-            rows = await cursor.fetchall()
+        rows = await self._conn.fetch(
+            "SELECT milestone, posted_at FROM milestone_updates WHERE po_id = $1 ORDER BY posted_at",
+            po_id,
+        )
 
         return [
             MilestoneUpdate(
@@ -51,11 +49,10 @@ class MilestoneRepository:
         ]
 
     async def latest_for_po(self, po_id: str) -> MilestoneUpdate | None:
-        async with self._conn.execute(
-            "SELECT milestone, posted_at FROM milestone_updates WHERE po_id = ? ORDER BY posted_at DESC LIMIT 1",
-            (po_id,),
-        ) as cursor:
-            row = await cursor.fetchone()
+        row = await self._conn.fetchrow(
+            "SELECT milestone, posted_at FROM milestone_updates WHERE po_id = $1 ORDER BY posted_at DESC LIMIT 1",
+            po_id,
+        )
 
         if row is None:
             return None

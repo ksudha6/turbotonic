@@ -7,15 +7,16 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from src.activity_repository import ActivityLogRepository
+from src.auth.dependencies import require_auth
 from src.db import get_db
 from src.domain.activity import EntityType
+from src.domain.user import User
 
 router = APIRouter(prefix="/api/v1/activity", tags=["activity"])
 
 
 async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield ActivityLogRepository(conn)
 
 
@@ -54,7 +55,7 @@ def _entry_to_response(entry) -> ActivityLogResponse:
 
 
 @router.get("/unread-count")
-async def get_unread_count(activity_repo: ActivityRepoDep) -> dict[str, int]:
+async def get_unread_count(activity_repo: ActivityRepoDep, _user: User = require_auth) -> dict[str, int]:
     count = await activity_repo.unread_count()
     return {"count": count}
 
@@ -65,6 +66,7 @@ async def list_activity(
     limit: int = 20,
     entity_type: str | None = None,
     entity_id: str | None = None,
+    _user: User = require_auth,
 ) -> list[ActivityLogResponse]:
     if entity_type is not None and entity_id is not None:
         et = EntityType(entity_type.upper())
@@ -75,6 +77,6 @@ async def list_activity(
 
 
 @router.post("/mark-read")
-async def mark_read(body: MarkReadRequest, activity_repo: ActivityRepoDep) -> dict[str, int]:
+async def mark_read(body: MarkReadRequest, activity_repo: ActivityRepoDep, _user: User = require_auth) -> dict[str, int]:
     marked = await activity_repo.mark_read(event_ids=body.event_ids, all=body.all)
     return {"marked": marked}

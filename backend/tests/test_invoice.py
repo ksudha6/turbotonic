@@ -1,39 +1,9 @@
 from __future__ import annotations
 
 import datetime
-from contextlib import asynccontextmanager
-from typing import AsyncIterator
-from unittest.mock import patch
 
-import aiosqlite
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-
-from src.activity_repository import ActivityLogRepository
-from src.db import get_db
-from src.invoice_repository import InvoiceRepository
-from src.main import app
-from src.repository import PurchaseOrderRepository
-from src.routers.dashboard import get_activity_repo as dash_get_activity_repo
-from src.routers.dashboard import get_invoice_repo as dash_get_invoice_repo
-from src.routers.dashboard import get_milestone_repo as dash_get_milestone_repo
-from src.routers.dashboard import get_repo as dash_get_repo
-from src.routers.dashboard import get_vendor_repo as dash_get_vendor_repo
-from src.routers.invoice import get_activity_repo as invoice_get_activity_repo
-from src.routers.invoice import get_invoice_repo as invoice_get_invoice_repo
-from src.routers.invoice import get_po_repo as invoice_get_po_repo
-from src.routers.invoice import get_vendor_repo as invoice_get_vendor_repo
-from src.routers.milestone import get_milestone_repo
-from src.routers.milestone import get_activity_repo as milestone_get_activity_repo
-from src.routers.purchase_order import get_activity_repo as po_get_activity_repo
-from src.routers.purchase_order import get_invoice_repo as po_get_invoice_repo
-from src.routers.purchase_order import get_repo
-from src.routers.purchase_order import get_vendor_repo as po_get_vendor_repo
-from src.routers.vendor import get_vendor_repo as vendor_get_vendor_repo
-from src.milestone_repository import MilestoneRepository
-from src.schema import init_db
-from src.vendor_repository import VendorRepository
+from httpx import AsyncClient
 
 pytestmark = pytest.mark.asyncio
 
@@ -76,61 +46,6 @@ _PO_PAYLOAD = {
 }
 
 
-@pytest_asyncio.fixture
-async def client() -> AsyncIterator[AsyncClient]:
-    async with aiosqlite.connect(":memory:") as conn:
-        await conn.execute("PRAGMA journal_mode=WAL")
-        await init_db(conn)
-
-        async def override_get_repo() -> AsyncIterator[PurchaseOrderRepository]:
-            await conn.execute("PRAGMA foreign_keys = ON")
-            yield PurchaseOrderRepository(conn)
-
-        async def override_get_vendor_repo() -> AsyncIterator[VendorRepository]:
-            await conn.execute("PRAGMA foreign_keys = ON")
-            yield VendorRepository(conn)
-
-        async def override_get_invoice_repo() -> AsyncIterator[InvoiceRepository]:
-            await conn.execute("PRAGMA foreign_keys = ON")
-            yield InvoiceRepository(conn)
-
-        async def override_get_milestone_repo() -> AsyncIterator[MilestoneRepository]:
-            await conn.execute("PRAGMA foreign_keys = ON")
-            yield MilestoneRepository(conn)
-
-        async def override_get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
-            await conn.execute("PRAGMA foreign_keys = ON")
-            yield ActivityLogRepository(conn)
-
-        @asynccontextmanager
-        async def _test_get_db(*_args, **_kwargs) -> AsyncIterator[aiosqlite.Connection]:
-            yield conn
-
-        app.dependency_overrides[get_repo] = override_get_repo
-        app.dependency_overrides[po_get_vendor_repo] = override_get_vendor_repo
-        app.dependency_overrides[po_get_activity_repo] = override_get_activity_repo
-        app.dependency_overrides[vendor_get_vendor_repo] = override_get_vendor_repo
-        app.dependency_overrides[dash_get_repo] = override_get_repo
-        app.dependency_overrides[dash_get_vendor_repo] = override_get_vendor_repo
-        app.dependency_overrides[dash_get_invoice_repo] = override_get_invoice_repo
-        app.dependency_overrides[dash_get_milestone_repo] = override_get_milestone_repo
-        app.dependency_overrides[dash_get_activity_repo] = override_get_activity_repo
-        app.dependency_overrides[invoice_get_invoice_repo] = override_get_invoice_repo
-        app.dependency_overrides[invoice_get_po_repo] = override_get_repo
-        app.dependency_overrides[invoice_get_vendor_repo] = override_get_vendor_repo
-        app.dependency_overrides[invoice_get_activity_repo] = override_get_activity_repo
-        app.dependency_overrides[po_get_invoice_repo] = override_get_invoice_repo
-        app.dependency_overrides[get_milestone_repo] = override_get_milestone_repo
-        app.dependency_overrides[milestone_get_activity_repo] = override_get_activity_repo
-
-        transport = ASGITransport(app=app)
-        with patch("src.routers.purchase_order.get_db", _test_get_db):
-            async with AsyncClient(transport=transport, base_url="http://test") as ac:
-                yield ac
-
-    app.dependency_overrides.clear()
-
-
 async def _create_accepted_po(client: AsyncClient, po_type: str = "PROCUREMENT") -> dict:
     vendor = await client.post(
         "/api/v1/vendors/",
@@ -146,7 +61,8 @@ async def _create_accepted_po(client: AsyncClient, po_type: str = "PROCUREMENT")
     return (await client.get(f"/api/v1/po/{po_id}")).json()
 
 
-async def test_invoiced_quantities_excludes_disputed(client: AsyncClient) -> None:
+async def test_invoiced_quantities_excludes_disputed(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # Disputed invoices must not count toward invoiced totals.
     pn1 = "PN-001"
     pn2 = "PN-002"
@@ -202,7 +118,8 @@ async def test_invoiced_quantities_excludes_disputed(client: AsyncClient) -> Non
     assert lines_by_part[pn2]["remaining"] == pn2_ordered - 20
 
 
-async def test_over_invoicing_rejected(client: AsyncClient) -> None:
+async def test_over_invoicing_rejected(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # A second invoice must be rejected when it would exceed the ordered quantity.
     pn1 = "PN-001"
     pn1_ordered = 100
@@ -241,7 +158,8 @@ async def test_over_invoicing_rejected(client: AsyncClient) -> None:
     assert violation["requested"] == 50
 
 
-async def test_partial_invoice_accepted(client: AsyncClient) -> None:
+async def test_partial_invoice_accepted(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # An invoice covering only part of one line must succeed and leave the rest available.
     pn1 = "PN-001"
     pn2 = "PN-002"
@@ -274,7 +192,8 @@ async def test_partial_invoice_accepted(client: AsyncClient) -> None:
     assert lines_by_part[pn2]["remaining"] == pn2_ordered
 
 
-async def test_zero_quantity_lines_excluded(client: AsyncClient) -> None:
+async def test_zero_quantity_lines_excluded(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # Line items with quantity=0 must not appear in the saved invoice.
     pn1 = "PN-001"
     pn2 = "PN-002"
@@ -306,7 +225,8 @@ async def test_zero_quantity_lines_excluded(client: AsyncClient) -> None:
     assert len(line_items) == 1, "invoice must contain exactly one line item"
 
 
-async def test_remaining_endpoint(client: AsyncClient) -> None:
+async def test_remaining_endpoint(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # /remaining must reflect only active (non-disputed) invoices and update after each invoice.
     pn1 = "PN-001"
     pn2 = "PN-002"
@@ -348,7 +268,8 @@ async def test_remaining_endpoint(client: AsyncClient) -> None:
     assert lines_by_part2[pn2]["remaining"] == pn2_ordered
 
 
-async def test_list_invoices_returns_all(client: AsyncClient) -> None:
+async def test_list_invoices_returns_all(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # GET /api/v1/invoices/ must return all invoices across all POs.
     po1 = await _create_accepted_po(client)
     po2 = await _create_accepted_po(client)
@@ -384,7 +305,8 @@ async def test_list_invoices_returns_all(client: AsyncClient) -> None:
     assert returned_po_ids == expected_po_ids
 
 
-async def test_list_invoices_filter_by_status(client: AsyncClient) -> None:
+async def test_list_invoices_filter_by_status(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # GET /api/v1/invoices/?status=X must return only invoices in that status.
     po = await _create_accepted_po(client)
     po_id = po["id"]
@@ -428,14 +350,16 @@ async def test_list_invoices_filter_by_status(client: AsyncClient) -> None:
     assert submitted_items[0]["status"] == "SUBMITTED"
 
 
-async def test_list_invoices_empty(client: AsyncClient) -> None:
+async def test_list_invoices_empty(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # GET /api/v1/invoices/ with no invoices in the database must return an empty list.
     resp = await client.get("/api/v1/invoices/")
     assert resp.status_code == 200
     assert resp.json() == {"items": [], "total": 0, "page": 1, "page_size": 20}
 
 
-async def test_list_invoices_filter_by_po_number(client: AsyncClient) -> None:
+async def test_list_invoices_filter_by_po_number(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # GET /api/v1/invoices/?po_number=X must return only invoices whose PO number contains X.
     po1 = await _create_accepted_po(client)
     po2 = await _create_accepted_po(client)
@@ -476,7 +400,8 @@ async def test_list_invoices_filter_by_po_number(client: AsyncClient) -> None:
     assert items[0]["po_number"] == target_po_number
 
 
-async def test_list_invoices_filter_by_vendor_name(client: AsyncClient) -> None:
+async def test_list_invoices_filter_by_vendor_name(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # GET /api/v1/invoices/?vendor_name=X must return only invoices from vendors whose name contains X.
     alpha_vendor_name = "Alpha Corp"
     beta_vendor_name = "Beta Ltd"
@@ -538,7 +463,8 @@ async def test_list_invoices_filter_by_vendor_name(client: AsyncClient) -> None:
     assert beta_items[0]["vendor_name"] == beta_vendor_name
 
 
-async def test_list_invoices_filter_by_invoice_number(client: AsyncClient) -> None:
+async def test_list_invoices_filter_by_invoice_number(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # GET /api/v1/invoices/?invoice_number=X must return only invoices whose invoice_number contains X.
     po = await _create_accepted_po(client)
     po_id = po["id"]
@@ -579,7 +505,8 @@ async def test_list_invoices_filter_by_invoice_number(client: AsyncClient) -> No
     assert items[0]["id"] == inv_a_id
 
 
-async def test_list_invoices_filter_by_date_range(client: AsyncClient) -> None:
+async def test_list_invoices_filter_by_date_range(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # GET /api/v1/invoices/?date_from=X&date_to=Y must return invoices within the date range.
     today = datetime.date.today().isoformat()
     future_date = "2099-01-01"
@@ -614,7 +541,8 @@ async def test_list_invoices_filter_by_date_range(client: AsyncClient) -> None:
     assert past_resp.json()["items"] == [], "date_to in far past must return empty list"
 
 
-async def test_dashboard_includes_invoice_summary(client: AsyncClient) -> None:
+async def test_dashboard_includes_invoice_summary(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # GET /api/v1/dashboard/ must include invoice_summary with at least one entry
     # after an invoice exists.
     po = await _create_accepted_po(client)
@@ -643,7 +571,8 @@ async def test_dashboard_includes_invoice_summary(client: AsyncClient) -> None:
         assert required_keys <= entry.keys(), f"invoice_summary entry missing keys: {required_keys - entry.keys()}"
 
 
-async def test_create_opex_invoice(client: AsyncClient) -> None:
+async def test_create_opex_invoice(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # Creating an invoice against an ACCEPTED OPEX PO must succeed and include all line items at full quantity.
     pn1 = "PN-001"
     pn2 = "PN-002"
@@ -665,7 +594,8 @@ async def test_create_opex_invoice(client: AsyncClient) -> None:
     assert line_items_by_part[pn2]["quantity"] == pn2_ordered, "PN-002 must be invoiced at full ordered quantity"
 
 
-async def test_create_second_opex_invoice_returns_409(client: AsyncClient) -> None:
+async def test_create_second_opex_invoice_returns_409(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # A second invoice attempt on the same OPEX PO must return 409.
     po = await _create_accepted_po(client, po_type="OPEX")
     po_id = po["id"]
@@ -678,7 +608,8 @@ async def test_create_second_opex_invoice_returns_409(client: AsyncClient) -> No
     assert "already exists" in second.json()["detail"], "409 detail must state an invoice already exists"
 
 
-async def test_create_opex_invoice_with_line_items_returns_422(client: AsyncClient) -> None:
+async def test_create_opex_invoice_with_line_items_returns_422(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # Sending line_items when creating an OPEX invoice must return 422.
     po = await _create_accepted_po(client, po_type="OPEX")
     po_id = po["id"]
@@ -691,7 +622,8 @@ async def test_create_opex_invoice_with_line_items_returns_422(client: AsyncClie
     assert "line_items" in resp.json()["detail"], "422 detail must mention line_items"
 
 
-async def test_opex_invoice_lifecycle(client: AsyncClient) -> None:
+async def test_opex_invoice_lifecycle(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # An OPEX invoice must progress through the full lifecycle: Draft → Submitted → Approved → Paid.
     # Dispute from Submitted must also work.
     po = await _create_accepted_po(client, po_type="OPEX")

@@ -9,10 +9,11 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi",
     "uvicorn[standard]",
-    "aiosqlite",
+    "asyncpg",
     "itsdangerous",
     "sse-starlette",
     "reportlab",
+    "webauthn>=2",
 ]
 
 [tool.hatch.build.targets.wheel]

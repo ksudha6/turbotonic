@@ -4,19 +4,19 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Annotated, Any, AsyncIterator
 
-import aiosqlite
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from src.activity_repository import ActivityLogRepository
+from src.auth.dependencies import require_auth
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType
+from src.domain.user import User
 from src.domain.milestone import MILESTONE_ORDER, ProductionMilestone
 from src.domain.reference_data import RATE_TO_USD
 from src.invoice_repository import InvoiceRepository
 from src.milestone_repository import MilestoneRepository
 from src.repository import PurchaseOrderRepository
-from src.schema import init_db
 from src.vendor_repository import VendorRepository
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -24,31 +24,26 @@ router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 
 async def get_repo() -> AsyncIterator[PurchaseOrderRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield PurchaseOrderRepository(conn)
 
 
 async def get_vendor_repo() -> AsyncIterator[VendorRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield VendorRepository(conn)
 
 
 async def get_invoice_repo() -> AsyncIterator[InvoiceRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield InvoiceRepository(conn)
 
 
 async def get_milestone_repo() -> AsyncIterator[MilestoneRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield MilestoneRepository(conn)
 
 
 async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
     async with get_db() as conn:
-        await conn.execute("PRAGMA foreign_keys = ON")
         yield ActivityLogRepository(conn)
 
 
@@ -125,6 +120,7 @@ async def get_dashboard(
     invoice_repo: InvoiceRepoDep,
     milestone_repo: MilestoneRepoDep,
     activity_repo: ActivityRepoDep,
+    _user: User = require_auth,
 ) -> DashboardResponse:
     # PO summary: aggregate by status, convert to USD
     raw_summary = await repo.po_summary_by_status()
@@ -172,8 +168,7 @@ async def get_dashboard(
     ]
 
     # Invoice summary: aggregate by status and currency, convert to USD
-    invoice_repo._conn.row_factory = aiosqlite.Row
-    async with invoice_repo._conn.execute(
+    invoice_rows = await invoice_repo._conn.fetch(
         """
         SELECT i.status, i.currency, COUNT(*) as count,
                COALESCE(SUM(sub.subtotal), 0) as total
@@ -184,8 +179,7 @@ async def get_dashboard(
         ) sub ON sub.invoice_id = i.id
         GROUP BY i.status, i.currency
         """
-    ) as cursor:
-        invoice_rows = await cursor.fetchall()
+    )
 
     inv_agg: dict[str, dict[str, Any]] = {}
     for row in invoice_rows:
@@ -207,8 +201,7 @@ async def get_dashboard(
     ]
 
     # Production summary: count of ACCEPTED PROCUREMENT POs at each milestone stage.
-    milestone_repo._conn.row_factory = aiosqlite.Row
-    async with milestone_repo._conn.execute(
+    prod_rows = await milestone_repo._conn.fetch(
         """
         SELECT lm.milestone, COUNT(*) AS cnt
         FROM purchase_orders p
@@ -224,8 +217,7 @@ async def get_dashboard(
         WHERE p.status = 'ACCEPTED' AND p.po_type = 'PROCUREMENT'
         GROUP BY lm.milestone
         """
-    ) as cursor:
-        prod_rows = await cursor.fetchall()
+    )
 
     prod_counts: dict[str, int] = {row["milestone"]: row["cnt"] for row in prod_rows}
     # Return summary in MILESTONE_ORDER sequence, omitting stages with zero POs.
@@ -238,7 +230,7 @@ async def get_dashboard(
     # Overdue POs: ACCEPTED PROCUREMENT POs whose latest milestone has been stuck
     # longer than the per-milestone threshold. SHIPPED is never overdue.
     now_utc = datetime.now(UTC)
-    async with milestone_repo._conn.execute(
+    overdue_rows = await milestone_repo._conn.fetch(
         """
         SELECT p.id, p.po_number, p.vendor_id, lm.milestone, lm.max_posted_at
         FROM purchase_orders p
@@ -253,8 +245,7 @@ async def get_dashboard(
         ) lm ON lm.po_id = p.id
         WHERE p.status = 'ACCEPTED' AND p.po_type = 'PROCUREMENT'
         """
-    ) as cursor:
-        overdue_rows = await cursor.fetchall()
+    )
 
     overdue_pos: list[OverduePO] = []
     for row in overdue_rows:

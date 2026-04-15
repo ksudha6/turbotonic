@@ -1,38 +1,11 @@
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-from typing import AsyncIterator
-from unittest.mock import patch
-
-import aiosqlite
+import asyncpg
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 
-from src.activity_repository import ActivityLogRepository
-from src.db import get_db
-from src.invoice_repository import InvoiceRepository
-from src.main import app
-from src.milestone_repository import MilestoneRepository
-from src.repository import PurchaseOrderRepository
-from src.routers.dashboard import get_activity_repo as dash_get_activity_repo
-from src.routers.dashboard import get_invoice_repo as dash_get_invoice_repo
 from src.routers.dashboard import get_milestone_repo as dash_get_milestone_repo
-from src.routers.dashboard import get_repo as dash_get_repo
-from src.routers.dashboard import get_vendor_repo as dash_get_vendor_repo
-from src.routers.invoice import get_activity_repo as invoice_get_activity_repo
-from src.routers.invoice import get_invoice_repo as invoice_get_invoice_repo
-from src.routers.invoice import get_po_repo as invoice_get_po_repo
-from src.routers.milestone import get_activity_repo as milestone_get_activity_repo
-from src.routers.milestone import get_milestone_repo
-from src.routers.milestone import get_po_repo as milestone_get_po_repo
-from src.routers.purchase_order import get_activity_repo as po_get_activity_repo
-from src.routers.purchase_order import get_invoice_repo as po_get_invoice_repo
-from src.routers.purchase_order import get_repo
-from src.routers.purchase_order import get_vendor_repo as po_get_vendor_repo
-from src.routers.vendor import get_vendor_repo as vendor_get_vendor_repo
-from src.schema import init_db
-from src.vendor_repository import VendorRepository
+from src.main import app
 
 pytestmark = pytest.mark.asyncio
 
@@ -63,61 +36,6 @@ _PO_PAYLOAD = {
     "country_of_destination": "CN",
     "line_items": [_LINE_ITEM],
 }
-
-
-@pytest_asyncio.fixture
-async def client() -> AsyncIterator[AsyncClient]:
-    async with aiosqlite.connect(":memory:") as conn:
-        await conn.execute("PRAGMA journal_mode=WAL")
-        await init_db(conn)
-
-        async def override_get_repo() -> AsyncIterator[PurchaseOrderRepository]:
-            await conn.execute("PRAGMA foreign_keys = ON")
-            yield PurchaseOrderRepository(conn)
-
-        async def override_get_vendor_repo() -> AsyncIterator[VendorRepository]:
-            await conn.execute("PRAGMA foreign_keys = ON")
-            yield VendorRepository(conn)
-
-        async def override_get_invoice_repo() -> AsyncIterator[InvoiceRepository]:
-            await conn.execute("PRAGMA foreign_keys = ON")
-            yield InvoiceRepository(conn)
-
-        async def override_get_milestone_repo() -> AsyncIterator[MilestoneRepository]:
-            await conn.execute("PRAGMA foreign_keys = ON")
-            yield MilestoneRepository(conn)
-
-        async def override_get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
-            await conn.execute("PRAGMA foreign_keys = ON")
-            yield ActivityLogRepository(conn)
-
-        @asynccontextmanager
-        async def _test_get_db(*_args, **_kwargs) -> AsyncIterator[aiosqlite.Connection]:
-            yield conn
-
-        app.dependency_overrides[get_repo] = override_get_repo
-        app.dependency_overrides[po_get_vendor_repo] = override_get_vendor_repo
-        app.dependency_overrides[po_get_activity_repo] = override_get_activity_repo
-        app.dependency_overrides[vendor_get_vendor_repo] = override_get_vendor_repo
-        app.dependency_overrides[dash_get_repo] = override_get_repo
-        app.dependency_overrides[dash_get_vendor_repo] = override_get_vendor_repo
-        app.dependency_overrides[dash_get_invoice_repo] = override_get_invoice_repo
-        app.dependency_overrides[dash_get_milestone_repo] = override_get_milestone_repo
-        app.dependency_overrides[dash_get_activity_repo] = override_get_activity_repo
-        app.dependency_overrides[invoice_get_invoice_repo] = override_get_invoice_repo
-        app.dependency_overrides[invoice_get_po_repo] = override_get_repo
-        app.dependency_overrides[invoice_get_activity_repo] = override_get_activity_repo
-        app.dependency_overrides[po_get_invoice_repo] = override_get_invoice_repo
-        app.dependency_overrides[get_milestone_repo] = override_get_milestone_repo
-        app.dependency_overrides[milestone_get_po_repo] = override_get_repo
-        app.dependency_overrides[milestone_get_activity_repo] = override_get_activity_repo
-
-        transport = ASGITransport(app=app)
-        with patch("src.routers.purchase_order.get_db", _test_get_db):
-            async with AsyncClient(transport=transport, base_url="http://test") as ac:
-                yield ac
-
-    app.dependency_overrides.clear()
 
 
 async def _create_accepted_procurement_po(client: AsyncClient) -> dict:
@@ -154,7 +72,8 @@ async def _create_accepted_opex_po(client: AsyncClient) -> dict:
     return (await client.get(f"/api/v1/po/{po_id}")).json()
 
 
-async def test_post_milestone_on_accepted_procurement_po_returns_201(client: AsyncClient) -> None:
+async def test_post_milestone_on_accepted_procurement_po_returns_201(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # Posting RAW_MATERIALS on an ACCEPTED PROCUREMENT PO must return 201 with milestone and posted_at.
     po = await _create_accepted_procurement_po(client)
     po_id = po["id"]
@@ -169,7 +88,8 @@ async def test_post_milestone_on_accepted_procurement_po_returns_201(client: Asy
     assert data["posted_at"] is not None
 
 
-async def test_reject_milestone_on_non_accepted_po(client: AsyncClient) -> None:
+async def test_reject_milestone_on_non_accepted_po(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # Posting a milestone on a DRAFT PO must return 409.
     vendor = await client.post(
         "/api/v1/vendors/",
@@ -185,7 +105,8 @@ async def test_reject_milestone_on_non_accepted_po(client: AsyncClient) -> None:
     assert resp.status_code == 409, f"expected 409 for DRAFT PO, got {resp.status_code}: {resp.text}"
 
 
-async def test_reject_milestone_on_non_procurement_po(client: AsyncClient) -> None:
+async def test_reject_milestone_on_non_procurement_po(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # Posting a milestone on an ACCEPTED OPEX PO must return 409.
     po = await _create_accepted_opex_po(client)
     po_id = po["id"]
@@ -194,7 +115,8 @@ async def test_reject_milestone_on_non_procurement_po(client: AsyncClient) -> No
     assert resp.status_code == 409, f"expected 409 for OPEX PO, got {resp.status_code}: {resp.text}"
 
 
-async def test_reject_out_of_order_milestone(client: AsyncClient) -> None:
+async def test_reject_out_of_order_milestone(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # After RAW_MATERIALS, posting QC_PASSED (skipping PRODUCTION_STARTED) must return 409.
     po = await _create_accepted_procurement_po(client)
     po_id = po["id"]
@@ -206,7 +128,8 @@ async def test_reject_out_of_order_milestone(client: AsyncClient) -> None:
     assert skip.status_code == 409, f"expected 409 for out-of-order milestone, got {skip.status_code}: {skip.text}"
 
 
-async def test_reject_duplicate_milestone(client: AsyncClient) -> None:
+async def test_reject_duplicate_milestone(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # Posting RAW_MATERIALS twice must return 409 on the second attempt.
     po = await _create_accepted_procurement_po(client)
     po_id = po["id"]
@@ -218,7 +141,8 @@ async def test_reject_duplicate_milestone(client: AsyncClient) -> None:
     assert duplicate.status_code == 409, f"expected 409 for duplicate milestone, got {duplicate.status_code}: {duplicate.text}"
 
 
-async def test_get_milestones_returns_posted_order(client: AsyncClient) -> None:
+async def test_get_milestones_returns_posted_order(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # GET milestones after posting RAW_MATERIALS then PRODUCTION_STARTED must return both in order.
     raw_materials = "RAW_MATERIALS"
     production_started = "PRODUCTION_STARTED"
@@ -238,7 +162,8 @@ async def test_get_milestones_returns_posted_order(client: AsyncClient) -> None:
     assert items[1]["milestone"] == production_started, "second item must be PRODUCTION_STARTED"
 
 
-async def test_get_milestones_empty(client: AsyncClient) -> None:
+async def test_get_milestones_empty(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # GET milestones on a PO with none posted must return 200 with an empty list.
     po = await _create_accepted_procurement_po(client)
     po_id = po["id"]
@@ -248,7 +173,8 @@ async def test_get_milestones_empty(client: AsyncClient) -> None:
     assert resp.json() == [], "no milestones posted must return empty list"
 
 
-async def test_post_invalid_milestone_value_returns_422(client: AsyncClient) -> None:
+async def test_post_invalid_milestone_value_returns_422(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # Posting an unrecognised milestone value must return 422.
     po = await _create_accepted_procurement_po(client)
     po_id = po["id"]
@@ -257,7 +183,8 @@ async def test_post_invalid_milestone_value_returns_422(client: AsyncClient) -> 
     assert resp.status_code == 422, f"expected 422 for invalid milestone, got {resp.status_code}: {resp.text}"
 
 
-async def test_po_list_includes_current_milestone(client: AsyncClient) -> None:
+async def test_po_list_includes_current_milestone(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # An ACCEPTED PROCUREMENT PO with RAW_MATERIALS posted must appear with current_milestone set.
     po = await _create_accepted_procurement_po(client)
     po_id = po["id"]
@@ -275,7 +202,8 @@ async def test_po_list_includes_current_milestone(client: AsyncClient) -> None:
     )
 
 
-async def test_po_list_current_milestone_null_when_no_milestones(client: AsyncClient) -> None:
+async def test_po_list_current_milestone_null_when_no_milestones(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # An ACCEPTED PROCUREMENT PO with no milestones posted must have current_milestone null.
     po = await _create_accepted_procurement_po(client)
     po_id = po["id"]
@@ -290,7 +218,8 @@ async def test_po_list_current_milestone_null_when_no_milestones(client: AsyncCl
     )
 
 
-async def test_po_list_filter_by_milestone(client: AsyncClient) -> None:
+async def test_po_list_filter_by_milestone(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # With two POs at different milestones, filtering by one milestone returns only that PO.
     po_a = await _create_accepted_procurement_po(client)
     po_b = await _create_accepted_procurement_po(client)
@@ -307,7 +236,8 @@ async def test_po_list_filter_by_milestone(client: AsyncClient) -> None:
     assert po_b["id"] not in ids, "PO at PRODUCTION_STARTED must not appear when filtering RAW_MATERIALS"
 
 
-async def test_dashboard_production_summary(client: AsyncClient) -> None:
+async def test_dashboard_production_summary(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # After posting RAW_MATERIALS on one PO and PRODUCTION_STARTED on another,
     # production_summary must count one PO at each stage.
     po_a = await _create_accepted_procurement_po(client)
@@ -324,7 +254,8 @@ async def test_dashboard_production_summary(client: AsyncClient) -> None:
     assert summary.get("PRODUCTION_STARTED") == 1, f"expected 1 at PRODUCTION_STARTED, got {summary}"
 
 
-async def test_dashboard_overdue_pos(client: AsyncClient) -> None:
+async def test_dashboard_overdue_pos(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
     # A PO at RAW_MATERIALS with posted_at backdated to 8 days ago must appear in overdue_pos.
     # RAW_MATERIALS threshold is 7 days, so 8 days ago exceeds it.
     from datetime import UTC, datetime, timedelta  # noqa: PLC0415
@@ -335,10 +266,8 @@ async def test_dashboard_overdue_pos(client: AsyncClient) -> None:
     post_resp = await client.post(f"/api/v1/po/{po_id}/milestones", json={"milestone": "RAW_MATERIALS"})
     assert post_resp.status_code == 201
 
-    # The fixture shares a single aiosqlite connection across all dependency overrides.
-    # Retrieve the conn by calling the registered override for dash_get_milestone_repo.
-    from src.main import app as _app  # noqa: PLC0415
-    override_fn = _app.dependency_overrides.get(dash_get_milestone_repo)
+    # Retrieve the shared Postgres connection from any registered override.
+    override_fn = app.dependency_overrides.get(dash_get_milestone_repo)
     assert override_fn is not None, "dash_get_milestone_repo override must be registered"
     conn_ref = None
     async for repo in override_fn():
@@ -348,10 +277,9 @@ async def test_dashboard_overdue_pos(client: AsyncClient) -> None:
 
     eight_days_ago = (datetime.now(UTC) - timedelta(days=8)).isoformat()
     await conn_ref.execute(
-        "UPDATE milestone_updates SET posted_at = ? WHERE po_id = ?",
-        (eight_days_ago, po_id),
+        "UPDATE milestone_updates SET posted_at = $1 WHERE po_id = $2",
+        eight_days_ago, po_id,
     )
-    await conn_ref.commit()
 
     dash_resp = await client.get("/api/v1/dashboard/")
     assert dash_resp.status_code == 200
