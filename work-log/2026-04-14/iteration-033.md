@@ -15,21 +15,31 @@ The backend enforces auth (iter 030), role guards (iter 031), and vendor scoping
 
 ### Login page
 - [ ] Create `frontend/src/routes/login/+page.svelte`
-  - Two modes: Register and Login (tab or toggle)
-  - Register mode: username, display_name, role dropdown (SM/VENDOR/QUALITY_LAB/FREIGHT_MANAGER), vendor dropdown (shown only when role=VENDOR, populated from /api/v1/vendors/), register button
-  - Login mode: username field, login button
-  - Register flow:
-    1. POST /api/v1/auth/register/options with {username, display_name, role, vendor_id?}
-    2. Call `navigator.credentials.create()` with returned options
-    3. POST /api/v1/auth/register/verify with credential response
-    4. On success: redirect to /dashboard
+  - Login mode only (no public registration): username field, login button
   - Login flow:
     1. POST /api/v1/auth/login/options with {username}
     2. Call `navigator.credentials.get()` with returned options
     3. POST /api/v1/auth/login/verify with auth response
     4. On success: redirect to /dashboard
-  - Error handling: display error messages inline (e.g., "Username already taken", "Passkey not recognized", "WebAuthn not supported by this browser")
+  - Error handling: display error messages inline (e.g., "Passkey not recognized", "User not found", "WebAuthn not supported by this browser")
   - WebAuthn browser support check: if `window.PublicKeyCredential` is undefined, show "WebAuthn is not supported in this browser"
+
+### Registration page (invite-only)
+- [ ] Create `frontend/src/routes/register/+page.svelte`
+  - Accessible via `/register?username=<username>` (link sent by admin after invite)
+  - Reads username from query param, calls POST /api/v1/auth/register/options with {username}
+  - If user not found or already active: show error ("Invalid invite link" / "Account already registered")
+  - On success: call `navigator.credentials.create()` with returned options, then POST /api/v1/auth/register/verify
+  - On verify success: redirect to /dashboard
+  - No role selection, no display_name input — these were set by admin during invite
+
+### Bootstrap page (first user only)
+- [ ] Create `frontend/src/routes/setup/+page.svelte`
+  - Shown only when zero users exist (check via /api/v1/auth/bootstrap returning 409 means users exist)
+  - Fields: username, display_name
+  - Calls POST /api/v1/auth/bootstrap, then navigator.credentials.create(), then register/verify
+  - On success: redirect to /dashboard
+  - Once bootstrap is done, this page shows "System already configured" and links to /login
 
 ### WebAuthn helper module
 - [ ] Create `frontend/src/lib/webauthn.ts`
@@ -39,7 +49,8 @@ The backend enforces auth (iter 030), role guards (iter 031), and vendor scoping
 
 ### Auth API client
 - [ ] Create `frontend/src/lib/auth.ts`
-  - `registerOptions(username, display_name, role, vendor_id?)` -- POST /api/v1/auth/register/options
+  - `bootstrap(username, display_name)` -- POST /api/v1/auth/bootstrap
+  - `registerOptions(username)` -- POST /api/v1/auth/register/options
   - `registerVerify(credential)` -- POST /api/v1/auth/register/verify
   - `loginOptions(username)` -- POST /api/v1/auth/login/options
   - `loginVerify(credential)` -- POST /api/v1/auth/login/verify
@@ -49,8 +60,9 @@ The backend enforces auth (iter 030), role guards (iter 031), and vendor scoping
 
 ### User type definition
 - [ ] Create `frontend/src/lib/types/user.ts` (or add to existing types file)
-  - `type UserRole = 'SM' | 'VENDOR' | 'QUALITY_LAB' | 'FREIGHT_MANAGER'`
-  - `type User = { id: string, username: string, display_name: string, role: UserRole, vendor_id: string | null }`
+  - `type UserRole = 'ADMIN' | 'PROCUREMENT_MANAGER' | 'SM' | 'VENDOR' | 'QUALITY_LAB' | 'FREIGHT_MANAGER'`
+  - `type UserStatus = 'ACTIVE' | 'INACTIVE' | 'PENDING'`
+  - `type User = { id: string, username: string, display_name: string, role: UserRole, status: UserStatus, vendor_id: string | null }`
 
 ### Layout: session check and user context
 - [ ] Update `frontend/src/routes/+layout.svelte` (or create `+layout.ts` / `+layout.server.ts`)
@@ -77,6 +89,20 @@ The backend enforces auth (iter 030), role guards (iter 031), and vendor scoping
   - On 401: redirect to /login (session expired while using the app)
   - Avoid redirect loops (don't redirect if already on /login)
 
+### Deep link preservation
+- [ ] When redirecting unauthenticated users to /login, pass the original path as a query parameter: `/login?redirect=/po/123`
+- [ ] After successful login/registration, read the `redirect` query param and navigate there instead of /dashboard
+- [ ] Default to /dashboard if no redirect param present
+- [ ] Sanitize: redirect must start with `/` (reject external URLs and protocol-relative URLs)
+
+### Existing test impact
+- All 8 existing Playwright specs break: pages redirect to /login since backend now returns 401.
+- Add an `authenticatedPage` fixture to `frontend/tests/fixtures.ts` that:
+  1. Mocks `GET /api/v1/auth/me` to return a valid SM user
+  2. Makes the session appear active so layout does not redirect to /login
+- Update all existing Playwright tests to use the authenticated fixture.
+- The unauthenticated page stays available for testing redirect-to-login behavior.
+
 ### Tests (permanent)
 - [ ] `frontend/tests/auth-flow.spec.ts` (Playwright)
   - Visiting /dashboard without a session redirects to /login
@@ -84,6 +110,7 @@ The backend enforces auth (iter 030), role guards (iter 031), and vendor scoping
   - Visiting /login does not redirect (no loop)
   - After login (mock WebAuthn -- Playwright cannot do real passkeys without virtual authenticator setup), user lands on /dashboard
   - After logout, visiting /dashboard redirects to /login
+  - Visiting /po/123 without session redirects to /login with redirect param; after mock login, lands on /po/123
   - Note: full WebAuthn flow requires Playwright's `cdpSession.send('WebAuthn.enable')` and virtual authenticator. If too complex for permanent tests, test the redirect behavior with mocked /api/v1/auth/me responses instead.
 
 ### Tests (scratch)
@@ -93,8 +120,10 @@ The backend enforces auth (iter 030), role guards (iter 031), and vendor scoping
 - [ ] Screenshot: post-logout redirect to /login
 
 ## Acceptance criteria
-- [ ] /login page renders with register and login modes
-- [ ] Register mode shows username, display_name, role dropdown; shows vendor dropdown only when role=VENDOR
+- [ ] /login page renders with login mode only (no public registration)
+- [ ] /register page accepts username from query param and registers passkey for invited PENDING users
+- [ ] /setup page handles first-user bootstrap (creates ADMIN account)
+- [ ] /setup shows "System already configured" after bootstrap is done
 - [ ] WebAuthn registration calls navigator.credentials.create() with server options, then verifies with server
 - [ ] WebAuthn login calls navigator.credentials.get() with server options, then verifies with server
 - [ ] Successful register/login sets session cookie and redirects to /dashboard
@@ -104,4 +133,6 @@ The backend enforces auth (iter 030), role guards (iter 031), and vendor scoping
 - [ ] Logout button calls /api/v1/auth/logout, clears state, redirects to /login
 - [ ] All existing API fetch calls include `credentials: 'include'`
 - [ ] 401 responses from any API call trigger redirect to /login
+- [ ] Unauthenticated access to /po/123 redirects to /login?redirect=%2Fpo%2F123; after login, user lands on /po/123
+- [ ] All pre-existing Playwright tests pass with the authenticated fixture
 - [ ] `make test-browser` passes with new Playwright tests

@@ -14,18 +14,9 @@ Role guards (iter 031) control which endpoints a VENDOR can call, but a VENDOR u
 
 ## Tasks
 
-### Database: vendor_id on users
-- [ ] Add `vendor_id` column to `users` table in `backend/src/schema.py`
-  - `vendor_id TEXT REFERENCES vendors(id)` -- nullable (SM, QUALITY_LAB, FREIGHT_MANAGER have no vendor_id)
-  - Use ALTER TABLE with duplicate-column guard (same pattern as existing migrations)
-- [ ] Update User domain: add `vendor_id: str | None` field to User dataclass
-- [ ] Update User.create(): accept optional `vendor_id` parameter, required when role=VENDOR
-- [ ] Update UserRepository: persist and load vendor_id
-
-### Registration: vendor_id for VENDOR users
-- [ ] Update `POST /api/v1/auth/register/options` to accept optional `vendor_id` field
-- [ ] When role=VENDOR: vendor_id is required, validate it exists in vendors table, reject if missing
-- [ ] When role=SM/QUALITY_LAB/FREIGHT_MANAGER: vendor_id must be None, reject if provided
+### Note: vendor_id on users
+- vendor_id column, User domain field, and VENDOR-role validation already exist from iteration 030
+- No schema or domain changes needed here; this iteration only adds query-level filtering
 
 ### Repository-level filtering: PurchaseOrderRepository
 - [ ] Add `vendor_id` filter parameter to `list_pos_paginated()` (already has vendor_id filter, but this is the auth-level filter, not the UI filter)

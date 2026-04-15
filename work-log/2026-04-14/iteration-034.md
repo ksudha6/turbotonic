@@ -16,6 +16,8 @@ The frontend has auth and user context in layout (iter 033), but renders every b
 
 ### Role helper utility
 - [ ] Create `frontend/src/lib/permissions.ts`
+  - `canDoEverything(role)` -- ADMIN only (ADMIN inherits all SM permissions plus user management)
+  - Each `can*` function should return true for ADMIN (ADMIN passes every permission check)
   - `canCreatePO(role)` -- SM only
   - `canEditPO(role)` -- SM only
   - `canSubmitPO(role)` -- SM only
@@ -41,6 +43,8 @@ The frontend has auth and user context in layout (iter 033), but renders every b
   - VENDOR: Dashboard, POs, Invoices (no Vendors, no Products)
   - QUALITY_LAB: Dashboard, Products (no POs, no Invoices, no Vendors)
   - FREIGHT_MANAGER: Dashboard, POs (no Invoices, no Vendors, no Products)
+  - ADMIN: same as SM plus Users link (user management page)
+  - PROCUREMENT_MANAGER: Dashboard only (permissions not yet wired; future iteration will expand access)
   - Use `canManageVendors`, `canViewProducts`, `canViewInvoices`, `canViewPOs` to control visibility
   - Display current user's display_name and role in header/nav
 
@@ -108,11 +112,16 @@ The frontend has auth and user context in layout (iter 033), but renders every b
   - VENDOR: PO summary (own), invoice summary (own), production pipeline (own), overdue POs (own)
   - QUALITY_LAB: products count, activity feed (no PO/invoice/vendor summaries)
   - FREIGHT_MANAGER: PO summary (read-only context), production pipeline (read-only context)
+  - ADMIN: same view as SM (full visibility)
 
 ### Backend: target_role filter on activity endpoints (small addition)
 - [ ] Add optional `target_role` query parameter to `GET /api/v1/activity/` and `GET /api/v1/activity/unread-count`
 - [ ] Update `ActivityLogRepository.list_recent()` and `unread_count()` to accept optional `target_role` filter
 - [ ] This is a minor backend change needed to support role-filtered activity on the frontend
+
+### Existing test impact
+- No existing tests break. This iteration only hides/shows UI elements based on role. All existing Playwright tests use the SM-authenticated fixture from iteration 033, and SM sees all controls.
+- New tests mock different roles via /api/v1/auth/me to verify conditional rendering.
 
 ### Tests (permanent)
 - [ ] `frontend/tests/role-rendering.spec.ts` (Playwright)
@@ -127,6 +136,8 @@ The frontend has auth and user context in layout (iter 033), but renders every b
   - VENDOR visiting /po/new redirects to /po
   - VENDOR visiting /vendors redirects to /dashboard
   - QUALITY_LAB visiting /invoices redirects to /dashboard
+  - ADMIN user: nav shows Dashboard, POs, Invoices, Vendors, Products, Users
+  - ADMIN on PO detail: same buttons as SM
   - Note: these tests require mocking /api/v1/auth/me to return different user roles
 
 ### Tests (scratch)

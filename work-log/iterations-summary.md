@@ -1,7 +1,7 @@
 # Iterations Summary
 
 > Single-file context for future conversations. Replaces reading 29 individual iteration docs.
-> Last updated: 2026-04-10 (after iteration 029).
+> Last updated: 2026-04-15 (backlog cleanup, Phase 2 planning corrections).
 
 ---
 
@@ -11,7 +11,7 @@ Turbo Tonic is a vendor portal for purchase order confirmation, invoicing, produ
 
 ## Tech stack
 
-Python 3.13, FastAPI, SQLite (aiosqlite, WAL), WebAuthn/passkeys + cookie sessions. Frontend: SvelteKit 2 + Svelte 5, adapter-static. Package manager: uv (backend), npm (frontend), nvm for Node.
+Python 3.13, FastAPI, Postgres (asyncpg; migrated from SQLite in iter 029a), WebAuthn/passkeys + cookie sessions. Frontend: SvelteKit 2 + Svelte 5, adapter-static. Package manager: uv (backend), npm (frontend), nvm for Node. Local dev: Docker Compose for Postgres.
 
 ## Current domain model (as of iteration 029)
 
@@ -91,6 +91,7 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 | 27 | 2026-04-06 | Field-level mutability rules: which PO fields are editable in which status |
 | 28 | 2026-04-06 | Partial PO acceptance (line-item level accept/reject) — scoped but not started |
 | 29 | 2026-04-09 | Product master: vendor-scoped product catalog with requires_certification flag |
+| 29a | -- | Postgres migration (planned, not implemented). SQLite remains in use. |
 
 ---
 
@@ -112,8 +113,8 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 ## What does not exist yet
 
 ### From the backlog (PO confirmation module)
-- Auth and sessions (WebAuthn/passkeys) — no auth currently, everything is open
-- Roles: SM vs Vendor views (same data, different controls)
+- Auth and sessions (WebAuthn/passkeys) — in progress (iter 030-033)
+- Roles: SM vs Vendor views (same data, different controls) — in progress (iter 031-034)
 - Overdue PO status (time-based trigger past required delivery date)
 - Mobile layout
 - Custom value approval for reference data dropdowns
@@ -121,6 +122,29 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - Live/historical exchange rates
 - Buyer as first-class entity (currently hardcoded)
 - Partial PO acceptance at line-item level (iter 28 scoped, not built)
+
+### From the backlog (auth and user management)
+- Multiple passkeys per user (register backup device for recovery)
+- Admin re-invite flow for lost device (reset to PENDING, user registers new passkey)
+- Credential reset endpoint: `POST /api/v1/users/{id}/reset-credentials` (revoke all passkeys, reset to PENDING)
+- User management frontend page (`/users`) — list, invite, deactivate, reset credentials (API exists in 031, UI deferred)
+- VENDOR user's vendor gets deactivated — make vendor-scoped data read-only
+- Stale PENDING user cleanup (invited but never registered)
+- Proxy access for internal leave coverage (delegation table, time-bounded, audit trail)
+- Email/notification for invite links (manual link sharing works for small teams)
+- PROCUREMENT_MANAGER role permissions: enum value exists from iter 030, no endpoint guards wired. Future iteration to define and wire access (read-only PO/vendor/invoice visibility, pay/dispute invoices)
+- Invite token security: replace `/register?username=<name>` with `/register?token=<uuid>`. Add invite_token column to users table, set on invite, cleared after registration. Prevents guessable registration URLs.
+- Welcome email on invite: send registration link via email when admin invites a user. Currently manual link sharing.
+
+### From the backlog (infrastructure)
+- HTTPS for non-localhost deployment (WebAuthn requires HTTPS or localhost; needed before first external demo)
+- Postgres migration from SQLite (iter 029a planned, not implemented)
+- Database migration tool (alembic or similar; needed once real data exists that can't be dropped and recreated)
+- Session revocation ("log out all devices"; currently relies on cookie expiry + user status check)
+- Self-service vendor onboarding (currently invite-only; needed if vendors should sign up without admin)
+- Pre-commit hook: run `make test-backend` on every commit to enforce "no broken code on main"
+- Unified `make test` target: single command that runs both backend (pytest) and frontend (Playwright) test suites
+- Critical-path integration test: single backend test exercising full PO lifecycle (vendor -> PO -> submit -> accept -> invoice -> milestone) as regression safety net
 
 ### From the roadmap (post-confirmation)
 1. **Quality labs** — certificate management, lab results, product-level cert requirements

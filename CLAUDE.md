@@ -21,13 +21,18 @@ When I say "let's start a new iteration":
 2. JTBD (Jobs To Be Done) must exist before proceeding next
 3. Every other section may proceed in any desired manner
 4. We may loop back to 1 or 2 any number of times, and then cascade
-5. When all iteration tasks are complete:
+5. Test sections must start with an "Existing test impact" subsection before listing new tests:
+    1. Which existing tests break from changes in this iteration?
+    2. What updates (fixtures, mocks, helpers) are needed to keep them passing?
+    3. If no tests break, state that explicitly.
+6. When all iteration tasks are complete:
     1. Assess domain terms that emerged during implementation
     2. Propose additions to `docs/ddd-vocab.md` and await confirmation before writing
-6. When I say "let's close this iteration":
+7. When I say "let's close this iteration":
     1. Mark incomplete tasks as carried forward (not dropped)
     2. Write a one-paragraph summary in `## Notes` — decisions made, not actions taken
     3. Update `work-log/iterations-summary.md`: append to the iteration log table, and update any other sections that changed (domain model, routes, API surface, "what exists" / "what does not exist yet")
+    4. Clean the backlog: remove items completed in this iteration, update status of in-progress items
 
 # Testing
 
