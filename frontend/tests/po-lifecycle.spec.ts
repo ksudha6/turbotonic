@@ -679,3 +679,96 @@ test('PO form renders dropdown fields from reference data', async ({ page }) => 
 	const bcSelect = page.locator('#buyer_country');
 	await expect(bcSelect).toHaveValue('US');
 });
+
+// ---------------------------------------------------------------------------
+// Iteration 36 — Marketplace dropdown
+// ---------------------------------------------------------------------------
+
+test('PO form renders marketplace dropdown with correct options', async ({ page }) => {
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([{ id: 'vendor-uuid-1', name: 'Acme Corp', country: 'CN', status: 'ACTIVE', vendor_type: 'PROCUREMENT' }])
+		});
+	});
+
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(REFERENCE_DATA)
+		});
+	});
+
+	await page.goto('/po/new');
+	await page.waitForSelector('form');
+
+	const marketplaceSelect = page.locator('#marketplace');
+	await expect(marketplaceSelect).toBeVisible();
+
+	// 1 empty option + 4 marketplace values = 5 total
+	const options = page.locator('#marketplace option');
+	await expect(options).toHaveCount(5);
+
+	// Assert each expected value is present
+	for (const value of ['', 'AMZ', '3PL_1', '3PL_2', '3PL_3']) {
+		await expect(page.locator(`#marketplace option[value="${value}"]`)).toHaveCount(1);
+	}
+});
+
+test('PO form submits marketplace value', async ({ page }) => {
+	let capturedBody: Record<string, unknown> | null = null;
+
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([{ id: 'vendor-uuid-1', name: 'Acme Corp', country: 'CN', status: 'ACTIVE', vendor_type: 'PROCUREMENT' }])
+		});
+	});
+
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(REFERENCE_DATA)
+		});
+	});
+
+	await page.route('**/api/v1/po/', (route) => {
+		const method = route.request().method();
+		if (method === 'POST') {
+			capturedBody = JSON.parse(route.request().postData() ?? '{}');
+			route.fulfill({
+				status: 201,
+				contentType: 'application/json',
+				body: JSON.stringify(makePO('DRAFT'))
+			});
+		} else {
+			route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+		}
+	});
+
+	await page.goto('/po/new');
+	await page.waitForSelector('form');
+
+	// Fill required header fields
+	await page.selectOption('#vendor_id', 'vendor-uuid-1');
+	await page.selectOption('#currency', 'USD');
+	await page.fill('#issued_date', '2026-03-16');
+	await page.fill('#required_delivery_date', '2026-04-16');
+
+	// Fill required line item field
+	await page.locator('input[placeholder="Part No."]').fill('PART-001');
+
+	// Select marketplace
+	await page.selectOption('#marketplace', 'AMZ');
+
+	await page.getByRole('button', { name: 'Create PO' }).click();
+	await page.waitForURL(`**/po/${PO_ID}`);
+
+	// Assert the POST body included the selected marketplace
+	expect(capturedBody).not.toBeNull();
+	expect((capturedBody as Record<string, unknown>)['marketplace']).toBe('AMZ');
+});

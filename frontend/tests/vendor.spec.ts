@@ -299,3 +299,76 @@ test('vendor create form shows country options from reference data', async ({ pa
 	await expect(countrySelect).toContainText('China');
 	await expect(countrySelect).toContainText('Germany');
 });
+
+// ---------------------------------------------------------------------------
+// Iteration 36 — Vendor address and account_details fields
+// ---------------------------------------------------------------------------
+
+test('vendor create form renders address and account_details fields', async ({ page }) => {
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				currencies: [], incoterms: [], payment_terms: [], ports: [],
+				vendor_types: [], po_types: [],
+				countries: [{ code: 'JP', label: 'Japan' }],
+			}),
+		});
+	});
+
+	await page.goto('/vendors/new');
+	await page.waitForSelector('form');
+
+	await expect(page.locator('#address')).toBeVisible();
+	await expect(page.locator('#account_details')).toBeVisible();
+	await expect(page.locator('#address')).toHaveValue('');
+	await expect(page.locator('#account_details')).toHaveValue('');
+});
+
+test('vendor create form submits address and account_details', async ({ page }) => {
+	const ADDRESS = '123 Factory Rd, Tokyo';
+	const ACCOUNT_DETAILS = 'Bank: Mizuho, Acct: 12345';
+
+	let capturedBody: Record<string, unknown> = {};
+
+	await page.route('**/api/v1/vendors**', (route) => {
+		const method = route.request().method();
+		if (method === 'POST') {
+			capturedBody = JSON.parse(route.request().postData() ?? '{}');
+			route.fulfill({
+				status: 201,
+				contentType: 'application/json',
+				body: JSON.stringify({ id: 'v-new', name: 'Test Vendor', country: 'JP', status: 'ACTIVE', vendor_type: 'PROCUREMENT' }),
+			});
+		} else {
+			route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
+		}
+	});
+
+	await page.route('**/api/v1/reference-data**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				currencies: [], incoterms: [], payment_terms: [], ports: [],
+				vendor_types: [], po_types: [],
+				countries: [{ code: 'JP', label: 'Japan' }],
+			}),
+		});
+	});
+
+	await page.goto('/vendors/new');
+	await page.waitForSelector('form');
+
+	await page.fill('#name', 'Test Vendor');
+	await page.selectOption('#country', 'JP');
+	await page.locator('#address').fill(ADDRESS);
+	await page.locator('#account_details').fill(ACCOUNT_DETAILS);
+
+	await page.getByRole('button', { name: 'Create Vendor' }).click();
+	await page.waitForURL('**/vendors');
+
+	expect(capturedBody['address']).toBe(ADDRESS);
+	expect(capturedBody['account_details']).toBe(ACCOUNT_DETAILS);
+});
