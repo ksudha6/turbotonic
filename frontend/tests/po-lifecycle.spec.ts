@@ -6,10 +6,12 @@ import { test, expect } from '@playwright/test';
 // ---------------------------------------------------------------------------
 
 test.beforeEach(async ({ page }) => {
-	// Register catch-all first (lower LIFO priority), then specific route after
-	// (higher LIFO priority). Playwright evaluates routes in reverse registration order.
-	await page.route('**/api/v1/activity/**', (route) => {
+	// Catch-all for any unmocked API route (lowest LIFO priority — registered first).
+	await page.route('**/api/v1/**', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/auth/me', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'test-user-id', username: 'test-sm', display_name: 'Test User', role: 'SM', status: 'ACTIVE', vendor_id: null } }) });
 	});
 	await page.route('**/api/v1/activity/unread-count', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ count: 0 }) });
@@ -180,6 +182,11 @@ test('draft PO shows Edit and Submit buttons', async ({ page }) => {
 test('pending PO shows Accept and Reject buttons', async ({ page }) => {
 	const po = makePO('PENDING');
 
+	// Override beforeEach SM mock — LIFO priority means this handler runs first.
+	await page.route('**/api/v1/auth/me', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'test-user-id', username: 'test-vendor', display_name: 'Test Vendor', role: 'VENDOR', status: 'ACTIVE', vendor_id: 'vendor-1' } }) });
+	});
+
 	await page.route('**/api/v1/po/*/invoices', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
 	});
@@ -317,6 +324,11 @@ test('create PO form rejects quantity <= 0', async ({ page }) => {
 test('reject modal requires non-empty comment', async ({ page }) => {
 	const po = makePO('PENDING');
 
+	// Override beforeEach SM mock — LIFO priority means this handler runs first.
+	await page.route('**/api/v1/auth/me', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'test-user-id', username: 'test-vendor', display_name: 'Test Vendor', role: 'VENDOR', status: 'ACTIVE', vendor_id: 'vendor-1' } }) });
+	});
+
 	await page.route('**/api/v1/po/*/invoices', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
 	});
@@ -347,6 +359,27 @@ test('reject modal requires non-empty comment', async ({ page }) => {
 test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ page }) => {
 	// Mutable state tracking current PO status for the detail endpoint
 	let currentPO = makePO('DRAFT');
+
+	// Dynamic auth mock — role switches mid-test as VENDOR-only actions require it.
+	// The beforeEach SM handler has lower LIFO priority; this one intercepts first.
+	let currentRole = 'SM';
+	let currentVendorId: string | null = null;
+	await page.route('**/api/v1/auth/me', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				user: {
+					id: 'test-user-id',
+					username: `test-${currentRole.toLowerCase()}`,
+					display_name: `Test ${currentRole}`,
+					role: currentRole,
+					status: 'ACTIVE',
+					vendor_id: currentVendorId
+				}
+			})
+		});
+	});
 
 	// Mock supporting APIs for PO detail page
 	await page.route('**/api/v1/po/*/invoices', (route) => {
@@ -478,7 +511,11 @@ test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ pa
 	await page.getByRole('button', { name: 'Submit' }).click();
 	await expect(page.locator('body')).toContainText('Pending');
 
-	// Step 3: Reject
+	// Step 3: Reject — VENDOR-only action; switch role before reload.
+	currentRole = 'VENDOR';
+	currentVendorId = 'vendor-1';
+	await page.reload();
+	await page.waitForSelector('h1');
 	await page.getByRole('button', { name: 'Reject' }).click();
 	await page.waitForSelector('.dialog');
 	await page.locator('.dialog textarea').fill('Need revision');
@@ -486,7 +523,11 @@ test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ pa
 	await expect(page.locator('body')).toContainText('Rejected');
 	await expect(page.locator('body')).toContainText('Need revision');
 
-	// Step 4: Edit (navigate to edit page)
+	// Step 4: Edit — SM-only action; switch back before reload.
+	currentRole = 'SM';
+	currentVendorId = null;
+	await page.reload();
+	await page.waitForSelector('h1');
 	await page.locator('a[href*="/edit"]').click();
 	await page.waitForURL(`**/po/${PO_ID}/edit`);
 	await page.waitForSelector('form');
@@ -508,7 +549,11 @@ test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ pa
 	await page.getByRole('button', { name: 'Resubmit' }).click();
 	await expect(page.locator('body')).toContainText('Pending');
 
-	// Step 7: Accept
+	// Step 7: Accept — VENDOR-only action; switch role before reload.
+	currentRole = 'VENDOR';
+	currentVendorId = 'vendor-1';
+	await page.reload();
+	await page.waitForSelector('h1');
 	await page.getByRole('button', { name: 'Accept' }).click();
 	await expect(page.locator('body')).toContainText('Accepted');
 });

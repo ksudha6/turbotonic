@@ -53,6 +53,9 @@ function mockActivityRoutes(
 }
 
 test.beforeEach(async ({ page }) => {
+	await page.route('**/api/v1/auth/me', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'test-user-id', username: 'test-sm', display_name: 'Test User', role: 'SM', status: 'ACTIVE', vendor_id: null } }) });
+	});
 	await page.route('**/api/v1/dashboard**', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MOCK_DASHBOARD) });
 	});

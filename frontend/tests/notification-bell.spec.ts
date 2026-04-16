@@ -33,12 +33,15 @@ async function mockActivityRoutes(
 	await page.route('**/api/v1/activity/**', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(listEntries) });
 	});
-	await page.route('**/api/v1/activity/unread-count', (route) => {
+	await page.route('**/api/v1/activity/unread-count*', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ count: unreadCount }) });
 	});
 }
 
 test.beforeEach(async ({ page }) => {
+	await page.route('**/api/v1/auth/me', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'test-user-id', username: 'test-sm', display_name: 'Test User', role: 'SM', status: 'ACTIVE', vendor_id: null } }) });
+	});
 	await page.route('**/api/v1/dashboard**', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(EMPTY_DASHBOARD) });
 	});

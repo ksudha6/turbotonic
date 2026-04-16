@@ -2,6 +2,9 @@ import { test, expect } from '@playwright/test';
 
 // NotificationBell calls unread-count on every page load.
 test.beforeEach(async ({ page }) => {
+	await page.route('**/api/v1/auth/me', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'test-user-id', username: 'test-sm', display_name: 'Test User', role: 'SM', status: 'ACTIVE', vendor_id: null } }) });
+	});
 	// Catch-all first (lower LIFO priority), specific unread-count after (higher priority).
 	await page.route('**/api/v1/activity/**', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });

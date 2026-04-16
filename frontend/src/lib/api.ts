@@ -1,8 +1,15 @@
 import type { ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PaginatedInvoiceList, PaginatedPOList, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
-	const res = await fetch(path);
+	const res = await fetch(path, { credentials: 'include' });
 	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
 		throw new Error(`GET ${path} failed: ${res.status} ${res.statusText}`);
 	}
 	return res.json() as Promise<T>;
@@ -12,9 +19,17 @@ async function apiPost<T>(path: string, body?: unknown): Promise<T> {
 	const res = await fetch(path, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: body !== undefined ? JSON.stringify(body) : undefined
+		body: body !== undefined ? JSON.stringify(body) : undefined,
+		credentials: 'include'
 	});
 	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
 		throw new Error(`POST ${path} failed: ${res.status} ${res.statusText}`);
 	}
 	return res.json() as Promise<T>;
@@ -24,9 +39,17 @@ async function apiPut<T>(path: string, body: unknown): Promise<T> {
 	const res = await fetch(path, {
 		method: 'PUT',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(body)
+		body: JSON.stringify(body),
+		credentials: 'include'
 	});
 	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
 		throw new Error(`PUT ${path} failed: ${res.status} ${res.statusText}`);
 	}
 	return res.json() as Promise<T>;
@@ -94,8 +117,16 @@ export async function downloadBulkInvoicePdf(ids: string[]): Promise<void> {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ invoice_ids: ids }),
+		credentials: 'include'
 	});
 	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
 		throw new Error(`POST /api/v1/invoices/bulk/pdf failed: ${res.status}`);
 	}
 	const blob = await res.blob();
@@ -216,16 +247,20 @@ export function postMilestone(poId: string, milestone: string): Promise<Mileston
 	return apiPost<MilestoneUpdate>(`/api/v1/po/${poId}/milestones`, { milestone });
 }
 
-export function fetchActivity(limit: number = 20): Promise<ActivityLogEntry[]> {
-	return apiGet<ActivityLogEntry[]>(`/api/v1/activity/?limit=${limit}`);
+export function fetchActivity(limit: number = 20, targetRole?: string): Promise<ActivityLogEntry[]> {
+	let url = `/api/v1/activity/?limit=${limit}`;
+	if (targetRole) url += `&target_role=${targetRole}`;
+	return apiGet<ActivityLogEntry[]>(url);
 }
 
 export function fetchActivityForEntity(entityType: string, entityId: string): Promise<ActivityLogEntry[]> {
 	return apiGet<ActivityLogEntry[]>(`/api/v1/activity/?entity_type=${entityType}&entity_id=${entityId}`);
 }
 
-export function fetchUnreadCount(): Promise<{ count: number }> {
-	return apiGet<{ count: number }>('/api/v1/activity/unread-count');
+export function fetchUnreadCount(targetRole?: string): Promise<{ count: number }> {
+	let url = '/api/v1/activity/unread-count';
+	if (targetRole) url += `?target_role=${targetRole}`;
+	return apiGet<{ count: number }>(url);
 }
 
 export function markActivityRead(eventIds?: string[]): Promise<{ marked: number }> {
@@ -252,9 +287,17 @@ export async function updateProduct(id: string, data: { description?: string; re
 	const res = await fetch(`/api/v1/products/${id}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify(data)
+		body: JSON.stringify(data),
+		credentials: 'include'
 	});
 	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
 		throw new Error(`PATCH /api/v1/products/${id} failed: ${res.status} ${res.statusText}`);
 	}
 	return res.json() as Promise<Product>;

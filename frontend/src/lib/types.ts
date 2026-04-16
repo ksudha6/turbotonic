@@ -298,3 +298,15 @@ export interface ProductInput {
 	description: string;
 	requires_certification: boolean;
 }
+
+export type UserRole = 'ADMIN' | 'PROCUREMENT_MANAGER' | 'SM' | 'VENDOR' | 'QUALITY_LAB' | 'FREIGHT_MANAGER';
+export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'PENDING';
+
+export interface User {
+	id: string;
+	username: string;
+	display_name: string;
+	role: UserRole;
+	status: UserStatus;
+	vendor_id: string | null;
+}

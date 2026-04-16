@@ -2,29 +2,56 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import '$lib/styles/global.css';
 	import NotificationBell from '$lib/components/NotificationBell.svelte';
+	import { page } from '$app/state';
+	import { logout } from '$lib/auth';
+	import { goto } from '$app/navigation';
+	import { canViewPOs, canViewInvoices, canManageVendors, canViewProducts } from '$lib/permissions';
 
 	let { children } = $props();
+
+	const user = $derived(page.data.user);
+
+	async function handleLogout() {
+		try {
+			await logout();
+		} catch {
+			// proceed even if logout call fails
+		}
+		goto('/login');
+	}
 </script>
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<nav>
-	<div class="nav-inner">
-		<a href="/" class="nav-brand">Vendor Portal</a>
-		<ul class="nav-links">
-			<li><a href="/dashboard">Dashboard</a></li>
-			<li><a href="/po">Purchase Orders</a></li>
-			<li><a href="/invoices">Invoices</a></li>
-			<li><a href="/vendors">Vendors</a></li>
-			<li><a href="/products">Products</a></li>
-		</ul>
-		<div class="nav-actions">
-			<NotificationBell />
+{#if user}
+	<nav>
+		<div class="nav-inner">
+			<a href="/" class="nav-brand">Vendor Portal</a>
+			<ul class="nav-links">
+				<li><a href="/dashboard">Dashboard</a></li>
+				{#if canViewPOs(user.role)}
+					<li><a href="/po">Purchase Orders</a></li>
+				{/if}
+				{#if canViewInvoices(user.role)}
+					<li><a href="/invoices">Invoices</a></li>
+				{/if}
+				{#if canManageVendors(user.role)}
+					<li><a href="/vendors">Vendors</a></li>
+				{/if}
+				{#if canViewProducts(user.role)}
+					<li><a href="/products">Products</a></li>
+				{/if}
+			</ul>
+			<div class="nav-actions">
+				<NotificationBell />
+				<span class="user-name">{user.display_name} · {user.role}</span>
+				<button class="logout-btn" onclick={handleLogout}>Log out</button>
+			</div>
 		</div>
-	</div>
-</nav>
+	</nav>
+{/if}
 
 <div class="container">
 	{@render children()}
@@ -76,5 +103,28 @@
 
 	.nav-actions {
 		margin-left: auto;
+		display: flex;
+		align-items: center;
+		gap: var(--space-4);
+	}
+
+	.user-name {
+		font-size: var(--font-size-sm);
+		color: var(--gray-600);
+	}
+
+	.logout-btn {
+		font-size: var(--font-size-sm);
+		color: var(--gray-600);
+		background: none;
+		border: 1px solid var(--gray-300);
+		border-radius: 0.25rem;
+		padding: var(--space-1) var(--space-3);
+		cursor: pointer;
+	}
+
+	.logout-btn:hover {
+		color: var(--gray-900);
+		border-color: var(--gray-400);
 	}
 </style>

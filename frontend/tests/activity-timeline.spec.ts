@@ -97,6 +97,19 @@ async function mockActivityRoutes(
 // PO detail — Activity section
 // ---------------------------------------------------------------------------
 
+test.beforeEach(async ({ page }) => {
+	// Catch-all for any unmocked API route (lowest LIFO priority — registered first).
+	await page.route('**/api/v1/**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+	await page.route('**/api/v1/auth/me', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'test-user-id', username: 'test-sm', display_name: 'Test User', role: 'SM', status: 'ACTIVE', vendor_id: null } }) });
+	});
+	await page.route('**/api/v1/activity/unread-count', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ count: 0 }) });
+	});
+});
+
 test('PO detail page shows Activity section heading and timeline entries', async ({ page }) => {
 	await page.route('**/api/v1/reference-data/**', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(REFERENCE_DATA) });
