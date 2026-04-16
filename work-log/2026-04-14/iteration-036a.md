@@ -47,7 +47,7 @@ Product has a boolean `requires_certification` flag, which is too coarse to dist
 - [ ] Add `product_qualifications` join table:
   ```
   product_qualifications (
-      product_id            TEXT NOT NULL REFERENCES products(id),
+      product_id            TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
       qualification_type_id TEXT NOT NULL REFERENCES qualification_types(id),
       PRIMARY KEY (product_id, qualification_type_id)
   )
@@ -95,11 +95,11 @@ Product has a boolean `requires_certification` flag, which is too coarse to dist
 ### Router
 
 #### Create `backend/src/routers/qualification_type.py`
-- [ ] `POST /api/v1/qualification-types` -- create qualification type. Returns QualificationTypeResponse, 201.
-- [ ] `GET /api/v1/qualification-types` -- list all. Returns list[QualificationTypeListItem].
-- [ ] `GET /api/v1/qualification-types/{qt_id}` -- get by id. Returns QualificationTypeResponse. 404 if not found.
-- [ ] `PATCH /api/v1/qualification-types/{qt_id}` -- update fields. Returns QualificationTypeResponse. 404 if not found.
-- [ ] `DELETE /api/v1/qualification-types/{qt_id}` -- delete. Returns 204. 404 if not found. 409 if in use by products.
+- [ ] `POST /api/v1/qualification-types` -- create qualification type. Returns QualificationTypeResponse, 201. Role: SM only. 409 on duplicate name.
+- [ ] `GET /api/v1/qualification-types` -- list all. Returns list[QualificationTypeListItem]. Role: SM only.
+- [ ] `GET /api/v1/qualification-types/{qt_id}` -- get by id. Returns QualificationTypeResponse. 404 if not found. Role: SM only.
+- [ ] `PATCH /api/v1/qualification-types/{qt_id}` -- update fields. Returns QualificationTypeResponse. 404 if not found. Role: SM only.
+- [ ] `DELETE /api/v1/qualification-types/{qt_id}` -- delete. Returns 204. 404 if not found. 409 if in use by products. Role: SM only.
 - [ ] `POST /api/v1/products/{product_id}/qualifications` -- body: `{ qualification_type_id: str }`. Assigns qualification to product. 201.
 - [ ] `DELETE /api/v1/products/{product_id}/qualifications/{qt_id}` -- removes qualification from product. 204.
 - [ ] `GET /api/v1/products/{product_id}/qualifications` -- list qualifications for product. Returns list[QualificationTypeListItem].
@@ -109,7 +109,7 @@ Product has a boolean `requires_certification` flag, which is too coarse to dist
 - [ ] In `create_product()`: remove `requires_certification` from `Product.create()` call
 - [ ] In `update_product()`: remove `requires_certification` from `Product.update()` call
 - [ ] In `get_product()`: fetch qualifications via QualificationTypeRepository and pass to `product_to_response()`
-- [ ] In `list_products()`: fetch qualifications for each product and pass to `product_to_list_item()`
+- [ ] In `list_products()`: fetch qualifications for all products in a single batch query (avoid N+1), pass to `product_to_list_item()`
 
 ### Frontend changes
 
@@ -140,12 +140,19 @@ Product has a boolean `requires_certification` flag, which is too coarse to dist
 #### `frontend/src/routes/products/+page.svelte`
 - [ ] Replace `requires_certification` column with qualifications count or list display
 
+### Existing test impact
+- `backend/tests/test_product.py`: tests that set or assert `requires_certification` break. Remove `requires_certification` from test inputs and assertions. Replace with qualification assignment where applicable.
+- `backend/tests/test_api_product.py`: same. Product response no longer includes `requires_certification`; now includes `qualifications` list.
+- Frontend Playwright tests that render the product create/edit form (if any reference the certification checkbox): update to use qualifications section instead.
+- `tools/seed_data.py`: creates products with `requires_certification=true`. Update to create QualificationTypes and assign them via `product_qualifications`.
+
 ### Tests (permanent)
 - [ ] `backend/tests/test_qualification_type.py` -- domain model tests:
   - Create with valid inputs
   - Reject empty name, empty target_market
 - [ ] `backend/tests/test_api_qualification_type.py` -- API tests:
   - CRUD for qualification types (create, list, get, update, delete)
+  - Create with duplicate name returns 409
   - Delete in-use qualification type returns 409
   - Assign qualification to product, list product qualifications, remove
   - Product response includes qualifications list
@@ -175,6 +182,7 @@ Product has a boolean `requires_certification` flag, which is too coarse to dist
 - `backend/tests/test_api_qualification_type.py`
 
 ## Files modified
+- `tools/seed_data.py` -- replace requires_certification with qualification type creation and assignment
 - `backend/src/domain/product.py` -- remove requires_certification
 - `backend/src/schema.py` -- add qualification_types, product_qualifications tables; migration
 - `backend/src/product_dto.py` -- replace requires_certification with qualifications list

@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 from unittest.mock import patch
 
@@ -13,6 +16,7 @@ from httpx import ASGITransport, AsyncClient
 from src.activity_repository import ActivityLogRepository
 from src.auth.session import COOKIE_NAME, create_session_cookie
 from src.db import get_db
+from src.document_repository import DocumentRepository
 from src.domain.user import User, UserRole
 from src.invoice_repository import InvoiceRepository
 from src.main import app
@@ -25,6 +29,8 @@ from src.routers.dashboard import get_invoice_repo as dash_get_invoice_repo
 from src.routers.dashboard import get_milestone_repo as dash_get_milestone_repo
 from src.routers.dashboard import get_repo as dash_get_repo
 from src.routers.dashboard import get_vendor_repo as dash_get_vendor_repo
+from src.routers.document import get_document_repo as document_get_document_repo
+from src.routers.document import get_file_storage as document_get_file_storage
 from src.routers.invoice import get_activity_repo as invoice_get_activity_repo
 from src.routers.invoice import get_invoice_repo as invoice_get_invoice_repo
 from src.routers.invoice import get_po_repo as invoice_get_po_repo
@@ -40,6 +46,7 @@ from src.routers.product import get_product_repo as product_get_product_repo
 from src.routers.vendor import get_vendor_repo as vendor_get_vendor_repo
 from src.schema import init_db
 from src.product_repository import ProductRepository
+from src.services.file_storage import FileStorageService
 from src.user_repository import UserRepository
 from src.vendor_repository import VendorRepository
 
@@ -48,8 +55,10 @@ TEST_DATABASE_URL = os.environ.get(
     "postgresql://turbo_tonic@localhost:5432/turbo_tonic_test",
 )
 
+_current_upload_dir: Path | None = None
 
-async def _setup_overrides(conn: asyncpg.Connection) -> None:
+
+async def _setup_overrides(conn: asyncpg.Connection, upload_dir: Path) -> None:
     """Register all FastAPI dependency overrides for the given connection."""
     async def override_get_repo() -> AsyncIterator[PurchaseOrderRepository]:
         yield PurchaseOrderRepository(conn)
@@ -72,6 +81,12 @@ async def _setup_overrides(conn: asyncpg.Connection) -> None:
     async def override_get_user_repo() -> AsyncIterator[UserRepository]:
         yield UserRepository(conn)
 
+    async def override_get_document_repo() -> AsyncIterator[DocumentRepository]:
+        yield DocumentRepository(conn)
+
+    def override_get_file_storage() -> FileStorageService:
+        return FileStorageService(upload_dir)
+
     app.dependency_overrides[get_repo] = override_get_repo
     app.dependency_overrides[po_get_vendor_repo] = override_get_vendor_repo
     app.dependency_overrides[po_get_invoice_repo] = override_get_invoice_repo
@@ -92,17 +107,22 @@ async def _setup_overrides(conn: asyncpg.Connection) -> None:
     app.dependency_overrides[activity_get_activity_repo] = override_get_activity_repo
     app.dependency_overrides[product_get_product_repo] = override_get_product_repo
     app.dependency_overrides[auth_get_user_repo] = override_get_user_repo
+    app.dependency_overrides[document_get_document_repo] = override_get_document_repo
+    app.dependency_overrides[document_get_file_storage] = override_get_file_storage
 
 
 @pytest_asyncio.fixture
 async def client() -> AsyncIterator[AsyncClient]:
     """Unauthenticated client -- for testing 401/403 behaviour on pre-auth flows."""
+    global _current_upload_dir
     conn = await asyncpg.connect(TEST_DATABASE_URL)
     await init_db(conn)
     tx = conn.transaction()
     await tx.start()
 
-    await _setup_overrides(conn)
+    upload_dir = Path(tempfile.mkdtemp())
+    _current_upload_dir = upload_dir
+    await _setup_overrides(conn, upload_dir)
 
     @asynccontextmanager
     async def _test_get_db() -> AsyncIterator[asyncpg.Connection]:
@@ -117,11 +137,13 @@ async def client() -> AsyncIterator[AsyncClient]:
     await tx.rollback()
     await conn.close()
     app.dependency_overrides.clear()
+    shutil.rmtree(upload_dir, ignore_errors=True)
 
 
 @pytest_asyncio.fixture
 async def authenticated_client() -> AsyncIterator[AsyncClient]:
     """Client with ADMIN session cookie -- for tests that require authentication."""
+    global _current_upload_dir
     conn = await asyncpg.connect(TEST_DATABASE_URL)
     await init_db(conn)
     tx = conn.transaction()
@@ -136,7 +158,9 @@ async def authenticated_client() -> AsyncIterator[AsyncClient]:
     cookie_value = create_session_cookie(admin.id)
     cookies = {COOKIE_NAME: cookie_value}
 
-    await _setup_overrides(conn)
+    upload_dir = Path(tempfile.mkdtemp())
+    _current_upload_dir = upload_dir
+    await _setup_overrides(conn, upload_dir)
 
     @asynccontextmanager
     async def _test_get_db() -> AsyncIterator[asyncpg.Connection]:
@@ -151,3 +175,10 @@ async def authenticated_client() -> AsyncIterator[AsyncClient]:
     await tx.rollback()
     await conn.close()
     app.dependency_overrides.clear()
+    shutil.rmtree(upload_dir, ignore_errors=True)
+
+
+@pytest.fixture
+def upload_dir() -> Path:
+    assert _current_upload_dir is not None
+    return _current_upload_dir

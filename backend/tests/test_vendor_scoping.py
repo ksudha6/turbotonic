@@ -6,9 +6,11 @@ SM/ADMIN users see everything.
 from __future__ import annotations
 
 import os
+import tempfile
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import AsyncIterator
 from unittest.mock import patch
 
@@ -184,7 +186,8 @@ async def vendor_scoping_env():
     cookie_sm = {COOKIE_NAME: create_session_cookie(sm.id)}
 
     # Dependency overrides for this connection
-    await _setup_overrides(conn)
+    _upload_dir = Path(tempfile.mkdtemp())
+    await _setup_overrides(conn, _upload_dir)
 
     @asynccontextmanager
     async def _test_get_db() -> AsyncIterator[asyncpg.Connection]:

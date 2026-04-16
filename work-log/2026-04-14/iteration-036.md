@@ -16,8 +16,8 @@ PurchaseOrder, LineItem, Vendor, and Product lack fields needed by downstream fe
 ### Domain model changes
 
 #### `backend/src/domain/purchase_order.py`
-- [ ] Add `marketplace: str | None` field to `PurchaseOrder.__init__` (after `country_of_destination`)
-- [ ] Add `marketplace` parameter to `PurchaseOrder.create()` with default `None`
+- [ ] Add `marketplace: str | None` field to `PurchaseOrder.__init__` (after `country_of_destination`). Valid values: AMZ, 3PL_1, 3PL_2, 3PL_3. Treat as reference data (add to reference data module).
+- [ ] Add `marketplace` parameter to `PurchaseOrder.create()` with default `None`. Validate against marketplace reference data if provided.
 - [ ] Add `marketplace` parameter to `PurchaseOrder.revise()` and update it on the instance
 - [ ] Add `product_id: str | None = None` field to `LineItem` dataclass
 
@@ -33,11 +33,11 @@ PurchaseOrder, LineItem, Vendor, and Product lack fields needed by downstream fe
 ### Schema migration
 
 #### `backend/src/schema.py`
-- [ ] Add `marketplace` column to `purchase_orders` table (TEXT, nullable, ALTER TABLE with try/except for existing DBs)
-- [ ] Add `product_id` column to `line_items` table (TEXT, nullable, no FK constraint since SQLite ALTER TABLE can't add FK -- enforce in application layer)
-- [ ] Add `address` column to `vendors` table (TEXT NOT NULL DEFAULT '')
-- [ ] Add `account_details` column to `vendors` table (TEXT NOT NULL DEFAULT '')
-- [ ] Add `manufacturing_address` column to `products` table (TEXT NOT NULL DEFAULT '')
+- [ ] Add `marketplace` column to `purchase_orders` table (TEXT, nullable, `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`)
+- [ ] Add `product_id` column to `line_items` table (TEXT, nullable, FK to `products(id)`)
+- [ ] Add `address` column to `vendors` table (TEXT NOT NULL DEFAULT '', `ADD COLUMN IF NOT EXISTS`)
+- [ ] Add `account_details` column to `vendors` table (TEXT NOT NULL DEFAULT '', `ADD COLUMN IF NOT EXISTS`)
+- [ ] Add `manufacturing_address` column to `products` table (TEXT NOT NULL DEFAULT '', `ADD COLUMN IF NOT EXISTS`)
 
 ### DTO changes
 

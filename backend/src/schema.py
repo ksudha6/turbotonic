@@ -172,3 +172,26 @@ async def init_db(conn: asyncpg.Connection) -> None:
         )
         """
     )
+
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS files (
+            id              TEXT PRIMARY KEY,
+            entity_type     TEXT NOT NULL,
+            entity_id       TEXT NOT NULL,
+            file_type       TEXT NOT NULL DEFAULT '',
+            original_name   TEXT NOT NULL,
+            stored_path     TEXT NOT NULL,
+            content_type    TEXT NOT NULL,
+            size_bytes      INTEGER NOT NULL,
+            uploaded_at     TEXT NOT NULL
+        )
+        """
+    )
+
+    await conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_files_entity
+        ON files (entity_type, entity_id)
+        """
+    )

@@ -16,6 +16,7 @@ build/
 *.db-wal
 
 # Project-specific
+uploads/
 logs/
 !logs/.gitkeep
 frontend/tests/scratch/

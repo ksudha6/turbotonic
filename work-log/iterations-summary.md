@@ -1,7 +1,7 @@
 # Iterations Summary
 
 > Single-file context for future conversations. Replaces reading 29 individual iteration docs.
-> Last updated: 2026-04-16 (iteration 032 closed).
+> Last updated: iteration 035 closed.
 
 ---
 
@@ -27,7 +27,7 @@ Python 3.13, FastAPI, Postgres 16 (asyncpg, connection pool), WebAuthn/passkeys 
 - **Reference data** — 30 currencies, 11 incoterms, 17 payment terms, 31 countries, 50+ ports, USD exchange rates.
 
 ### Database tables
-purchase_orders, line_items, rejection_history, vendors, products, invoices, invoice_line_items, milestone_updates, activity_log.
+purchase_orders, line_items, rejection_history, vendors, products, invoices, invoice_line_items, milestone_updates, activity_log, files.
 
 ## Frontend routes
 
@@ -45,6 +45,9 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 | `/products` | Product catalog list with vendor filter |
 | `/products/new` | Create product |
 | `/products/[id]/edit` | Edit product attributes |
+| `/login` | WebAuthn passkey login, deep link redirect support |
+| `/register` | Invite-only passkey registration (username from query param) |
+| `/setup` | First-user bootstrap, pending-user message, already-configured detection |
 
 ## API surface
 
@@ -53,8 +56,9 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - **Vendor**: CRUD, deactivate, reactivate
 - **Product**: CRUD (POST, GET list, GET by id, PATCH)
 - **Milestone**: list by PO, post milestone
-- **Activity**: list, unread count, mark read
+- **Activity**: list (with optional target_role filter), unread count (with optional target_role filter), mark read
 - **Reference data**: all lookups in one GET
+- **Document**: upload (multipart, PDF-only, 10MB limit), download (Content-Disposition), delete, list by entity
 
 ---
 
@@ -95,6 +99,9 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 | 030 | 2026-04-15 | User entity (6 roles, 3 statuses), WebAuthn passkey registration/login, cookie sessions, session middleware, bootstrap/invite flows, critical-path integration test |
 | 031 | 2026-04-15 | API role guards: require_role/require_auth on all 30+ endpoints, ADMIN bypass, bulk transition fine-grained action check, authenticated_client test fixture, dev-login endpoint |
 | 032 | 2026-04-16 | Vendor-scoped data access: VENDOR users see only their vendor's POs, invoices, milestones, activity, and dashboard data. check_vendor_access helper, 404 on ownership mismatch, bulk ops skip non-owned entities |
+| 033 | 2026-04-16 | Frontend auth flow: login page (WebAuthn passkey), invite-only register page, bootstrap/setup page, layout session check with redirect, logout, 401 handling, deep link preservation, credentials: include on all API calls, 9 new Playwright auth tests, existing tests updated with auth mock |
+| 034 | 2026-04-16 | Frontend role-conditional rendering: permissions.ts helper, role-based nav links, PO/invoice/vendor/product page button guards, page-level role redirects via +page.ts, dashboard role-filtered widgets, backend target_role filter on activity endpoints, 16 new Playwright role tests |
+| 035 | 2026-04-16 | Document storage infrastructure: files table, FileMetadata domain model, DocumentRepository, FileStorageService (local disk), upload/download/delete/list API endpoints, PDF-only 10MB limit, path traversal protection, require_auth on all endpoints, 19 new tests |
 
 ---
 
@@ -120,11 +127,16 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - API role guards on all endpoints (ADMIN bypass, per-role access control)
 - Dev-login endpoint for local development (`GET /api/v1/auth/dev-login`)
 - Vendor-scoped data access: VENDOR users see only their vendor's POs, invoices, milestones, activity, and dashboard data (check_vendor_access helper, 404 on ownership mismatch)
+- Frontend auth flow: login page (/login), invite-only register page (/register?username=), bootstrap page (/setup), layout session check with redirect to /login, logout button, deep link preservation
+- All frontend API calls send credentials (cookies) and redirect to /login on 401
+- Frontend role-conditional rendering: nav links, page-level redirects, action buttons all respect user role. SM/ADMIN see management controls, VENDOR sees accept/reject/invoice/milestone controls, QUALITY_LAB sees products only, FREIGHT_MANAGER sees POs read-only
+- Backend activity endpoints accept optional target_role filter for role-scoped feeds
+- Document storage: upload/download/delete/list API backed by local filesystem (`uploads/`), metadata in `files` table with entity_type/entity_id index, PDF-only with 10MB limit, filename sanitization, path traversal protection, require_auth on all endpoints
 
 ## What does not exist yet
 
 ### From the backlog (PO confirmation module)
-- Roles: SM vs Vendor views (same data, different controls) — backend scoping done (iter 032), frontend auth flow (iter 033) and role-conditional rendering (iter 034) pending
+- Roles: SM vs Vendor views (same data, different controls) — complete (backend scoping iter 032, frontend auth iter 033, role-conditional rendering iter 034)
 - Overdue PO status (time-based trigger past required delivery date)
 - Mobile layout
 - Custom value approval for reference data dropdowns
@@ -143,21 +155,26 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - Stale PENDING user cleanup (invited but never registered)
 - Proxy access for internal leave coverage (delegation table, time-bounded, audit trail)
 - Email/notification for invite links (manual link sharing works for small teams)
-- PROCUREMENT_MANAGER role permissions: enum value exists from iter 030, no endpoint guards wired. Future iteration to define and wire access (read-only PO/vendor/invoice visibility, pay/dispute invoices)
+- PROCUREMENT_MANAGER role permissions: enum value exists from iter 030, no endpoint guards wired. Future iteration to define and wire access (read-only PO/vendor/invoice visibility, pay/dispute invoices). Frontend: define redirect behavior for PM on non-dashboard pages.
+- User management page (`/users`): ADMIN can list, invite, deactivate, reactivate users, reset credentials. Nav "Users" link hidden until page exists.
 - Invite token security: replace `/register?username=<name>` with `/register?token=<uuid>`. Add invite_token column to users table, set on invite, cleared after registration. Prevents guessable registration URLs.
 - Welcome email on invite: send registration link via email when admin invites a user. Currently manual link sharing.
 
 ### From the backlog (UX)
 - Error handling across all users and workflows: define and surface user-facing error states for every endpoint (validation errors, conflict errors, not-found, auth failures). Currently errors are ad hoc per endpoint with no consistent frontend treatment.
 - Recent activity redesign: club PO and invoice activity into a unified feed (currently separate activity streams). Needs discussion on grouping, filtering, and presentation.
-- Deep link preservation on register/bootstrap: if an invited user opens a deep link (e.g. `/po/123`) and lands on `/register`, the original path is lost. After registration they go to `/dashboard`, not the deep link. Same for `/setup`. Low priority since registration is a one-time event.
+- Deep link preservation on register/bootstrap: deep link preservation on /login is done (iter 033). If an invited user opens a deep link (e.g. `/po/123`) and lands on `/register` or `/setup`, the original path is still lost. After registration/bootstrap they go to `/dashboard`, not the deep link. Low priority since registration is a one-time event.
 - Session cookie path/domain audit: verify the session cookie is set with `path=/` and appropriate domain/SameSite attributes for production deployment behind a reverse proxy. Currently works in dev via Vite proxy.
 
 ### From the backlog (infrastructure)
+- File endpoint role guards: restrict upload/download/delete by role and entity ownership. Currently any authenticated user can access any file. Define guard rules once consuming features (certificates, shipment docs) are built.
+- File upload entity existence validation: upload endpoint accepts any entity_type/entity_id without checking the entity exists. Decide per-feature whether to validate at upload time or at the consuming feature level.
+- Vendor catalog / vendor-SKU mapping: products are vendor-agnostic, but a vendor's catalog defines which SKUs they offer. Line item product_id should reference a SKU in the vendor's catalog. New entity needed.
 - HTTPS for non-localhost deployment (WebAuthn requires HTTPS or localhost; needed before first external demo)
 - Database migration tool (alembic or similar; needed once real data exists that can't be dropped and recreated)
 - Session revocation ("log out all devices"; currently relies on cookie expiry + user status check)
 - Self-service vendor onboarding (currently invite-only; needed if vendors should sign up without admin)
+- Dev-login UX: dev-login is a GET endpoint that returns JSON and sets a cookie, but doesn't redirect to the app. After hitting dev-login the user must manually navigate to /dashboard. Either redirect dev-login to /dashboard, or add a "Dev Login" button on the /login page when running in development mode.
 - Remove dev-login endpoint before production deployment
 
 ### From the roadmap (post-confirmation)
@@ -211,3 +228,5 @@ These are the product differentiators. The CRUD workflow (items 1-3, 5, 7-10) is
 | 030 | User, UserRole (6 values), UserStatus (3 values), WebAuthnCredential, SessionCookie, Bootstrap |
 | 031 | RoleGuard, RequireRole, RequireAuth |
 | 032 | VendorScopedAccess |
+| 034 | RolePermission, RoleConditionalRendering |
+| 035 | FileMetadata, FileStorageService, DocumentRepository |
