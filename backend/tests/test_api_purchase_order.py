@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
-from src.domain.purchase_order import POStatus
+from src.domain.purchase_order import LineItemStatus, POStatus
 
 pytestmark = pytest.mark.asyncio
 
@@ -731,3 +731,164 @@ async def test_create_po_hs_code_minimum_length_returns_201(authenticated_client
     # "1234" is the minimum valid HS code: 4 digits
     _, status = await _make_payload_with_hs_code(client, "1234")
     assert status == 201
+
+
+# ---------------------------------------------------------------------------
+# accept-lines helpers
+# ---------------------------------------------------------------------------
+
+_LINE_ITEM_2: dict = {
+    "part_number": "PN-002",
+    "description": "Widget B",
+    "quantity": 5,
+    "uom": "EA",
+    "unit_price": "3.00",
+    "hs_code": "8471.30",
+    "country_of_origin": "US",
+}
+
+
+async def _create_two_line_po(client: AsyncClient) -> dict:
+    """Create and return a PO with two line items (PN-001 and PN-002)."""
+    vendor_resp = await client.post(
+        "/api/v1/vendors/", json={"name": "TwoLine Vendor", "country": "US", "vendor_type": "PROCUREMENT"}
+    )
+    assert vendor_resp.status_code == 201
+    vendor_id = vendor_resp.json()["id"]
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "line_items": [_LINE_ITEM, _LINE_ITEM_2]}
+    resp = await client.post("/api/v1/po/", json=payload)
+    assert resp.status_code == 201
+    return resp.json()
+
+
+# ---------------------------------------------------------------------------
+# accept-lines: happy paths
+# ---------------------------------------------------------------------------
+
+
+async def test_accept_lines_all_accepted_api(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
+    po = await _create_two_line_po(client)
+    await client.post(f"/api/v1/po/{po['id']}/submit")
+
+    decisions = [
+        {"part_number": "PN-001", "status": "ACCEPTED"},
+        {"part_number": "PN-002", "status": "ACCEPTED"},
+    ]
+    resp = await client.post(f"/api/v1/po/{po['id']}/accept-lines", json={"decisions": decisions})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == LineItemStatus.ACCEPTED.value
+    line_statuses = {li["part_number"]: li["status"] for li in data["line_items"]}
+    assert line_statuses == {"PN-001": "ACCEPTED", "PN-002": "ACCEPTED"}
+
+
+async def test_accept_lines_partial_reject_api(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
+    rejection_comment = "PN-002 price too high"
+    po = await _create_two_line_po(client)
+    await client.post(f"/api/v1/po/{po['id']}/submit")
+
+    decisions = [
+        {"part_number": "PN-001", "status": "ACCEPTED"},
+        {"part_number": "PN-002", "status": "REJECTED"},
+    ]
+    resp = await client.post(
+        f"/api/v1/po/{po['id']}/accept-lines",
+        json={"decisions": decisions, "comment": rejection_comment},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == POStatus.REJECTED.value
+    assert len(data["rejection_history"]) == 1
+    assert data["rejection_history"][0]["comment"] == rejection_comment
+    line_statuses = {li["part_number"]: li["status"] for li in data["line_items"]}
+    assert line_statuses == {"PN-001": "ACCEPTED", "PN-002": "REJECTED"}
+
+
+# ---------------------------------------------------------------------------
+# accept-lines: error cases
+# ---------------------------------------------------------------------------
+
+
+async def test_accept_lines_omitting_line_returns_422(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
+    po = await _create_two_line_po(client)
+    await client.post(f"/api/v1/po/{po['id']}/submit")
+
+    # Only PN-001 decision provided; PN-002 is omitted
+    decisions = [{"part_number": "PN-001", "status": "ACCEPTED"}]
+    resp = await client.post(f"/api/v1/po/{po['id']}/accept-lines", json={"decisions": decisions})
+    assert resp.status_code == 422
+
+
+async def test_accept_lines_unknown_part_number_returns_422(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
+    po = await _create_two_line_po(client)
+    await client.post(f"/api/v1/po/{po['id']}/submit")
+
+    decisions = [
+        {"part_number": "PN-001", "status": "ACCEPTED"},
+        {"part_number": "PN-002", "status": "ACCEPTED"},
+        {"part_number": "UNKNOWN-999", "status": "ACCEPTED"},
+    ]
+    resp = await client.post(f"/api/v1/po/{po['id']}/accept-lines", json={"decisions": decisions})
+    assert resp.status_code == 422
+
+
+async def test_accept_lines_not_pending_returns_409(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
+    po = await _create_two_line_po(client)
+    # PO is DRAFT, not PENDING
+
+    decisions = [
+        {"part_number": "PN-001", "status": "ACCEPTED"},
+        {"part_number": "PN-002", "status": "ACCEPTED"},
+    ]
+    resp = await client.post(f"/api/v1/po/{po['id']}/accept-lines", json={"decisions": decisions})
+    assert resp.status_code == 409
+
+
+async def test_accept_lines_missing_comment_returns_422(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
+    po = await _create_two_line_po(client)
+    await client.post(f"/api/v1/po/{po['id']}/submit")
+
+    # REJECTED line but no comment provided
+    decisions = [
+        {"part_number": "PN-001", "status": "ACCEPTED"},
+        {"part_number": "PN-002", "status": "REJECTED"},
+    ]
+    resp = await client.post(f"/api/v1/po/{po['id']}/accept-lines", json={"decisions": decisions})
+    assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# remaining quantities: rejected lines return 0 remaining
+# ---------------------------------------------------------------------------
+
+
+async def test_remaining_quantities_excludes_rejected_lines(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
+    rejection_comment = "PN-002 rejected"
+    po = await _create_two_line_po(client)
+    await client.post(f"/api/v1/po/{po['id']}/submit")
+
+    decisions = [
+        {"part_number": "PN-001", "status": "ACCEPTED"},
+        {"part_number": "PN-002", "status": "REJECTED"},
+    ]
+    await client.post(
+        f"/api/v1/po/{po['id']}/accept-lines",
+        json={"decisions": decisions, "comment": rejection_comment},
+    )
+
+    resp = await client.get(f"/api/v1/invoices/po/{po['id']}/remaining")
+    assert resp.status_code == 200
+    data = resp.json()
+    lines = {line["part_number"]: line for line in data["lines"]}
+    # PN-001 is accepted: remaining equals ordered quantity
+    assert lines["PN-001"]["remaining"] == lines["PN-001"]["ordered"]
+    # PN-002 is rejected: remaining is 0 regardless of ordered quantity
+    assert lines["PN-002"]["remaining"] == 0
+    assert lines["PN-002"]["ordered"] == 5

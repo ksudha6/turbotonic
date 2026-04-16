@@ -9,6 +9,7 @@ import asyncpg
 
 from src.domain.purchase_order import (
     LineItem,
+    LineItemStatus,
     POStatus,
     POType,
     PurchaseOrder,
@@ -89,8 +90,8 @@ class PurchaseOrderRepository:
                         """
                         INSERT INTO line_items (
                             id, po_id, part_number, description, quantity,
-                            uom, unit_price, hs_code, country_of_origin, product_id, sort_order
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                            uom, unit_price, hs_code, country_of_origin, product_id, sort_order, status
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                         """,
                         str(uuid4()),
                         po.id,
@@ -103,6 +104,7 @@ class PurchaseOrderRepository:
                         item.country_of_origin,
                         item.product_id,
                         sort_order,
+                        item.status.value,
                     )
 
                 for record in po.rejection_history:
@@ -159,8 +161,8 @@ class PurchaseOrderRepository:
                         """
                         INSERT INTO line_items (
                             id, po_id, part_number, description, quantity,
-                            uom, unit_price, hs_code, country_of_origin, product_id, sort_order
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                            uom, unit_price, hs_code, country_of_origin, product_id, sort_order, status
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                         """,
                         str(uuid4()),
                         po.id,
@@ -173,6 +175,7 @@ class PurchaseOrderRepository:
                         item.country_of_origin,
                         item.product_id,
                         sort_order,
+                        item.status.value,
                     )
 
                 # Append only new rejection records by comparing persisted count to
@@ -433,6 +436,7 @@ def _reconstruct(
             hs_code=row["hs_code"],
             country_of_origin=row["country_of_origin"],
             product_id=row["product_id"],
+            status=LineItemStatus(row["status"]) if row["status"] else LineItemStatus.PENDING,
         )
         for row in item_rows
     ]

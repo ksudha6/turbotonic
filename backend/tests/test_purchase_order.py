@@ -7,6 +7,7 @@ import pytest
 
 from src.domain.purchase_order import (
     LineItem,
+    LineItemStatus,
     POStatus,
     PurchaseOrder,
     RejectionRecord,
@@ -517,3 +518,125 @@ def test_created_at_is_read_only() -> None:
     po = make_po()
     with pytest.raises(AttributeError):
         po.created_at = datetime.now(UTC)  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# LineItemStatus defaults
+# ---------------------------------------------------------------------------
+
+
+def test_line_item_default_status_is_pending() -> None:
+    item = make_line_item()
+    assert item.status is LineItemStatus.PENDING
+
+
+# ---------------------------------------------------------------------------
+# accept() and reject() set all line item statuses
+# ---------------------------------------------------------------------------
+
+
+def test_accept_sets_all_line_items_accepted() -> None:
+    items = [
+        make_line_item(part_number="A"),
+        make_line_item(part_number="B"),
+    ]
+    po = make_po(line_items=items)
+    po.submit()
+    po.accept()
+    statuses = {item.part_number: item.status for item in po.line_items}
+    assert statuses == {"A": LineItemStatus.ACCEPTED, "B": LineItemStatus.ACCEPTED}
+
+
+def test_reject_sets_all_line_items_rejected() -> None:
+    rejection_comment = "Whole order rejected"
+    items = [
+        make_line_item(part_number="A"),
+        make_line_item(part_number="B"),
+    ]
+    po = make_po(line_items=items)
+    po.submit()
+    po.reject(rejection_comment)
+    statuses = {item.part_number: item.status for item in po.line_items}
+    assert statuses == {"A": LineItemStatus.REJECTED, "B": LineItemStatus.REJECTED}
+
+
+# ---------------------------------------------------------------------------
+# accept_lines()
+# ---------------------------------------------------------------------------
+
+
+def test_accept_lines_all_accepted() -> None:
+    items = [
+        make_line_item(part_number="PN-001"),
+        make_line_item(part_number="PN-002"),
+    ]
+    po = make_po(line_items=items)
+    po.submit()
+    decisions = [
+        {"part_number": "PN-001", "status": "ACCEPTED"},
+        {"part_number": "PN-002", "status": "ACCEPTED"},
+    ]
+    po.accept_lines(decisions, comment=None)
+    assert po.status is POStatus.ACCEPTED
+    statuses = {item.part_number: item.status for item in po.line_items}
+    assert statuses == {"PN-001": LineItemStatus.ACCEPTED, "PN-002": LineItemStatus.ACCEPTED}
+
+
+def test_accept_lines_partial_reject() -> None:
+    rejection_comment = "Part PN-002 price too high"
+    items = [
+        make_line_item(part_number="PN-001"),
+        make_line_item(part_number="PN-002"),
+    ]
+    po = make_po(line_items=items)
+    po.submit()
+    decisions = [
+        {"part_number": "PN-001", "status": "ACCEPTED"},
+        {"part_number": "PN-002", "status": "REJECTED"},
+    ]
+    po.accept_lines(decisions, comment=rejection_comment)
+    assert po.status is POStatus.REJECTED
+    statuses = {item.part_number: item.status for item in po.line_items}
+    assert statuses == {"PN-001": LineItemStatus.ACCEPTED, "PN-002": LineItemStatus.REJECTED}
+    assert len(po.rejection_history) == 1
+    assert po.rejection_history[0].comment == rejection_comment
+
+
+def test_accept_lines_missing_line_item() -> None:
+    items = [
+        make_line_item(part_number="PN-001"),
+        make_line_item(part_number="PN-002"),
+    ]
+    po = make_po(line_items=items)
+    po.submit()
+    # Only one decision provided; PN-002 is omitted
+    decisions = [{"part_number": "PN-001", "status": "ACCEPTED"}]
+    with pytest.raises(ValueError, match="PN-002"):
+        po.accept_lines(decisions, comment=None)
+
+
+def test_accept_lines_unknown_part_number() -> None:
+    po = make_po(line_items=[make_line_item(part_number="PN-001")])
+    po.submit()
+    decisions = [
+        {"part_number": "PN-001", "status": "ACCEPTED"},
+        {"part_number": "UNKNOWN-999", "status": "ACCEPTED"},
+    ]
+    with pytest.raises(ValueError, match="UNKNOWN-999"):
+        po.accept_lines(decisions, comment=None)
+
+
+def test_accept_lines_not_pending() -> None:
+    po = make_po(line_items=[make_line_item(part_number="PN-001")])
+    # PO is in DRAFT, not PENDING
+    decisions = [{"part_number": "PN-001", "status": "ACCEPTED"}]
+    with pytest.raises(ValueError, match="PENDING"):
+        po.accept_lines(decisions, comment=None)
+
+
+def test_accept_lines_reject_without_comment() -> None:
+    po = make_po(line_items=[make_line_item(part_number="PN-001")])
+    po.submit()
+    decisions = [{"part_number": "PN-001", "status": "REJECTED"}]
+    with pytest.raises(ValueError, match="comment"):
+        po.accept_lines(decisions, comment=None)

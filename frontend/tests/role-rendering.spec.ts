@@ -87,7 +87,8 @@ const PENDING_PO = {
 			uom: 'PCS',
 			unit_price: '100',
 			hs_code: '7318.15',
-			country_of_origin: 'CN'
+			country_of_origin: 'CN',
+			status: 'PENDING'
 		}
 	],
 	rejection_history: [],
@@ -273,8 +274,8 @@ test('VENDOR on PO detail (PENDING) sees Accept and Reject', async ({ page }) =>
 	});
 	await page.goto('/po/po-1');
 	await page.waitForSelector('h1');
-	await expect(page.getByRole('button', { name: 'Accept' })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Reject' })).toBeVisible();
+	await expect(page.locator('.actions').getByRole('button', { name: 'Accept' })).toBeVisible();
+	await expect(page.locator('.actions').getByRole('button', { name: 'Reject' })).toBeVisible();
 });
 
 test('ADMIN on PO detail (DRAFT) has same buttons as SM', async ({ page }) => {

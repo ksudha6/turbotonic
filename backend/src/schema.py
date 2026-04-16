@@ -175,6 +175,15 @@ async def init_db(conn: asyncpg.Connection) -> None:
 
     await conn.execute("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS marketplace TEXT")
     await conn.execute("ALTER TABLE line_items ADD COLUMN IF NOT EXISTS product_id TEXT REFERENCES products(id)")
+    await conn.execute("ALTER TABLE line_items ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'PENDING'")
+    # Backfill: line items on ACCEPTED POs receive ACCEPTED status; all others keep PENDING
+    await conn.execute(
+        """
+        UPDATE line_items
+        SET status = 'ACCEPTED'
+        WHERE po_id IN (SELECT id FROM purchase_orders WHERE status = 'ACCEPTED')
+        """
+    )
     await conn.execute("ALTER TABLE vendors ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT ''")
     await conn.execute("ALTER TABLE vendors ADD COLUMN IF NOT EXISTS account_details TEXT NOT NULL DEFAULT ''")
     await conn.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturing_address TEXT NOT NULL DEFAULT ''")

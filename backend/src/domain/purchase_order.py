@@ -29,6 +29,12 @@ class POType(Enum):
     OPEX = "OPEX"
 
 
+class LineItemStatus(Enum):
+    PENDING = "PENDING"
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+
+
 @dataclass
 class LineItem:
     part_number: str
@@ -39,6 +45,7 @@ class LineItem:
     hs_code: str
     country_of_origin: str
     product_id: str | None = None
+    status: LineItemStatus = field(default=LineItemStatus.PENDING)
 
     def __post_init__(self) -> None:
         if not self.part_number or not self.part_number.strip():
@@ -237,6 +244,8 @@ class PurchaseOrder:
             raise ValueError(
                 f"accept requires PENDING status; current status is {self.status.value}"
             )
+        for item in self.line_items:
+            item.status = LineItemStatus.ACCEPTED
         self.status = POStatus.ACCEPTED
         self.updated_at = datetime.now(UTC)
 
@@ -248,10 +257,67 @@ class PurchaseOrder:
             raise ValueError(
                 f"reject requires PENDING status; current status is {self.status.value}"
             )
+        for item in self.line_items:
+            item.status = LineItemStatus.REJECTED
         self.rejection_history.append(
             RejectionRecord(comment=comment, rejected_at=datetime.now(UTC))
         )
         self.status = POStatus.REJECTED
+        self.updated_at = datetime.now(UTC)
+
+    def accept_lines(self, decisions: list[dict[str, str]], comment: str | None) -> None:
+        # accept_lines owns per-line vendor response; PO must be under review
+        if self.status is not POStatus.PENDING:
+            raise ValueError(
+                f"accept_lines requires PENDING status; current status is {self.status.value}"
+            )
+        # Validate decisions: every part_number must map to a known line item
+        known_parts = {item.part_number for item in self.line_items}
+        decision_parts = [d["part_number"] for d in decisions]
+        decision_part_set = set(decision_parts)
+
+        if len(decision_parts) != len(decision_part_set):
+            raise ValueError("decisions must not contain duplicate part_numbers")
+
+        extras = decision_part_set - known_parts
+        if extras:
+            raise ValueError(f"unknown part_numbers in decisions: {sorted(extras)}")
+
+        omissions = known_parts - decision_part_set
+        if omissions:
+            raise ValueError(f"decisions missing part_numbers: {sorted(omissions)}")
+
+        # Validate status values in decisions
+        for d in decisions:
+            try:
+                LineItemStatus(d["status"])
+            except (KeyError, ValueError) as exc:
+                raise ValueError(
+                    f"invalid status {d.get('status')!r} for part_number {d.get('part_number')!r}; must be ACCEPTED or REJECTED"
+                ) from exc
+            if LineItemStatus(d["status"]) is LineItemStatus.PENDING:
+                raise ValueError("decisions may not set status to PENDING")
+
+        # comment required when any line is rejected
+        any_rejected = any(d["status"] == "REJECTED" for d in decisions)
+        if any_rejected:
+            if not comment or not comment.strip():
+                raise ValueError("comment is required when any line is rejected")
+
+        # Apply decisions to line items
+        decision_map = {d["part_number"]: LineItemStatus(d["status"]) for d in decisions}
+        for item in self.line_items:
+            item.status = decision_map[item.part_number]
+
+        # Determine PO-level outcome
+        if any_rejected:
+            self.rejection_history.append(
+                RejectionRecord(comment=comment, rejected_at=datetime.now(UTC))  # type: ignore[arg-type]
+            )
+            self.status = POStatus.REJECTED
+        else:
+            self.status = POStatus.ACCEPTED
+
         self.updated_at = datetime.now(UTC)
 
     def revise(

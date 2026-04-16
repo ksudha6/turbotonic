@@ -2,13 +2,13 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf, createInvoice, listInvoicesByPO, fetchReferenceData, getRemainingQuantities, listMilestones, postMilestone, listProducts } from '$lib/api';
+	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf, createInvoice, listInvoicesByPO, fetchReferenceData, getRemainingQuantities, listMilestones, postMilestone, listProducts, acceptLinesPO } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import RejectDialog from '$lib/components/RejectDialog.svelte';
 	import CreateInvoiceDialog from '$lib/components/CreateInvoiceDialog.svelte';
 	import MilestoneTimeline from '$lib/components/MilestoneTimeline.svelte';
 	import ActivityTimeline from '$lib/components/ActivityTimeline.svelte';
-	import type { PurchaseOrder, InvoiceListItem, ReferenceData, RemainingLine, InvoiceLineItemCreate, MilestoneUpdate, ProductListItem } from '$lib/types';
+	import type { PurchaseOrder, InvoiceListItem, ReferenceData, RemainingLine, InvoiceLineItemCreate, MilestoneUpdate, ProductListItem, LineItemStatus } from '$lib/types';
 	import { buildLabelResolver } from '$lib/labels';
 	import { canEditPO, canSubmitPO, canAcceptRejectPO, canCreateInvoice, canPostMilestone } from '$lib/permissions';
 
@@ -24,6 +24,10 @@
 	let opexError: string = $state('');
 	let milestones: MilestoneUpdate[] = $state([]);
 	let certRequired: Set<string> = $state(new Set());
+	// Per-line decisions for accept-lines flow (VENDOR on PENDING PO)
+	let lineDecisions: Map<string, 'ACCEPTED' | 'REJECTED' | null> = $state(new Map());
+	let acceptLinesComment: string = $state('');
+	let acceptLinesError: string = $state('');
 
 	const id: string = page.params.id ?? '';
 	const role = $derived(page.data.user?.role);
@@ -44,6 +48,10 @@
 				const resp = await getRemainingQuantities(id);
 				remainingMap = new Map(resp.lines.map((l) => [l.part_number, l]));
 				milestones = await listMilestones(id);
+			}
+			// Initialise per-line decisions when VENDOR lands on a PENDING PO
+			if (po.status === 'PENDING' && role && canAcceptRejectPO(role)) {
+				initLineDecisions();
 			}
 		} finally {
 			loading = false;
@@ -90,6 +98,50 @@
 		showInvoiceDialog = false;
 		const invoice = await createInvoice(id, lineItems);
 		goto(`/invoice/${invoice.id}`);
+	}
+
+	function initLineDecisions() {
+		if (!po) return;
+		lineDecisions = new Map(po.line_items.map((item): [string, 'ACCEPTED' | 'REJECTED' | null] => [item.part_number, null]));
+		acceptLinesComment = '';
+		acceptLinesError = '';
+	}
+
+	function setLineDecision(partNumber: string, status: 'ACCEPTED' | 'REJECTED') {
+		const current = lineDecisions.get(partNumber);
+		// Toggle off if same status clicked again
+		lineDecisions = new Map(lineDecisions).set(partNumber, current === status ? null : status);
+	}
+
+	function allLinesDecided(): boolean {
+		for (const v of lineDecisions.values()) {
+			if (v === null) return false;
+		}
+		return lineDecisions.size > 0;
+	}
+
+	function anyLineRejected(): boolean {
+		for (const v of lineDecisions.values()) {
+			if (v === 'REJECTED') return true;
+		}
+		return false;
+	}
+
+	async function handleAcceptLines() {
+		acceptLinesError = '';
+		const decisions = Array.from(lineDecisions.entries()).map(([part_number, status]) => ({
+			part_number,
+			status: status as 'ACCEPTED' | 'REJECTED'
+		}));
+		try {
+			await acceptLinesPO(id, {
+				decisions,
+				comment: acceptLinesComment.trim() || null
+			});
+			await fetchPO();
+		} catch (err: unknown) {
+			acceptLinesError = err instanceof Error ? err.message : String(err);
+		}
 	}
 
 	async function handlePostMilestone(milestone: string) {
@@ -235,6 +287,11 @@
 					<th>HS Code</th>
 					<th>Origin</th>
 					<th>Cert</th>
+					{#if po.status !== 'PENDING' || !(role && canAcceptRejectPO(role))}
+						<th>Status</th>
+					{:else}
+						<th>Decision</th>
+					{/if}
 				</tr>
 			</thead>
 			<tbody>
@@ -257,10 +314,51 @@
 								<span class="badge badge-cert">Required</span>
 							{/if}
 						</td>
+						<td>
+							{#if po.status === 'PENDING' && role && canAcceptRejectPO(role)}
+								<div class="line-decision-btns">
+									<button
+										class="btn-line-decision {lineDecisions.get(item.part_number) === 'ACCEPTED' ? 'active-accept' : ''}"
+										onclick={() => setLineDecision(item.part_number, 'ACCEPTED')}
+									>Accept</button>
+									<button
+										class="btn-line-decision {lineDecisions.get(item.part_number) === 'REJECTED' ? 'active-reject' : ''}"
+										onclick={() => setLineDecision(item.part_number, 'REJECTED')}
+									>Reject</button>
+								</div>
+							{:else}
+								<span class="badge badge-line-status badge-{item.status.toLowerCase()}">{item.status}</span>
+							{/if}
+						</td>
 					</tr>
 				{/each}
 			</tbody>
 		</table>
+
+		{#if po.status === 'PENDING' && role && canAcceptRejectPO(role)}
+			{#if anyLineRejected()}
+				<div class="accept-lines-comment">
+					<label for="accept-lines-comment" class="field-label">Rejection comment (required)</label>
+					<textarea
+						id="accept-lines-comment"
+						class="textarea"
+						bind:value={acceptLinesComment}
+						rows={3}
+						placeholder="Explain which items cannot be supplied and why"
+					></textarea>
+				</div>
+			{/if}
+			{#if acceptLinesError}
+				<p class="error-message">{acceptLinesError}</p>
+			{/if}
+			<div class="accept-lines-actions">
+				<button
+					class="btn btn-primary"
+					disabled={!allLinesDecided() || (anyLineRejected() && !acceptLinesComment.trim())}
+					onclick={handleAcceptLines}
+				>Submit Response</button>
+			</div>
+		{/if}
 	</div>
 
 	{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT'}

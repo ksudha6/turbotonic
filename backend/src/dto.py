@@ -175,6 +175,40 @@ class RejectRequest(BaseModel):
         return stripped
 
 
+_VALID_LINE_DECISION_STATUSES: tuple[str, ...] = ("ACCEPTED", "REJECTED")
+
+
+class LineDecision(BaseModel):
+    part_number: str
+    status: str
+
+    @field_validator("part_number")
+    @classmethod
+    def part_number_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("part_number must not be empty or whitespace-only")
+        return v
+
+    @field_validator("status")
+    @classmethod
+    def status_must_be_valid(cls, v: str) -> str:
+        if v not in _VALID_LINE_DECISION_STATUSES:
+            raise ValueError(f"status must be one of: {', '.join(_VALID_LINE_DECISION_STATUSES)}")
+        return v
+
+
+class AcceptLinesRequest(BaseModel):
+    decisions: list[LineDecision]
+    comment: str | None = None
+
+    @field_validator("decisions")
+    @classmethod
+    def decisions_not_empty(cls, v: list[LineDecision]) -> list[LineDecision]:
+        if not v:
+            raise ValueError("decisions must not be empty")
+        return v
+
+
 class LineItemResponse(BaseModel):
     part_number: str
     description: str
@@ -184,6 +218,7 @@ class LineItemResponse(BaseModel):
     hs_code: str
     country_of_origin: str
     product_id: str | None = None
+    status: str = "PENDING"
 
 
 class RejectionResponse(BaseModel):
@@ -255,6 +290,7 @@ def _line_item_to_response(item: LineItem) -> LineItemResponse:
         hs_code=item.hs_code,
         country_of_origin=item.country_of_origin,
         product_id=item.product_id,
+        status=item.status.value,
     )
 
 

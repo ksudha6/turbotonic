@@ -13,6 +13,7 @@ from src.domain.purchase_order import LineItem, POStatus, POType, PurchaseOrder
 from src.domain.user import User, UserRole
 from src.domain.vendor import VendorStatus
 from src.dto import (
+    AcceptLinesRequest,
     BulkTransitionItemResult,
     BulkTransitionRequest,
     BulkTransitionResult,
@@ -332,6 +333,36 @@ async def reject_po(po_id: str, body: RejectRequest, repo: RepoDep, vendor_repo:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await repo.save(po)
     await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_REJECTED, detail=body.comment)
+    vendor = await vendor_repo.get_by_id(po.vendor_id)
+    vname = vendor.name if vendor else ""
+    vcountry = vendor.country if vendor else ""
+    return po_to_response(po, vendor_name=vname, vendor_country=vcountry)
+
+
+@router.post("/{po_id}/accept-lines", response_model=PurchaseOrderResponse)
+async def accept_lines_po(
+    po_id: str,
+    body: AcceptLinesRequest,
+    repo: RepoDep,
+    vendor_repo: VendorRepoDep,
+    activity_repo: ActivityRepoDep,
+    user: User = require_role(UserRole.VENDOR),
+) -> PurchaseOrderResponse:
+    po = await repo.get(po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
+    decisions = [{"part_number": d.part_number, "status": d.status} for d in body.decisions]
+    try:
+        po.accept_lines(decisions, body.comment)
+    except ValueError as exc:
+        status_code = 409 if "requires PENDING status" in str(exc) else 422
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    await repo.save(po)
+    if po.status.value == "ACCEPTED":
+        await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_ACCEPTED)
+    else:
+        await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_REJECTED, detail=body.comment)
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vname = vendor.name if vendor else ""
     vcountry = vendor.country if vendor else ""

@@ -49,7 +49,8 @@ const LINE_ITEM = {
 	uom: 'pcs',
 	unit_price: '15',
 	hs_code: '7318.15',
-	country_of_origin: 'CN'
+	country_of_origin: 'CN',
+	status: 'PENDING'
 };
 
 function makePO(status: string, extra: object = {}) {
@@ -200,8 +201,8 @@ test('pending PO shows Accept and Reject buttons', async ({ page }) => {
 	await page.goto(`/po/${PO_ID}`);
 	await page.waitForSelector('h1');
 
-	await expect(page.getByRole('button', { name: 'Accept' })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Reject' })).toBeVisible();
+	await expect(page.locator('.actions').getByRole('button', { name: 'Accept' })).toBeVisible();
+	await expect(page.locator('.actions').getByRole('button', { name: 'Reject' })).toBeVisible();
 });
 
 test('accepted PO shows read-only view', async ({ page }) => {
@@ -342,7 +343,7 @@ test('reject modal requires non-empty comment', async ({ page }) => {
 	await page.goto(`/po/${PO_ID}`);
 	await page.waitForSelector('h1');
 
-	await page.getByRole('button', { name: 'Reject' }).click();
+	await page.locator('.actions').getByRole('button', { name: 'Reject' }).click();
 	await page.waitForSelector('.dialog');
 
 	// Confirm button is disabled when comment is empty
@@ -516,7 +517,7 @@ test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ pa
 	currentVendorId = 'vendor-1';
 	await page.reload();
 	await page.waitForSelector('h1');
-	await page.getByRole('button', { name: 'Reject' }).click();
+	await page.locator('.actions').getByRole('button', { name: 'Reject' }).click();
 	await page.waitForSelector('.dialog');
 	await page.locator('.dialog textarea').fill('Need revision');
 	await page.locator('.dialog .btn-danger').click();
@@ -554,7 +555,7 @@ test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ pa
 	currentVendorId = 'vendor-1';
 	await page.reload();
 	await page.waitForSelector('h1');
-	await page.getByRole('button', { name: 'Accept' }).click();
+	await page.locator('.actions').getByRole('button', { name: 'Accept' }).click();
 	await expect(page.locator('body')).toContainText('Accepted');
 });
 

@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
+import type { AcceptLinesRequest, ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -102,6 +102,10 @@ export function rejectPO(id: string, comment: string): Promise<PurchaseOrder> {
 
 export function resubmitPO(id: string): Promise<PurchaseOrder> {
 	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/resubmit`);
+}
+
+export function acceptLinesPO(id: string, request: AcceptLinesRequest): Promise<PurchaseOrder> {
+	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/accept-lines`, request);
 }
 
 export function downloadPoPdf(id: string): void {

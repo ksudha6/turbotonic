@@ -35,6 +35,8 @@ export interface VendorInput {
 	account_details: string;
 }
 
+export type LineItemStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+
 export interface LineItem {
 	part_number: string;
 	description: string;
@@ -44,6 +46,17 @@ export interface LineItem {
 	hs_code: string;
 	country_of_origin: string;
 	product_id: string | null;
+	status: LineItemStatus;
+}
+
+export interface LineDecision {
+	part_number: string;
+	status: 'ACCEPTED' | 'REJECTED';
+}
+
+export interface AcceptLinesRequest {
+	decisions: LineDecision[];
+	comment: string | null;
 }
 
 export interface RejectionRecord {
