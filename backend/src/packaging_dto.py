@@ -50,6 +50,7 @@ class PackagingSpecResponse(BaseModel):
     description: str
     requirements_text: str
     status: PackagingSpecStatus
+    document_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -63,6 +64,7 @@ def spec_to_response(spec: PackagingSpec) -> PackagingSpecResponse:
         description=spec.description,
         requirements_text=spec.requirements_text,
         status=spec.status,
+        document_id=spec.document_id,
         created_at=spec.created_at,
         updated_at=spec.updated_at,
     )

@@ -286,3 +286,33 @@ async def init_db(conn: asyncpg.Connection) -> None:
         ON packaging_specs (product_id)
         """
     )
+
+    await conn.execute("ALTER TABLE packaging_specs ADD COLUMN IF NOT EXISTS document_id TEXT")
+
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS certificates (
+            id                      TEXT PRIMARY KEY,
+            product_id              TEXT NOT NULL REFERENCES products(id),
+            qualification_type_id   TEXT NOT NULL REFERENCES qualification_types(id),
+            cert_number             TEXT NOT NULL,
+            issuer                  TEXT NOT NULL,
+            testing_lab             TEXT NOT NULL DEFAULT '',
+            test_date               TEXT,
+            issue_date              TEXT NOT NULL,
+            expiry_date             TEXT,
+            target_market           TEXT NOT NULL,
+            document_id             TEXT,
+            status                  TEXT NOT NULL,
+            created_at              TEXT NOT NULL,
+            updated_at              TEXT NOT NULL
+        )
+        """
+    )
+
+    await conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_certificates_product
+        ON certificates (product_id)
+        """
+    )

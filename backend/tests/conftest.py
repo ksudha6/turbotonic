@@ -15,6 +15,7 @@ from httpx import ASGITransport, AsyncClient
 
 from src.activity_repository import ActivityLogRepository
 from src.auth.session import COOKIE_NAME, create_session_cookie
+from src.certificate_repository import CertificateRepository
 from src.db import get_db
 from src.document_repository import DocumentRepository
 from src.domain.user import User, UserRole
@@ -24,6 +25,12 @@ from src.milestone_repository import MilestoneRepository
 from src.repository import PurchaseOrderRepository
 from src.routers.activity import get_activity_repo as activity_get_activity_repo
 from src.routers.auth import get_user_repo as auth_get_user_repo
+from src.routers.certificate import get_activity_repo_for_cert as cert_get_activity_repo
+from src.routers.certificate import get_cert_repo
+from src.routers.certificate import get_document_repo_for_cert as cert_get_document_repo
+from src.routers.certificate import get_file_storage_for_cert as cert_get_file_storage
+from src.routers.certificate import get_product_repo_for_cert as cert_get_product_repo
+from src.routers.certificate import get_qt_repo_for_cert as cert_get_qt_repo
 from src.routers.dashboard import get_activity_repo as dash_get_activity_repo
 from src.routers.dashboard import get_invoice_repo as dash_get_invoice_repo
 from src.routers.dashboard import get_milestone_repo as dash_get_milestone_repo
@@ -45,6 +52,10 @@ from src.routers.purchase_order import get_vendor_repo as po_get_vendor_repo
 from src.routers.product import get_product_repo as product_get_product_repo
 from src.routers.packaging import get_packaging_repo as packaging_get_packaging_repo
 from src.routers.packaging import get_product_repo_for_packaging as packaging_get_product_repo
+from src.routers.packaging import get_document_repo_for_packaging as packaging_get_document_repo
+from src.routers.packaging import get_file_storage_for_packaging as packaging_get_file_storage
+from src.routers.packaging import get_activity_repo_for_packaging as packaging_get_activity_repo
+from src.routers.product import get_packaging_repo_for_product as product_get_packaging_repo
 from src.routers.qualification_type import get_qt_repo as qt_get_qt_repo
 from src.routers.vendor import get_vendor_repo as vendor_get_vendor_repo
 from src.schema import init_db
@@ -86,6 +97,9 @@ async def _setup_overrides(conn: asyncpg.Connection, upload_dir: Path) -> None:
     async def override_get_packaging_repo() -> AsyncIterator[PackagingSpecRepository]:
         yield PackagingSpecRepository(conn)
 
+    async def override_get_cert_repo() -> AsyncIterator[CertificateRepository]:
+        yield CertificateRepository(conn)
+
     async def override_get_qt_repo() -> AsyncIterator[QualificationTypeRepository]:
         yield QualificationTypeRepository(conn)
 
@@ -119,6 +133,16 @@ async def _setup_overrides(conn: asyncpg.Connection, upload_dir: Path) -> None:
     app.dependency_overrides[product_get_product_repo] = override_get_product_repo
     app.dependency_overrides[packaging_get_packaging_repo] = override_get_packaging_repo
     app.dependency_overrides[packaging_get_product_repo] = override_get_product_repo
+    app.dependency_overrides[packaging_get_document_repo] = override_get_document_repo
+    app.dependency_overrides[packaging_get_file_storage] = override_get_file_storage
+    app.dependency_overrides[packaging_get_activity_repo] = override_get_activity_repo
+    app.dependency_overrides[product_get_packaging_repo] = override_get_packaging_repo
+    app.dependency_overrides[get_cert_repo] = override_get_cert_repo
+    app.dependency_overrides[cert_get_product_repo] = override_get_product_repo
+    app.dependency_overrides[cert_get_qt_repo] = override_get_qt_repo
+    app.dependency_overrides[cert_get_activity_repo] = override_get_activity_repo
+    app.dependency_overrides[cert_get_document_repo] = override_get_document_repo
+    app.dependency_overrides[cert_get_file_storage] = override_get_file_storage
     app.dependency_overrides[qt_get_qt_repo] = override_get_qt_repo
     app.dependency_overrides[auth_get_user_repo] = override_get_user_repo
     app.dependency_overrides[document_get_document_repo] = override_get_document_repo

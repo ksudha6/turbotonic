@@ -18,6 +18,9 @@ class ActivityEvent(Enum):
     INVOICE_DISPUTED = "INVOICE_DISPUTED"
     MILESTONE_POSTED = "MILESTONE_POSTED"
     MILESTONE_OVERDUE = "MILESTONE_OVERDUE"
+    CERT_UPLOADED = "CERT_UPLOADED"
+    PACKAGING_COLLECTED = "PACKAGING_COLLECTED"
+    PACKAGING_MISSING = "PACKAGING_MISSING"
 
 
 class NotificationCategory(Enum):
@@ -29,6 +32,8 @@ class NotificationCategory(Enum):
 class EntityType(Enum):
     PO = "PO"
     INVOICE = "INVOICE"
+    CERTIFICATE = "CERTIFICATE"
+    PACKAGING = "PACKAGING"
 
 
 class TargetRole(Enum):
@@ -63,4 +68,7 @@ EVENT_METADATA: dict[ActivityEvent, tuple[NotificationCategory, TargetRole | Non
     ActivityEvent.INVOICE_DISPUTED: (NotificationCategory.ACTION_REQUIRED, TargetRole.VENDOR),
     ActivityEvent.MILESTONE_POSTED: (NotificationCategory.LIVE, TargetRole.SM),
     ActivityEvent.MILESTONE_OVERDUE: (NotificationCategory.DELAYED, TargetRole.SM),
+    ActivityEvent.CERT_UPLOADED: (NotificationCategory.LIVE, TargetRole.SM),
+    ActivityEvent.PACKAGING_COLLECTED: (NotificationCategory.LIVE, TargetRole.SM),
+    ActivityEvent.PACKAGING_MISSING: (NotificationCategory.ACTION_REQUIRED, TargetRole.SM),
 }

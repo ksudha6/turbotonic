@@ -166,3 +166,59 @@ def test_update_none_values_leave_fields_unchanged():
     assert spec.spec_name == SPEC_NAME
     assert spec.description == DESCRIPTION
     assert spec.requirements_text == REQUIREMENTS_TEXT
+
+
+DOCUMENT_ID = "doc-abc123"
+
+
+def test_collect_sets_document_id_and_status():
+    spec = PackagingSpec.create(
+        product_id=PRODUCT_ID, marketplace=MARKETPLACE, spec_name=SPEC_NAME
+    )
+    spec.collect(DOCUMENT_ID)
+    assert spec.document_id == DOCUMENT_ID
+    assert spec.status is PackagingSpecStatus.COLLECTED
+
+
+def test_collect_advances_updated_at():
+    spec = PackagingSpec.create(
+        product_id=PRODUCT_ID, marketplace=MARKETPLACE, spec_name=SPEC_NAME
+    )
+    original_updated_at = spec.updated_at
+    time.sleep(0.001)
+    spec.collect(DOCUMENT_ID)
+    assert spec.updated_at > original_updated_at
+
+
+def test_collect_raises_on_empty_document_id():
+    spec = PackagingSpec.create(
+        product_id=PRODUCT_ID, marketplace=MARKETPLACE, spec_name=SPEC_NAME
+    )
+    with pytest.raises(ValueError, match="document_id"):
+        spec.collect("")
+
+
+def test_collect_raises_on_whitespace_only_document_id():
+    spec = PackagingSpec.create(
+        product_id=PRODUCT_ID, marketplace=MARKETPLACE, spec_name=SPEC_NAME
+    )
+    with pytest.raises(ValueError, match="document_id"):
+        spec.collect("   ")
+
+
+def test_uncollect_clears_document_id_and_reverts_status():
+    spec = PackagingSpec.create(
+        product_id=PRODUCT_ID, marketplace=MARKETPLACE, spec_name=SPEC_NAME
+    )
+    spec.collect(DOCUMENT_ID)
+    spec.uncollect()
+    assert spec.document_id is None
+    assert spec.status is PackagingSpecStatus.PENDING
+
+
+def test_uncollect_raises_if_not_collected():
+    spec = PackagingSpec.create(
+        product_id=PRODUCT_ID, marketplace=MARKETPLACE, spec_name=SPEC_NAME
+    )
+    with pytest.raises(ValueError):
+        spec.uncollect()

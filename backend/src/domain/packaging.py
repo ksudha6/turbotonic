@@ -6,12 +6,12 @@ from uuid import uuid4
 
 
 class PackagingSpecStatus(str, Enum):
-    # COLLECTED added in iter 042
     PENDING = "PENDING"
+    COLLECTED = "COLLECTED"
 
 
 class PackagingSpec:
-    # id and created_at are immutable; all other fields are mutable via update()
+    # id and created_at are immutable; document_id and status are mutable via collect()/uncollect()
     def __init__(
         self,
         *,
@@ -22,6 +22,7 @@ class PackagingSpec:
         description: str,
         requirements_text: str,
         status: PackagingSpecStatus,
+        document_id: str | None = None,
         created_at: datetime,
         updated_at: datetime,
     ) -> None:
@@ -32,6 +33,7 @@ class PackagingSpec:
         self.description = description
         self.requirements_text = requirements_text
         self.status = status
+        self.document_id = document_id
         self._created_at = created_at
         self.updated_at = updated_at
 
@@ -68,6 +70,7 @@ class PackagingSpec:
             description=description,
             requirements_text=requirements_text,
             status=PackagingSpecStatus.PENDING,
+            document_id=None,
             created_at=now,
             updated_at=now,
         )
@@ -85,4 +88,20 @@ class PackagingSpec:
             self.description = description
         if requirements_text is not None:
             self.requirements_text = requirements_text
+        self.updated_at = datetime.now(UTC)
+
+    def collect(self, document_id: str) -> None:
+        # document_id identifies the stored file; status transitions to COLLECTED
+        if not document_id or not document_id.strip():
+            raise ValueError("document_id must not be empty or whitespace-only")
+        self.document_id = document_id
+        self.status = PackagingSpecStatus.COLLECTED
+        self.updated_at = datetime.now(UTC)
+
+    def uncollect(self) -> None:
+        # Reverts a COLLECTED spec back to PENDING, clearing the associated document
+        if self.status is not PackagingSpecStatus.COLLECTED:
+            raise ValueError("Can only uncollect a spec that is currently COLLECTED")
+        self.document_id = None
+        self.status = PackagingSpecStatus.PENDING
         self.updated_at = datetime.now(UTC)

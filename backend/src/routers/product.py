@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from typing import Annotated, AsyncIterator
+from typing import Annotated, Any, AsyncIterator
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from src.auth.dependencies import require_role
 from src.db import get_db
+from src.domain.packaging import PackagingSpecStatus
 from src.domain.product import Product
 from src.domain.user import User, UserRole
+from src.packaging_repository import PackagingSpecRepository
 from src.product_dto import (
     ProductCreate,
     ProductListItem,
@@ -28,7 +30,13 @@ async def get_product_repo() -> AsyncIterator[ProductRepository]:
         yield ProductRepository(conn)
 
 
+async def get_packaging_repo_for_product() -> AsyncIterator[PackagingSpecRepository]:
+    async with get_db() as conn:
+        yield PackagingSpecRepository(conn)
+
+
 ProductRepoDep = Annotated[ProductRepository, Depends(get_product_repo)]
+PackagingRepoDep = Annotated[PackagingSpecRepository, Depends(get_packaging_repo_for_product)]
 
 
 @router.post("/", response_model=ProductResponse, status_code=201)
@@ -104,3 +112,31 @@ async def update_product(
         qts = await qt_repo.list_by_product(product_id)
     qualifications = [qualification_type_to_list_item(qt) for qt in qts]
     return product_to_response(product, qualifications)
+
+
+@router.get("/{product_id}/packaging-readiness")
+async def packaging_readiness(
+    product_id: str,
+    marketplace: str,
+    packaging_repo: PackagingRepoDep,
+    _user: User = require_role(UserRole.SM, UserRole.VENDOR),
+) -> dict[str, Any]:
+    specs = await packaging_repo.list_by_product_and_marketplace(product_id, marketplace)
+    total = len(specs)
+    collected = sum(1 for s in specs if s.status is PackagingSpecStatus.COLLECTED)
+    return {
+        "product_id": product_id,
+        "marketplace": marketplace,
+        "total_specs": total,
+        "collected_specs": collected,
+        "is_ready": total > 0 and collected == total,
+        "specs": [
+            {
+                "spec_id": s.id,
+                "spec_name": s.spec_name,
+                "status": s.status.value,
+                "document_id": s.document_id,
+            }
+            for s in specs
+        ],
+    }

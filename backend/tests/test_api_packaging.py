@@ -265,3 +265,140 @@ async def test_delete_pending_returns_204(authenticated_client):
 async def test_delete_nonexistent_returns_404(authenticated_client):
     resp = await authenticated_client.delete("/api/v1/packaging-specs/nonexistent-id")
     assert resp.status_code == 404
+
+
+PDF_CONTENT = b"%PDF-1.4 test packaging file content"
+
+
+async def _upload_file(client, spec_id: str, content: bytes = PDF_CONTENT, filename: str = "packaging.pdf"):
+    return await client.post(
+        f"/api/v1/packaging-specs/{spec_id}/upload",
+        files={"file": (filename, content, "application/pdf")},
+    )
+
+
+async def test_upload_file_transitions_to_collected(authenticated_client):
+    _, product_id = await _create_vendor_and_product(authenticated_client)
+    create_resp = await _create_spec(authenticated_client, product_id)
+    spec_id = create_resp.json()["id"]
+
+    resp = await _upload_file(authenticated_client, spec_id)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == PackagingSpecStatus.COLLECTED.value
+    assert body["document_id"] is not None
+    assert body["id"] == spec_id
+
+
+async def test_upload_file_already_collected_replaces_document(authenticated_client):
+    _, product_id = await _create_vendor_and_product(authenticated_client)
+    create_resp = await _create_spec(authenticated_client, product_id)
+    spec_id = create_resp.json()["id"]
+
+    first_resp = await _upload_file(authenticated_client, spec_id, filename="first.pdf")
+    assert first_resp.status_code == 200
+    first_doc_id = first_resp.json()["document_id"]
+
+    second_resp = await _upload_file(authenticated_client, spec_id, filename="second.pdf")
+    assert second_resp.status_code == 200
+    body = second_resp.json()
+    assert body["status"] == PackagingSpecStatus.COLLECTED.value
+    assert body["document_id"] is not None
+    assert body["document_id"] != first_doc_id
+
+
+async def test_upload_file_nonexistent_spec_returns_404(authenticated_client):
+    resp = await _upload_file(authenticated_client, "nonexistent-spec-id")
+    assert resp.status_code == 404
+
+
+async def test_delete_collected_spec_returns_409(authenticated_client):
+    _, product_id = await _create_vendor_and_product(authenticated_client)
+    create_resp = await _create_spec(authenticated_client, product_id)
+    spec_id = create_resp.json()["id"]
+
+    upload_resp = await _upload_file(authenticated_client, spec_id)
+    assert upload_resp.status_code == 200
+    assert upload_resp.json()["status"] == PackagingSpecStatus.COLLECTED.value
+
+    del_resp = await authenticated_client.delete(f"/api/v1/packaging-specs/{spec_id}")
+    assert del_resp.status_code == 409
+
+
+async def test_upload_activity_event_recorded(authenticated_client):
+    _, product_id = await _create_vendor_and_product(authenticated_client)
+    create_resp = await _create_spec(authenticated_client, product_id)
+    spec_id = create_resp.json()["id"]
+
+    upload_resp = await _upload_file(authenticated_client, spec_id)
+    assert upload_resp.status_code == 200
+
+    activity_resp = await authenticated_client.get(
+        "/api/v1/activity/", params={"entity_type": "PACKAGING", "entity_id": spec_id}
+    )
+    assert activity_resp.status_code == 200
+    events = activity_resp.json()
+    event_names = [e["event"] for e in events]
+    assert "PACKAGING_COLLECTED" in event_names
+
+
+async def test_packaging_readiness_all_collected(authenticated_client):
+    _, product_id = await _create_vendor_and_product(authenticated_client)
+    create_resp = await _create_spec(authenticated_client, product_id, spec_name="Label A")
+    spec_id = create_resp.json()["id"]
+    await _upload_file(authenticated_client, spec_id)
+
+    resp = await authenticated_client.get(
+        f"/api/v1/products/{product_id}/packaging-readiness",
+        params={"marketplace": MARKETPLACE},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["product_id"] == product_id
+    assert body["marketplace"] == MARKETPLACE
+    assert body["total_specs"] == 1
+    assert body["collected_specs"] == 1
+    assert body["is_ready"] is True
+    assert len(body["specs"]) == 1
+    assert body["specs"][0]["status"] == PackagingSpecStatus.COLLECTED.value
+
+
+async def test_packaging_readiness_some_missing(authenticated_client):
+    _, product_id = await _create_vendor_and_product(authenticated_client)
+    spec1_resp = await _create_spec(authenticated_client, product_id, spec_name="Label A")
+    spec1_id = spec1_resp.json()["id"]
+    await _upload_file(authenticated_client, spec1_id)
+
+    await _create_spec(authenticated_client, product_id, spec_name="Label B")
+
+    resp = await authenticated_client.get(
+        f"/api/v1/products/{product_id}/packaging-readiness",
+        params={"marketplace": MARKETPLACE},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total_specs"] == 2
+    assert body["collected_specs"] == 1
+    assert body["is_ready"] is False
+
+
+async def test_packaging_readiness_no_specs(authenticated_client):
+    _, product_id = await _create_vendor_and_product(authenticated_client)
+
+    resp = await authenticated_client.get(
+        f"/api/v1/products/{product_id}/packaging-readiness",
+        params={"marketplace": MARKETPLACE},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total_specs"] == 0
+    assert body["collected_specs"] == 0
+    assert body["is_ready"] is False
+
+
+async def test_packaging_readiness_missing_marketplace_param_returns_422(authenticated_client):
+    _, product_id = await _create_vendor_and_product(authenticated_client)
+    resp = await authenticated_client.get(
+        f"/api/v1/products/{product_id}/packaging-readiness"
+    )
+    assert resp.status_code == 422

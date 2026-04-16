@@ -33,8 +33,8 @@ class PackagingSpecRepository:
                 """
                 INSERT INTO packaging_specs (
                     id, product_id, marketplace, spec_name, description,
-                    requirements_text, status, created_at, updated_at
-                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    requirements_text, status, document_id, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 """,
                 spec.id,
                 spec.product_id,
@@ -43,6 +43,7 @@ class PackagingSpecRepository:
                 spec.description,
                 spec.requirements_text,
                 spec.status.value,
+                spec.document_id,
                 _iso(spec.created_at),
                 _iso(spec.updated_at),
             )
@@ -55,14 +56,16 @@ class PackagingSpecRepository:
                     description = $3,
                     requirements_text = $4,
                     status = $5,
-                    updated_at = $6
-                WHERE id = $7
+                    document_id = $6,
+                    updated_at = $7
+                WHERE id = $8
                 """,
                 spec.marketplace,
                 spec.spec_name,
                 spec.description,
                 spec.requirements_text,
                 spec.status.value,
+                spec.document_id,
                 _iso(spec.updated_at),
                 spec.id,
             )
@@ -123,6 +126,7 @@ def _reconstruct(row: asyncpg.Record) -> PackagingSpec:
         description=row["description"] or "",
         requirements_text=row["requirements_text"] or "",
         status=PackagingSpecStatus(row["status"]),
+        document_id=row["document_id"],
         created_at=_parse_dt(row["created_at"]),
         updated_at=_parse_dt(row["updated_at"]),
     )
