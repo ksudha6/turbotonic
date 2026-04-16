@@ -1,7 +1,7 @@
 # Iterations Summary
 
 > Single-file context for future conversations. Replaces reading 29 individual iteration docs.
-> Last updated: iteration 036 closed.
+> Last updated: iteration 042 closed.
 
 ---
 
@@ -13,13 +13,16 @@ Turbo Tonic is a vendor portal for purchase order confirmation, invoicing, produ
 
 Python 3.13, FastAPI, Postgres 16 (asyncpg, connection pool), WebAuthn/passkeys + cookie sessions. Frontend: SvelteKit 2 + Svelte 5, adapter-static. Package manager: uv (backend), npm (frontend), nvm for Node. Local dev: Postgres via Homebrew (docker-compose.yml available for Docker environments).
 
-## Current domain model (as of iteration 029)
+## Current domain model (as of iteration 042)
 
 ### Aggregates
-- **PurchaseOrder** — Draft > Pending > Accepted | Rejected > Revised > Pending. Contains LineItems, RejectionHistory. Types: PROCUREMENT, OPEX.
+- **PurchaseOrder** — Draft > Pending > Accepted | Rejected > Revised > Pending. Contains LineItems (each with LineItemStatus: Pending/Accepted/Rejected for per-line accept/reject), RejectionHistory. Types: PROCUREMENT, OPEX.
 - **Invoice** — Draft > Submitted > Approved > Paid | Disputed > Resolved. Linked to PO. Over-invoicing guard checks cumulative quantities against PO line items.
 - **Vendor** — Active | Inactive. Types: PROCUREMENT, OPEX, FREIGHT, MISCELLANEOUS. Country validated against reference data.
-- **Product** — Vendor-scoped catalog (vendor_id + part_number unique). First attribute: requires_certification.
+- **Product** — Vendor-scoped catalog (vendor_id + part_number unique). Qualifications managed via QualificationType join table (replaces requires_certification boolean).
+- **QualificationType** — Named qualification requirement (e.g. QUALITY_CERTIFICATE). Linked to products via join table. Target market scoped.
+- **Certificate** — Links product to qualification type. Status: Pending > Valid. EXPIRED computed from expiry_date. Tracks cert_number, issuer, testing_lab, test/issue/expiry dates, target_market. Document attachment via file storage.
+- **PackagingSpec** — Per-product per-marketplace packaging requirement. Status: Pending > Collected (via file upload). Document attachment via file storage. Unique on (product_id, marketplace, spec_name).
 
 ### Supporting concepts
 - **Milestone** — RAW_MATERIALS > PRODUCTION_STARTED > QC_PASSED > READY_TO_SHIP > SHIPPED. Strict sequence enforcement. Attached to PO.
@@ -27,7 +30,7 @@ Python 3.13, FastAPI, Postgres 16 (asyncpg, connection pool), WebAuthn/passkeys 
 - **Reference data** — 30 currencies, 11 incoterms, 17 payment terms, 31 countries, 50+ ports, USD exchange rates.
 
 ### Database tables
-purchase_orders, line_items, rejection_history, vendors, products, invoices, invoice_line_items, milestone_updates, activity_log, files.
+purchase_orders, line_items, rejection_history, vendors, products, invoices, invoice_line_items, milestone_updates, activity_log, files, qualification_types, product_qualifications, certificates, packaging_specs.
 
 ## Frontend routes
 
@@ -54,11 +57,14 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - **PO**: CRUD, submit, accept, reject, resubmit, bulk transition, PDF export
 - **Invoice**: CRUD, submit, approve, pay, dispute, resolve, remaining quantities, PDF export, bulk PDF
 - **Vendor**: CRUD, deactivate, reactivate
-- **Product**: CRUD (POST, GET list, GET by id, PATCH)
+- **Product**: CRUD (POST, GET list, GET by id, PATCH), packaging readiness per marketplace
 - **Milestone**: list by PO, post milestone
 - **Activity**: list (with optional target_role filter), unread count (with optional target_role filter), mark read
 - **Reference data**: all lookups in one GET
 - **Document**: upload (multipart, PDF-only, 10MB limit), download (Content-Disposition), delete, list by entity
+- **QualificationType**: CRUD, product assignment/removal
+- **Certificate**: CRUD, document upload, computed EXPIRED status
+- **PackagingSpec**: CRUD, file upload, packaging readiness per product/marketplace
 
 ---
 
@@ -103,6 +109,11 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 | 034 | 2026-04-16 | Frontend role-conditional rendering: permissions.ts helper, role-based nav links, PO/invoice/vendor/product page button guards, page-level role redirects via +page.ts, dashboard role-filtered widgets, backend target_role filter on activity endpoints, 16 new Playwright role tests |
 | 035 | 2026-04-16 | Document storage infrastructure: files table, FileMetadata domain model, DocumentRepository, FileStorageService (local disk), upload/download/delete/list API endpoints, PDF-only 10MB limit, path traversal protection, require_auth on all endpoints, 19 new tests |
 | 036 | 2026-04-16 | Model extensions: marketplace on PO (with reference data validation), product_id on LineItem, address + account_details on Vendor, manufacturing_address on Product. Schema migration via ALTER TABLE. Frontend forms updated. Marketplace filter on PO list. |
+| 036a | 2026-04-16 | QualificationType entity replacing requires_certification boolean, product-qualification join table, CRUD + assignment API, 35 new tests |
+| 037 | 2026-04-16 | Per-line-item accept/reject on POs: LineItemStatus enum, accept_lines() method, per-line toggle UI, vendor-only Submit Response, 16 new tests |
+| 041 | 2026-04-16 | PackagingSpec entity for per-product per-marketplace packaging requirements, CRUD API, product edit UI section, 32 new tests |
+| 038 | 2026-04-16 | Certificate entity linking products to qualification types with cert details, computed EXPIRED status, document upload, CERT_UPLOADED activity event, 27 new tests |
+| 042 | 2026-04-16 | PackagingSpec file collection: COLLECTED status, document upload, packaging readiness endpoint, PACKAGING_COLLECTED activity event, 15 new tests |
 
 ---
 
@@ -137,6 +148,10 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - LineItem product_id FK to product catalog (loose, no cross-vendor validation yet)
 - Vendor address and account_details fields
 - Product manufacturing_address field
+- QualificationType entity with join table replacing requires_certification boolean; CRUD and product assignment/removal API
+- Certificate entity with computed EXPIRED status (not persisted) and document upload; CERT_UPLOADED activity event
+- Per-line-item accept/reject on POs (LineItemStatus: PENDING/ACCEPTED/REJECTED); vendor-only Submit Response flow
+- PackagingSpec with COLLECTED status, file upload, packaging readiness endpoint per product/marketplace; PACKAGING_COLLECTED and PACKAGING_MISSING activity events
 
 ## What does not exist yet
 
@@ -148,7 +163,6 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - Dedicated `/api/v1/po/ids` endpoint for cross-page selection beyond 200
 - Live/historical exchange rates
 - Buyer as first-class entity (currently hardcoded)
-- Partial PO acceptance at line-item level (iter 28 scoped, not built)
 
 ### From the backlog (auth and user management)
 - Multiple passkeys per user (register backup device for recovery)
@@ -183,7 +197,7 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - Remove dev-login endpoint before production deployment
 
 ### From the roadmap (post-confirmation)
-1. **Quality labs** — certificate management, lab results, product-level cert requirements
+1. **Quality labs** — Certificate entity and QualificationType exist (iter 038, 036a). Lab results, quality gate at PO submission (iter 039), and frontend certificate UI are not yet built.
 2. **Batch creation of partial PO shipments** — Shipment as new aggregate, split PO into shipments
 3. **Shipment document generation** — packing list, commercial invoice, bill of lading
 4. **Shipment document validation (agents/OCR)** — AI reads uploaded docs, flags discrepancies
@@ -236,3 +250,8 @@ These are the product differentiators. The CRUD workflow (items 1-3, 5, 7-10) is
 | 034 | RolePermission, RoleConditionalRendering |
 | 035 | FileMetadata, EntityAttachment |
 | 036 | Marketplace, ManufacturingAddress, VendorAccountDetails |
+| 036a | QualificationType, ProductQualification (join) |
+| 037 | LineItemStatus (Pending/Accepted/Rejected), AcceptLinesRequest |
+| 041 | PackagingSpec, PackagingSpecStatus |
+| 038 | Certificate, CertificateStatus (Pending/Valid/Expired-computed) |
+| 042 | PackagingCollection, PackagingReadiness |

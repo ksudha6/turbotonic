@@ -15,9 +15,9 @@ Products declare required qualifications (iter 036a) but there is no entity to r
 ### Domain model
 
 #### Create `backend/src/domain/certificate.py`
-- [ ] `CertificateStatus` enum: PENDING, VALID
+- [x] `CertificateStatus` enum: PENDING, VALID
   - EXPIRED is not a persisted status; it is computed on read
-- [ ] `Certificate` class:
+- [x] `Certificate` class:
   - Fields: id, product_id, qualification_type_id, cert_number, issuer, testing_lab, test_date (datetime | None), issue_date (datetime), expiry_date (datetime | None), target_market, document_id (str | None, FK to files), status (CertificateStatus), created_at, updated_at
   - `id`: UUID string
   - `cert_number`: str, non-empty
@@ -27,22 +27,22 @@ Products declare required qualifications (iter 036a) but there is no entity to r
   - `expiry_date`: nullable (some certificates don't expire)
   - `document_id`: nullable (certificate may be created before document is uploaded)
   - `target_market`: str, non-empty (e.g. "US", "EU")
-- [ ] `Certificate.create(product_id, qualification_type_id, cert_number, issuer, testing_lab, test_date, issue_date, expiry_date, target_market) -> Certificate`
+- [x] `Certificate.create(product_id, qualification_type_id, cert_number, issuer, testing_lab, test_date, issue_date, expiry_date, target_market) -> Certificate`
   - Validates: product_id, qualification_type_id, cert_number, issuer, target_market are non-empty
   - Initial status: PENDING
-- [ ] `Certificate.mark_valid() -> None`
+- [x] `Certificate.mark_valid() -> None`
   - Transitions PENDING -> VALID. Raises ValueError if already VALID.
-- [ ] `Certificate.attach_document(document_id: str) -> None`
+- [x] `Certificate.attach_document(document_id: str) -> None`
   - Sets document_id. Raises ValueError if document_id is empty.
-- [ ] `Certificate.is_expired(as_of: datetime | None = None) -> bool`
+- [x] `Certificate.is_expired(as_of: datetime | None = None) -> bool`
   - Returns True if expiry_date is not None and expiry_date < (as_of or now)
-- [ ] `Certificate.display_status(as_of: datetime | None = None) -> str`
+- [x] `Certificate.display_status(as_of: datetime | None = None) -> str`
   - Returns "EXPIRED" if is_expired(as_of), else status.value
 
 ### Schema
 
 #### `backend/src/schema.py`
-- [ ] Add `certificates` table:
+- [x] Add `certificates` table:
   ```
   certificates (
       id                      TEXT PRIMARY KEY,
@@ -65,7 +65,7 @@ Products declare required qualifications (iter 036a) but there is no entity to r
 ### DTOs
 
 #### Create `backend/src/certificate_dto.py`
-- [ ] `CertificateCreate(BaseModel)`:
+- [x] `CertificateCreate(BaseModel)`:
   - product_id: str
   - qualification_type_id: str
   - cert_number: str
@@ -76,7 +76,7 @@ Products declare required qualifications (iter 036a) but there is no entity to r
   - expiry_date: datetime | None = None
   - target_market: str
   - Validators: product_id, qualification_type_id, cert_number, issuer, target_market not empty
-- [ ] `CertificateUpdate(BaseModel)`:
+- [x] `CertificateUpdate(BaseModel)`:
   - cert_number: str | None = None
   - issuer: str | None = None
   - testing_lab: str | None = None
@@ -85,60 +85,60 @@ Products declare required qualifications (iter 036a) but there is no entity to r
   - expiry_date: datetime | None = None
   - target_market: str | None = None
   - status: str | None = None (only "VALID" transition allowed)
-- [ ] `CertificateResponse(BaseModel)`:
+- [x] `CertificateResponse(BaseModel)`:
   - id, product_id, qualification_type_id, cert_number, issuer, testing_lab, test_date, issue_date, expiry_date, target_market, document_id, status (str -- includes computed EXPIRED), created_at, updated_at
-- [ ] `CertificateListItem(BaseModel)`:
+- [x] `CertificateListItem(BaseModel)`:
   - id, product_id, qualification_type_id, cert_number, issuer, target_market, status (str), expiry_date
-- [ ] `certificate_to_response(cert: Certificate) -> CertificateResponse`
+- [x] `certificate_to_response(cert: Certificate) -> CertificateResponse`
   - Uses `cert.display_status()` for the status field
-- [ ] `certificate_to_list_item(cert: Certificate) -> CertificateListItem`
+- [x] `certificate_to_list_item(cert: Certificate) -> CertificateListItem`
   - Uses `cert.display_status()` for the status field
 
 ### Repository
 
 #### Create `backend/src/certificate_repository.py`
-- [ ] `CertificateRepository.__init__(conn)`
-- [ ] `save(cert: Certificate) -> None` -- upsert
-- [ ] `get_by_id(cert_id: str) -> Certificate | None`
-- [ ] `list_by_product(product_id: str) -> list[Certificate]`
-- [ ] `list_by_product_and_market(product_id: str, target_market: str) -> list[Certificate]`
-- [ ] `list_by_qualification(qualification_type_id: str) -> list[Certificate]`
-- [ ] `_reconstruct(row) -> Certificate`
+- [x] `CertificateRepository.__init__(conn)`
+- [x] `save(cert: Certificate) -> None` -- upsert
+- [x] `get_by_id(cert_id: str) -> Certificate | None`
+- [x] `list_by_product(product_id: str) -> list[Certificate]`
+- [x] `list_by_product_and_market(product_id: str, target_market: str) -> list[Certificate]`
+- [x] `list_by_qualification(qualification_type_id: str) -> list[Certificate]`
+- [x] `_reconstruct(row) -> Certificate`
 
 ### Router
 
 #### Create `backend/src/routers/certificate.py`
-- [ ] `POST /api/v1/certificates` -- create certificate
+- [x] `POST /api/v1/certificates` -- create certificate
   - Validate product_id exists (query product repo)
   - Validate qualification_type_id exists (query qualification type repo)
   - Return CertificateResponse, 201
   - Log CERT_UPLOADED activity event (target: SM)
-- [ ] `GET /api/v1/certificates` -- list certificates
+- [x] `GET /api/v1/certificates` -- list certificates
   - Query params: `product_id` (optional), `target_market` (optional)
   - Return list[CertificateListItem]
-- [ ] `GET /api/v1/certificates/{cert_id}` -- get by id
+- [x] `GET /api/v1/certificates/{cert_id}` -- get by id
   - Return CertificateResponse, 404 if not found
-- [ ] `PATCH /api/v1/certificates/{cert_id}` -- update certificate fields
+- [x] `PATCH /api/v1/certificates/{cert_id}` -- update certificate fields
   - If status = "VALID" in body, call cert.mark_valid()
   - Update other fields as provided
   - Return CertificateResponse
-- [ ] `POST /api/v1/certificates/{cert_id}/document` -- upload document
+- [x] `POST /api/v1/certificates/{cert_id}/document` -- upload document
   - Multipart form with file
   - Upload via file storage service (entity_type="CERTIFICATE", entity_id=cert_id, file_type="CERT_DOCUMENT")
   - Call cert.attach_document(file_metadata.id)
   - Save certificate
   - Return CertificateResponse
-- [ ] Register in `backend/src/main.py`
+- [x] Register in `backend/src/main.py`
 
 ### Activity log extension
 
 #### `backend/src/domain/activity.py`
-- [ ] Add `CERT_UPLOADED` to `ActivityEvent` enum
-- [ ] Add `CERTIFICATE` to `EntityType` enum
-- [ ] Add metadata entry: `CERT_UPLOADED -> (LIVE, TargetRole.SM)`
+- [x] Add `CERT_UPLOADED` to `ActivityEvent` enum
+- [x] Add `CERTIFICATE` to `EntityType` enum
+- [x] Add metadata entry: `CERT_UPLOADED -> (LIVE, TargetRole.SM)`
 
 ### Tests (permanent)
-- [ ] `backend/tests/test_certificate.py` -- domain model tests:
+- [x] `backend/tests/test_certificate.py` -- domain model tests:
   - Certificate.create with valid inputs, verify initial status is PENDING
   - Reject empty cert_number, issuer, product_id, qualification_type_id, target_market
   - mark_valid transitions PENDING -> VALID; raises on already VALID
@@ -147,7 +147,7 @@ Products declare required qualifications (iter 036a) but there is no entity to r
   - is_expired returns False when expiry_date is None
   - is_expired returns False when expiry_date is in the future
   - display_status returns "EXPIRED" for expired cert, "VALID" or "PENDING" otherwise
-- [ ] `backend/tests/test_api_certificate.py` -- API tests:
+- [x] `backend/tests/test_api_certificate.py` -- API tests:
   - Create certificate, verify 201 and response fields
   - Create with nonexistent product_id, verify 422
   - Create with nonexistent qualification_type_id, verify 422
@@ -158,18 +158,18 @@ Products declare required qualifications (iter 036a) but there is no entity to r
   - Create expired certificate, verify display_status is "EXPIRED" in response
 
 ### Tests (scratch)
-- [ ] Create product with qualification, create certificate for it, verify linkage via API
-- [ ] Upload PDF as certificate document, verify download works
+- [x] Create product with qualification, create certificate for it, verify linkage via API
+- [x] Upload PDF as certificate document, verify download works
 
 ## Acceptance criteria
-- [ ] `POST /api/v1/certificates` creates certificate with PENDING status
-- [ ] `GET /api/v1/certificates?product_id=X` lists certificates for a product
-- [ ] `GET /api/v1/certificates/{id}` returns certificate with computed EXPIRED status when applicable
-- [ ] `PATCH /api/v1/certificates/{id}` updates fields; status="VALID" triggers mark_valid()
-- [ ] `POST /api/v1/certificates/{id}/document` uploads and attaches document via file storage
-- [ ] CERT_UPLOADED activity event is logged on creation
-- [ ] Expired certificates show status "EXPIRED" in all responses (not stored, computed from expiry_date)
-- [ ] All permanent tests pass via `make test`
+- [x] `POST /api/v1/certificates` creates certificate with PENDING status
+- [x] `GET /api/v1/certificates?product_id=X` lists certificates for a product
+- [x] `GET /api/v1/certificates/{id}` returns certificate with computed EXPIRED status when applicable
+- [x] `PATCH /api/v1/certificates/{id}` updates fields; status="VALID" triggers mark_valid()
+- [x] `POST /api/v1/certificates/{id}/document` uploads and attaches document via file storage
+- [x] CERT_UPLOADED activity event is logged on creation
+- [x] Expired certificates show status "EXPIRED" in all responses (not stored, computed from expiry_date)
+- [x] All permanent tests pass via `make test`
 
 ## Files created
 - `backend/src/domain/certificate.py`
@@ -183,3 +183,7 @@ Products declare required qualifications (iter 036a) but there is no entity to r
 - `backend/src/schema.py` -- add certificates table
 - `backend/src/domain/activity.py` -- add CERT_UPLOADED event, CERTIFICATE entity type
 - `backend/src/main.py` -- register certificate router
+
+## Notes
+
+Certificate aggregate follows the same pattern as PackagingSpec: immutable id/created_at via property accessors, factory create() with validation, status enum. EXPIRED status is computed from expiry_date on read via display_status(), not persisted. Document upload reuses the file storage infrastructure from iter 035. 27 new tests (17 domain + 10 API). No existing tests broke.

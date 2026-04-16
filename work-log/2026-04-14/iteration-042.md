@@ -13,29 +13,29 @@ PackagingSpec (iter 041) defines what files are needed per product per marketpla
 ## Tasks
 
 ### Backend -- Schema
-- [ ] Add `document_id TEXT REFERENCES files(id)` column to `packaging_specs` table (nullable, default NULL)
-- [ ] Update `status` column: now uses both `PENDING` and `COLLECTED` values
+- [x] Add `document_id TEXT REFERENCES files(id)` column to `packaging_specs` table (nullable, default NULL)
+- [x] Update `status` column: now uses both `PENDING` and `COLLECTED` values
 
 ### Backend -- Domain
-- [ ] Add `COLLECTED` to `PackagingSpecStatus` enum
-- [ ] Add `document_id: str | None` field to `PackagingSpec` (default None)
-- [ ] Add `collect(document_id: str)` method to `PackagingSpec`:
+- [x] Add `COLLECTED` to `PackagingSpecStatus` enum
+- [x] Add `document_id: str | None` field to `PackagingSpec` (default None)
+- [x] Add `collect(document_id: str)` method to `PackagingSpec`:
   - Sets `document_id` to the provided value
   - Transitions `status` from `PENDING` to `COLLECTED`
   - Updates `updated_at`
   - Raises `ValueError` if `document_id` is empty or whitespace-only
-- [ ] Add `uncollect()` method to `PackagingSpec`:
+- [x] Add `uncollect()` method to `PackagingSpec`:
   - Clears `document_id` to None
   - Transitions `status` from `COLLECTED` back to `PENDING`
   - Updates `updated_at`
   - Raises `ValueError` if status is not `COLLECTED`
 
 ### Backend -- Repository
-- [ ] Update `PackagingSpecRepository.save()` to persist `document_id`
-- [ ] Update reconstruction to read `document_id` from DB row
+- [x] Update `PackagingSpecRepository.save()` to persist `document_id`
+- [x] Update reconstruction to read `document_id` from DB row
 
 ### Backend -- Router
-- [ ] `POST /api/v1/packaging-specs/{spec_id}/upload` -- upload a file against a spec
+- [x] `POST /api/v1/packaging-specs/{spec_id}/upload` -- upload a file against a spec
   - Accepts multipart file upload
   - Stores file via file storage service (from iter 035)
   - Calls `spec.collect(document_id)` to transition status
@@ -43,7 +43,7 @@ PackagingSpec (iter 041) defines what files are needed per product per marketpla
   - Role guard: SM and VENDOR
   - Returns 404 if spec not found
   - Replaces existing file if re-uploaded (updates document_id, status stays COLLECTED)
-- [ ] `GET /api/v1/products/{product_id}/packaging-readiness` -- packaging readiness check
+- [x] `GET /api/v1/products/{product_id}/packaging-readiness` -- packaging readiness check
   - Query param: `marketplace` (required)
   - Returns: `{"product_id": str, "marketplace": str, "total_specs": int, "collected_specs": int, "is_ready": bool, "specs": [{"spec_id": str, "spec_name": str, "status": "PENDING" | "COLLECTED", "document_id": str | null}]}`
   - `is_ready` is true when `total_specs > 0` and `collected_specs == total_specs`
@@ -51,49 +51,53 @@ PackagingSpec (iter 041) defines what files are needed per product per marketpla
   - Role guard: SM and VENDOR
 
 ### Backend -- Activity log
-- [ ] Add `PACKAGING_COLLECTED` to `ActivityEvent` enum
-- [ ] Add `PACKAGING_MISSING` to `ActivityEvent` enum
-- [ ] Add `PACKAGING` to `EntityType` enum
-- [ ] Add EVENT_METADATA entries:
+- [x] Add `PACKAGING_COLLECTED` to `ActivityEvent` enum
+- [x] Add `PACKAGING_MISSING` to `ActivityEvent` enum
+- [x] Add `PACKAGING` to `EntityType` enum
+- [x] Add EVENT_METADATA entries:
   - `PACKAGING_COLLECTED`: category `LIVE`, target_role `SM`
   - `PACKAGING_MISSING`: category `ACTION_REQUIRED`, target_role `SM`
-- [ ] Record `PACKAGING_COLLECTED` event when file uploaded against a spec
-- [ ] Record `PACKAGING_MISSING` event when readiness check finds missing specs (optional: only on explicit check, not on every list)
+- [x] Record `PACKAGING_COLLECTED` event when file uploaded against a spec
+- [x] Record `PACKAGING_MISSING` event when readiness check finds missing specs (optional: only on explicit check, not on every list)
 
 ### Frontend
-- [ ] Packaging spec list: show file upload button per spec (SM and VENDOR roles)
-- [ ] Upload flow: file picker, upload, spec status pill updates to COLLECTED (green)
-- [ ] Show uploaded file name and download link on collected specs
-- [ ] Re-upload button to replace an existing file
-- [ ] Product detail: packaging readiness summary per marketplace ("3 of 5 collected")
-- [ ] Visual: PENDING specs show grey pill; COLLECTED specs show green pill
+- [ ] Packaging spec list: show file upload button per spec (SM and VENDOR roles) -- carried forward, frontend not implemented in this iteration
+- [ ] Upload flow: file picker, upload, spec status pill updates to COLLECTED (green) -- carried forward, frontend not implemented in this iteration
+- [ ] Show uploaded file name and download link on collected specs -- carried forward, frontend not implemented in this iteration
+- [ ] Re-upload button to replace an existing file -- carried forward, frontend not implemented in this iteration
+- [ ] Product detail: packaging readiness summary per marketplace ("3 of 5 collected") -- carried forward, frontend not implemented in this iteration
+- [ ] Visual: PENDING specs show grey pill; COLLECTED specs show green pill -- carried forward, frontend not implemented in this iteration
 
 ### Tests (permanent)
-- [ ] Upload file against PENDING spec: status becomes COLLECTED, document_id set
-- [ ] Upload file against already-COLLECTED spec: file replaced, status stays COLLECTED
-- [ ] Upload with empty file: returns 422
-- [ ] Upload against nonexistent spec: returns 404
-- [ ] Packaging readiness with all specs collected: is_ready is true
-- [ ] Packaging readiness with some specs missing: is_ready is false, correct counts
-- [ ] Packaging readiness with no specs defined: total_specs is 0, is_ready is false
-- [ ] Packaging readiness with missing marketplace param: returns 422
-- [ ] Delete of COLLECTED spec: returns 409 (status is not PENDING)
-- [ ] Uncollect a COLLECTED spec: status returns to PENDING, document_id cleared
-- [ ] Activity log: PACKAGING_COLLECTED event recorded on upload
+- [x] Upload file against PENDING spec: status becomes COLLECTED, document_id set
+- [x] Upload file against already-COLLECTED spec: file replaced, status stays COLLECTED
+- [x] Upload with empty file: returns 422
+- [x] Upload against nonexistent spec: returns 404
+- [x] Packaging readiness with all specs collected: is_ready is true
+- [x] Packaging readiness with some specs missing: is_ready is false, correct counts
+- [x] Packaging readiness with no specs defined: total_specs is 0, is_ready is false
+- [x] Packaging readiness with missing marketplace param: returns 422
+- [x] Delete of COLLECTED spec: returns 409 (status is not PENDING)
+- [x] Uncollect a COLLECTED spec: status returns to PENDING, document_id cleared
+- [x] Activity log: PACKAGING_COLLECTED event recorded on upload
 
 ### Tests (scratch)
-- [ ] Screenshot: packaging spec list with mix of PENDING and COLLECTED status pills
-- [ ] Screenshot: file upload flow on a packaging spec
-- [ ] Screenshot: product packaging readiness summary
+- [ ] Screenshot: packaging spec list with mix of PENDING and COLLECTED status pills -- skipped, frontend not implemented
+- [ ] Screenshot: file upload flow on a packaging spec -- skipped, frontend not implemented
+- [ ] Screenshot: product packaging readiness summary -- skipped, frontend not implemented
 
 ## Acceptance criteria
-- [ ] `PackagingSpec` has `document_id` field and `COLLECTED` status
-- [ ] File upload against a spec transitions status from PENDING to COLLECTED
-- [ ] Files persist at product level, reusable across POs/shipments
-- [ ] Packaging readiness endpoint returns correct counts and `is_ready` flag
-- [ ] `is_ready` requires total_specs > 0 and all specs collected
-- [ ] Re-upload replaces the existing file
-- [ ] Activity log records PACKAGING_COLLECTED on upload
-- [ ] Role guard: SM and VENDOR can upload
-- [ ] COLLECTED specs cannot be deleted (returns 409)
-- [ ] All permanent tests pass
+- [x] `PackagingSpec` has `document_id` field and `COLLECTED` status
+- [x] File upload against a spec transitions status from PENDING to COLLECTED
+- [x] Files persist at product level, reusable across POs/shipments
+- [x] Packaging readiness endpoint returns correct counts and `is_ready` flag
+- [x] `is_ready` requires total_specs > 0 and all specs collected
+- [x] Re-upload replaces the existing file
+- [x] Activity log records PACKAGING_COLLECTED on upload
+- [x] Role guard: SM and VENDOR can upload
+- [x] COLLECTED specs cannot be deleted (returns 409)
+- [x] All permanent tests pass
+
+## Notes
+
+PackagingSpec gains COLLECTED status and document_id field. File upload endpoint reuses the document storage infrastructure. Packaging readiness endpoint lives on the product router since the URL path starts with /api/v1/products/. Delete guard already existed from iter 041 (PENDING-only check), so COLLECTED specs correctly return 409 on delete. 15 new tests (6 domain + 9 API). No existing tests broke.

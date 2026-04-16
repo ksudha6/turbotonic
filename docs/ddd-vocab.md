@@ -149,6 +149,16 @@
 | Manufacturing Address | Physical location where a product is manufactured. Stored on Product. Used by certificates of origin and compliance documents. | Procurement |
 | Vendor Account Details | Bank/payment information for a vendor. Free-text. Used by shipping and export documents. | Procurement |
 
+## Qualifications and Compliance
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| QualificationType | Named qualification requirement (e.g. QUALITY_CERTIFICATE) with target market scope. Products link to qualification types via join table. Created by SM; defines what certifications a product must have. | Quality |
+| Certificate | Evidence that a product meets a qualification type's requirements. Tracks cert_number, issuer, testing_lab, test_date, issue_date, expiry_date, target_market. Status: PENDING → VALID. EXPIRED is computed from expiry_date on read via display_status(), not persisted. Document attached via file storage. | Quality |
+| PackagingSpec | Per-product per-marketplace packaging file requirement. Status: PENDING → COLLECTED (on file upload). Document attached via file storage. Unique on (product_id, marketplace, spec_name). Delete is blocked when status is COLLECTED. | Packaging |
+| PackagingReadiness | Read model: per-product per-marketplace report of total vs collected packaging specs. is_ready requires total_specs > 0 and all specs collected. Returned by GET /api/v1/products/{id}/packaging-readiness?marketplace=X. | Packaging |
+| LineItemStatus | Per-line acceptance state on a PO: PENDING, ACCEPTED, REJECTED. Set during partial PO acceptance. Stored on each LineItem; the PO-level accept/reject decision can be broken down per line via accept_lines(). | Procurement |
+
 ## Compliance (deferred)
 
 | Term | Definition | Bounded Context |
