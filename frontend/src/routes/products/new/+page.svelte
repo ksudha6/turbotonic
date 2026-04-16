@@ -8,6 +8,7 @@
 	let part_number: string = $state('');
 	let description: string = $state('');
 	let requires_certification: boolean = $state(false);
+	let manufacturing_address: string = $state('');
 	let submitting: boolean = $state(false);
 	let error: string = $state('');
 	let vendors: VendorListItem[] = $state([]);
@@ -35,7 +36,8 @@
 				vendor_id,
 				part_number: part_number.trim(),
 				description: description.trim(),
-				requires_certification
+				requires_certification,
+				manufacturing_address
 			});
 			goto('/products');
 		} catch (err) {
@@ -79,6 +81,10 @@
 					Requires Certification
 				</label>
 			</div>
+			<div class="form-group span-2">
+				<label for="manufacturing_address">Manufacturing Address</label>
+				<textarea id="manufacturing_address" class="textarea" bind:value={manufacturing_address}></textarea>
+			</div>
 		</div>
 	</div>
 
@@ -108,6 +114,10 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: var(--space-4);
+	}
+
+	.form-grid .span-2 {
+		grid-column: span 2;
 	}
 
 	.form-group-checkbox {

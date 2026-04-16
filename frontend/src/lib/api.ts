@@ -283,7 +283,7 @@ export function createProduct(data: ProductInput): Promise<Product> {
 	return apiPost<Product>('/api/v1/products/', data);
 }
 
-export async function updateProduct(id: string, data: { description?: string; requires_certification?: boolean }): Promise<Product> {
+export async function updateProduct(id: string, data: { description?: string; requires_certification?: boolean; manufacturing_address?: string }): Promise<Product> {
 	const res = await fetch(`/api/v1/products/${id}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },

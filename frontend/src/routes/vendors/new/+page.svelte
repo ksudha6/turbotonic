@@ -7,6 +7,8 @@
 	let name: string = $state('');
 	let country: string = $state('');
 	let vendor_type: VendorType = $state('PROCUREMENT');
+	let address: string = $state('');
+	let account_details: string = $state('');
 	let submitting: boolean = $state(false);
 	let error: string = $state('');
 	let countries: ReferenceDataItem[] = $state([]);
@@ -31,7 +33,7 @@
 
 		submitting = true;
 		try {
-			await createVendor({ name: name.trim(), country, vendor_type });
+			await createVendor({ name: name.trim(), country, vendor_type, address, account_details });
 			goto('/vendors');
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'An error occurred.';
@@ -69,6 +71,14 @@
 					<option value="MISCELLANEOUS">Miscellaneous</option>
 				</select>
 			</div>
+			<div class="form-group span-2">
+				<label for="address">Address</label>
+				<textarea id="address" class="textarea" bind:value={address}></textarea>
+			</div>
+			<div class="form-group span-2">
+				<label for="account_details">Account Details</label>
+				<textarea id="account_details" class="textarea" bind:value={account_details}></textarea>
+			</div>
 		</div>
 	</div>
 
@@ -98,6 +108,10 @@
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: var(--space-4);
+	}
+
+	.form-grid .span-2 {
+		grid-column: span 2;
 	}
 
 	.form-actions {

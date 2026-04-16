@@ -1,7 +1,7 @@
 # Iterations Summary
 
 > Single-file context for future conversations. Replaces reading 29 individual iteration docs.
-> Last updated: iteration 035 closed.
+> Last updated: iteration 036 closed.
 
 ---
 
@@ -102,6 +102,7 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 | 033 | 2026-04-16 | Frontend auth flow: login page (WebAuthn passkey), invite-only register page, bootstrap/setup page, layout session check with redirect, logout, 401 handling, deep link preservation, credentials: include on all API calls, 9 new Playwright auth tests, existing tests updated with auth mock |
 | 034 | 2026-04-16 | Frontend role-conditional rendering: permissions.ts helper, role-based nav links, PO/invoice/vendor/product page button guards, page-level role redirects via +page.ts, dashboard role-filtered widgets, backend target_role filter on activity endpoints, 16 new Playwright role tests |
 | 035 | 2026-04-16 | Document storage infrastructure: files table, FileMetadata domain model, DocumentRepository, FileStorageService (local disk), upload/download/delete/list API endpoints, PDF-only 10MB limit, path traversal protection, require_auth on all endpoints, 19 new tests |
+| 036 | 2026-04-16 | Model extensions: marketplace on PO (with reference data validation), product_id on LineItem, address + account_details on Vendor, manufacturing_address on Product. Schema migration via ALTER TABLE. Frontend forms updated. Marketplace filter on PO list. |
 
 ---
 
@@ -132,6 +133,10 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - Frontend role-conditional rendering: nav links, page-level redirects, action buttons all respect user role. SM/ADMIN see management controls, VENDOR sees accept/reject/invoice/milestone controls, QUALITY_LAB sees products only, FREIGHT_MANAGER sees POs read-only
 - Backend activity endpoints accept optional target_role filter for role-scoped feeds
 - Document storage: upload/download/delete/list API backed by local filesystem (`uploads/`), metadata in `files` table with entity_type/entity_id index, PDF-only with 10MB limit, filename sanitization, path traversal protection, require_auth on all endpoints
+- PO marketplace field (AMZ, 3PL_1, 3PL_2, 3PL_3) with reference data validation and PO list filter
+- LineItem product_id FK to product catalog (loose, no cross-vendor validation yet)
+- Vendor address and account_details fields
+- Product manufacturing_address field
 
 ## What does not exist yet
 
@@ -229,4 +234,5 @@ These are the product differentiators. The CRUD workflow (items 1-3, 5, 7-10) is
 | 031 | RoleGuard, RequireRole, RequireAuth |
 | 032 | VendorScopedAccess |
 | 034 | RolePermission, RoleConditionalRendering |
-| 035 | FileMetadata, FileStorageService, DocumentRepository |
+| 035 | FileMetadata, EntityAttachment |
+| 036 | Marketplace, ManufacturingAddress, VendorAccountDetails |

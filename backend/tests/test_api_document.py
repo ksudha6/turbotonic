@@ -119,3 +119,13 @@ async def test_download_file_missing_from_disk(authenticated_client, upload_dir)
             f.unlink()
     resp = await authenticated_client.get(f"/api/v1/files/{file_id}")
     assert resp.status_code == 404
+
+
+async def test_upload_empty_entity_type(authenticated_client):
+    resp = await _upload_pdf(authenticated_client, entity_type="")
+    assert resp.status_code == 422
+
+
+async def test_upload_empty_entity_id(authenticated_client):
+    resp = await _upload_pdf(authenticated_client, entity_id="")
+    assert resp.status_code == 422

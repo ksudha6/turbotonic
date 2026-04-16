@@ -173,6 +173,12 @@ async def init_db(conn: asyncpg.Connection) -> None:
         """
     )
 
+    await conn.execute("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS marketplace TEXT")
+    await conn.execute("ALTER TABLE line_items ADD COLUMN IF NOT EXISTS product_id TEXT REFERENCES products(id)")
+    await conn.execute("ALTER TABLE vendors ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT ''")
+    await conn.execute("ALTER TABLE vendors ADD COLUMN IF NOT EXISTS account_details TEXT NOT NULL DEFAULT ''")
+    await conn.execute("ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturing_address TEXT NOT NULL DEFAULT ''")
+
     await conn.execute(
         """
         CREATE TABLE IF NOT EXISTS files (

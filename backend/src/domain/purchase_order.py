@@ -10,6 +10,7 @@ from src.domain.reference_data import (
     VALID_COUNTRIES,
     VALID_CURRENCIES,
     VALID_INCOTERMS,
+    VALID_MARKETPLACES,
     VALID_PAYMENT_TERMS,
     VALID_PORTS,
 )
@@ -37,6 +38,7 @@ class LineItem:
     unit_price: Decimal
     hs_code: str
     country_of_origin: str
+    product_id: str | None = None
 
     def __post_init__(self) -> None:
         if not self.part_number or not self.part_number.strip():
@@ -80,6 +82,7 @@ class PurchaseOrder:
         rejection_history: list[RejectionRecord],
         created_at: datetime,
         updated_at: datetime,
+        marketplace: str | None = None,
     ) -> None:
         self._id = id
         self._po_number = po_number
@@ -99,6 +102,7 @@ class PurchaseOrder:
         self.port_of_discharge = port_of_discharge
         self.country_of_origin = country_of_origin
         self.country_of_destination = country_of_destination
+        self.marketplace = marketplace
         self.line_items = line_items
         self.rejection_history = rejection_history
         self._created_at = created_at
@@ -175,6 +179,7 @@ class PurchaseOrder:
         country_of_destination: str,
         line_items: list[LineItem],
         po_type: POType = POType.PROCUREMENT,
+        marketplace: str | None = None,
     ) -> PurchaseOrder:
         cls._validate_reference_fields(
             currency=currency,
@@ -186,6 +191,8 @@ class PurchaseOrder:
             port_of_loading=port_of_loading,
             port_of_discharge=port_of_discharge,
         )
+        if marketplace is not None and marketplace not in VALID_MARKETPLACES:
+            raise ValueError(f"invalid marketplace: {marketplace!r}")
         if not line_items:
             raise ValueError("at least one line item is required")
         now = datetime.now(UTC)
@@ -208,6 +215,7 @@ class PurchaseOrder:
             port_of_discharge=port_of_discharge,
             country_of_origin=country_of_origin,
             country_of_destination=country_of_destination,
+            marketplace=marketplace,
             line_items=list(line_items),
             rejection_history=[],
             created_at=now,
@@ -264,6 +272,7 @@ class PurchaseOrder:
         country_of_origin: str,
         country_of_destination: str,
         line_items: list[LineItem],
+        marketplace: str | None = None,
     ) -> None:
         # Revision is the vendor's response to a rejection; only valid after REJECTED
         if self.status is not POStatus.REJECTED:
@@ -280,6 +289,8 @@ class PurchaseOrder:
             port_of_loading=port_of_loading,
             port_of_discharge=port_of_discharge,
         )
+        if marketplace is not None and marketplace not in VALID_MARKETPLACES:
+            raise ValueError(f"invalid marketplace: {marketplace!r}")
         if not line_items:
             raise ValueError("at least one line item is required")
         self.vendor_id = vendor_id
@@ -296,6 +307,7 @@ class PurchaseOrder:
         self.port_of_discharge = port_of_discharge
         self.country_of_origin = country_of_origin
         self.country_of_destination = country_of_destination
+        self.marketplace = marketplace
         self.line_items = list(line_items)
         self.status = POStatus.REVISED
         self.updated_at = datetime.now(UTC)

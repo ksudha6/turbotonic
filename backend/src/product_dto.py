@@ -12,6 +12,7 @@ class ProductCreate(BaseModel):
     part_number: str
     description: str = ""
     requires_certification: bool = False
+    manufacturing_address: str = ""
 
     @field_validator("vendor_id")
     @classmethod
@@ -31,6 +32,7 @@ class ProductCreate(BaseModel):
 class ProductUpdate(BaseModel):
     description: str | None = None
     requires_certification: bool | None = None
+    manufacturing_address: str | None = None
 
 
 class ProductResponse(BaseModel):
@@ -39,6 +41,7 @@ class ProductResponse(BaseModel):
     part_number: str
     description: str
     requires_certification: bool
+    manufacturing_address: str
     created_at: datetime
     updated_at: datetime
 
@@ -49,6 +52,7 @@ class ProductListItem(BaseModel):
     part_number: str
     description: str
     requires_certification: bool
+    manufacturing_address: str
 
 
 def product_to_response(product: Product) -> ProductResponse:
@@ -58,6 +62,7 @@ def product_to_response(product: Product) -> ProductResponse:
         part_number=product.part_number,
         description=product.description,
         requires_certification=product.requires_certification,
+        manufacturing_address=product.manufacturing_address,
         created_at=product.created_at,
         updated_at=product.updated_at,
     )
@@ -70,4 +75,5 @@ def product_to_list_item(product: Product) -> ProductListItem:
         part_number=product.part_number,
         description=product.description,
         requires_certification=product.requires_certification,
+        manufacturing_address=product.manufacturing_address,
     )

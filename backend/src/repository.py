@@ -58,8 +58,8 @@ class PurchaseOrderRepository:
                         issued_date, required_delivery_date,
                         terms_and_conditions, incoterm, port_of_loading,
                         port_of_discharge, country_of_origin, country_of_destination,
-                        created_at, updated_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+                        marketplace, created_at, updated_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
                     """,
                     po.id,
                     po.po_number,
@@ -79,6 +79,7 @@ class PurchaseOrderRepository:
                     po.port_of_discharge,
                     po.country_of_origin,
                     po.country_of_destination,
+                    po.marketplace,
                     _iso(po.created_at),
                     _iso(po.updated_at),
                 )
@@ -88,8 +89,8 @@ class PurchaseOrderRepository:
                         """
                         INSERT INTO line_items (
                             id, po_id, part_number, description, quantity,
-                            uom, unit_price, hs_code, country_of_origin, sort_order
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                            uom, unit_price, hs_code, country_of_origin, product_id, sort_order
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                         """,
                         str(uuid4()),
                         po.id,
@@ -100,6 +101,7 @@ class PurchaseOrderRepository:
                         str(item.unit_price),
                         item.hs_code,
                         item.country_of_origin,
+                        item.product_id,
                         sort_order,
                     )
 
@@ -123,8 +125,8 @@ class PurchaseOrderRepository:
                         terms_and_conditions = $12, incoterm = $13,
                         port_of_loading = $14, port_of_discharge = $15,
                         country_of_origin = $16, country_of_destination = $17,
-                        updated_at = $18
-                    WHERE id = $19
+                        marketplace = $18, updated_at = $19
+                    WHERE id = $20
                     """,
                     po.po_number,
                     po.status.value,
@@ -143,6 +145,7 @@ class PurchaseOrderRepository:
                     po.port_of_discharge,
                     po.country_of_origin,
                     po.country_of_destination,
+                    po.marketplace,
                     _iso(po.updated_at),
                     po.id,
                 )
@@ -156,8 +159,8 @@ class PurchaseOrderRepository:
                         """
                         INSERT INTO line_items (
                             id, po_id, part_number, description, quantity,
-                            uom, unit_price, hs_code, country_of_origin, sort_order
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                            uom, unit_price, hs_code, country_of_origin, product_id, sort_order
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                         """,
                         str(uuid4()),
                         po.id,
@@ -168,6 +171,7 @@ class PurchaseOrderRepository:
                         str(item.unit_price),
                         item.hs_code,
                         item.country_of_origin,
+                        item.product_id,
                         sort_order,
                     )
 
@@ -221,6 +225,7 @@ class PurchaseOrderRepository:
         vendor_id: str | None = None,
         currency: str | None = None,
         milestone: str | None = None,
+        marketplace: str | None = None,
         search: str | None = None,
         sort_by: str = "created_at",
         sort_dir: str = "desc",
@@ -254,6 +259,10 @@ class PurchaseOrderRepository:
             where_clauses.append(f"lm.milestone = ${param_idx}")
             params.append(milestone)
             param_idx += 1
+        if marketplace is not None:
+            where_clauses.append(f"p.marketplace = ${param_idx}")
+            params.append(marketplace)
+            param_idx += 1
         if search is not None:
             term = f"%{search}%"
             where_clauses.append(
@@ -286,6 +295,7 @@ class PurchaseOrderRepository:
                 p.buyer_name,
                 p.buyer_country,
                 p.po_type,
+                p.marketplace,
                 v.name AS vendor_name,
                 v.country AS vendor_country,
                 p.issued_date,
@@ -422,6 +432,7 @@ def _reconstruct(
             unit_price=Decimal(row["unit_price"]),
             hs_code=row["hs_code"],
             country_of_origin=row["country_of_origin"],
+            product_id=row["product_id"],
         )
         for row in item_rows
     ]
@@ -453,6 +464,7 @@ def _reconstruct(
         port_of_discharge=po_row["port_of_discharge"],
         country_of_origin=po_row["country_of_origin"],
         country_of_destination=po_row["country_of_destination"],
+        marketplace=po_row["marketplace"],
         line_items=line_items,
         rejection_history=rejection_history,
         created_at=_parse_dt(po_row["created_at"]),

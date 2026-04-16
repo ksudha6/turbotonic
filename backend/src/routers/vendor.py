@@ -31,7 +31,7 @@ VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
 @router.post("/", response_model=VendorResponse, status_code=201)
 async def create_vendor(body: VendorCreate, repo: VendorRepoDep, _user: User = require_role(UserRole.SM)) -> VendorResponse:
     vendor_type = VendorType(body.vendor_type)
-    vendor = Vendor.create(name=body.name, country=body.country, vendor_type=vendor_type)
+    vendor = Vendor.create(name=body.name, country=body.country, vendor_type=vendor_type, address=body.address, account_details=body.account_details)
     await repo.save(vendor)
     return vendor_to_response(vendor)
 

@@ -54,17 +54,20 @@ async def upload_file(
 
     raw_name = file.filename or "upload"
     original_name = raw_name.replace("/", "_").replace("\\", "_")
-    stored_path = await file_storage.save_file(entity_type, entity_id, original_name, content)
+    try:
+        stored_path = await file_storage.save_file(entity_type, entity_id, original_name, content)
 
-    metadata = FileMetadata.create(
-        entity_type=entity_type,
-        entity_id=entity_id,
-        file_type=file_type,
-        original_name=original_name,
-        stored_path=stored_path,
-        content_type=content_type,
-        size_bytes=len(content),
-    )
+        metadata = FileMetadata.create(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            file_type=file_type,
+            original_name=original_name,
+            stored_path=stored_path,
+            content_type=content_type,
+            size_bytes=len(content),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     await repo.save(metadata)
     return file_metadata_to_response(metadata)
 

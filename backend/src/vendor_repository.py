@@ -33,20 +33,23 @@ class VendorRepository:
         if not exists:
             await self._conn.execute(
                 """
-                INSERT INTO vendors (id, name, country, status, vendor_type, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                INSERT INTO vendors (id, name, country, status, vendor_type, address, account_details, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
                 """,
                 vendor.id, vendor.name, vendor.country, vendor.status.value,
-                vendor.vendor_type.value, _iso(vendor.created_at), _iso(vendor.updated_at),
+                vendor.vendor_type.value, vendor.address, vendor.account_details,
+                _iso(vendor.created_at), _iso(vendor.updated_at),
             )
         else:
             await self._conn.execute(
                 """
-                UPDATE vendors SET name = $1, country = $2, status = $3, vendor_type = $4, updated_at = $5
-                WHERE id = $6
+                UPDATE vendors SET name = $1, country = $2, status = $3, vendor_type = $4,
+                    address = $5, account_details = $6, updated_at = $7
+                WHERE id = $8
                 """,
                 vendor.name, vendor.country, vendor.status.value,
-                vendor.vendor_type.value, _iso(vendor.updated_at), vendor.id,
+                vendor.vendor_type.value, vendor.address, vendor.account_details,
+                _iso(vendor.updated_at), vendor.id,
             )
 
     async def get_by_id(self, vendor_id: str) -> Vendor | None:
@@ -90,4 +93,6 @@ def _reconstruct(row: asyncpg.Record) -> Vendor:
         vendor_type=VendorType(row["vendor_type"]),
         created_at=_parse_dt(row["created_at"]),
         updated_at=_parse_dt(row["updated_at"]),
+        address=row["address"] or "",
+        account_details=row["account_details"] or "",
     )

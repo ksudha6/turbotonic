@@ -24,6 +24,7 @@
 		port_of_discharge?: string;
 		country_of_origin?: string;
 		country_of_destination?: string;
+		marketplace?: string | null;
 		line_items?: LineItemInput[];
 	}
 
@@ -43,7 +44,8 @@
 			uom: '',
 			unit_price: '0',
 			hs_code: '',
-			country_of_origin: ''
+			country_of_origin: '',
+			product_id: null
 		};
 	}
 
@@ -68,6 +70,7 @@
 	let country_of_origin: string = $state(initialData.country_of_origin ?? '');
 	let country_of_destination: string = $state(initialData.country_of_destination ?? '');
 	let terms_and_conditions: string = $state(initialData.terms_and_conditions ?? '');
+	let marketplace: string = $state(initialData.marketplace ?? '');
 	let lineItems: LineItemInput[] = $state(
 		initialData.line_items && initialData.line_items.length > 0
 			? initialData.line_items.map((item) => ({ ...item }))
@@ -155,9 +158,11 @@
 			country_of_origin,
 			country_of_destination,
 			terms_and_conditions,
+			marketplace: marketplace || null,
 			line_items: lineItems.map((item) => ({
 				...item,
-				unit_price: String(parseFloat(item.unit_price) || 0)
+				unit_price: String(parseFloat(item.unit_price) || 0),
+				product_id: item.product_id || null
 			}))
 		};
 
@@ -191,6 +196,16 @@
 					{#each filteredVendors as v}
 						<option value={v.id}>{v.name} ({v.country})</option>
 					{/each}
+				</select>
+			</div>
+			<div class="form-group">
+				<label for="marketplace">Marketplace</label>
+				<select id="marketplace" class="select" bind:value={marketplace}>
+					<option value="">None</option>
+					<option value="AMZ">AMZ</option>
+					<option value="3PL_1">3PL_1</option>
+					<option value="3PL_2">3PL_2</option>
+					<option value="3PL_3">3PL_3</option>
 				</select>
 			</div>
 			<div class="form-group">
@@ -342,6 +357,7 @@
 				<span>Unit Price *</span>
 				<span>HS Code</span>
 				<span>Country of Origin</span>
+				<span>Product ID</span>
 				<span></span>
 			</div>
 			{#each lineItems as item, i}
@@ -388,6 +404,12 @@
 						type="text"
 						placeholder="Origin"
 						bind:value={item.country_of_origin}
+					/>
+					<input
+						class="input"
+						type="text"
+						placeholder="Product ID"
+						bind:value={item.product_id}
 					/>
 					<button
 						type="button"
@@ -453,7 +475,7 @@
 	.line-item-header-row,
 	.line-item-row {
 		display: grid;
-		grid-template-columns: 2fr 2fr 1fr 1fr 1.5fr 1.5fr 1.5fr auto;
+		grid-template-columns: 2fr 2fr 1fr 1fr 1.5fr 1.5fr 1.5fr 1.5fr auto;
 		gap: var(--space-2);
 		align-items: end;
 	}

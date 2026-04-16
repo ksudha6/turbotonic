@@ -12,6 +12,8 @@ class VendorCreate(BaseModel):
     name: str
     country: str
     vendor_type: str
+    address: str = ""
+    account_details: str = ""
 
     @field_validator("name")
     @classmethod
@@ -44,6 +46,8 @@ class VendorResponse(BaseModel):
     country: str
     status: str
     vendor_type: str
+    address: str
+    account_details: str
     created_at: datetime
     updated_at: datetime
 
@@ -54,6 +58,8 @@ class VendorListItem(BaseModel):
     country: str
     status: str
     vendor_type: str
+    address: str
+    account_details: str
 
 
 def vendor_to_response(vendor: Vendor) -> VendorResponse:
@@ -63,6 +69,8 @@ def vendor_to_response(vendor: Vendor) -> VendorResponse:
         country=vendor.country,
         status=vendor.status.value,
         vendor_type=vendor.vendor_type.value,
+        address=vendor.address,
+        account_details=vendor.account_details,
         created_at=vendor.created_at,
         updated_at=vendor.updated_at,
     )
@@ -75,4 +83,6 @@ def vendor_to_list_item(vendor: Vendor) -> VendorListItem:
         country=vendor.country,
         status=vendor.status.value,
         vendor_type=vendor.vendor_type.value,
+        address=vendor.address,
+        account_details=vendor.account_details,
     )

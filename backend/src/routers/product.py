@@ -42,6 +42,7 @@ async def create_product(body: ProductCreate, repo: ProductRepoDep, _user: User 
         part_number=body.part_number,
         description=body.description,
         requires_certification=body.requires_certification,
+        manufacturing_address=body.manufacturing_address,
     )
     try:
         await repo.save(product)
@@ -81,6 +82,7 @@ async def update_product(
     product.update(
         description=body.description,
         requires_certification=body.requires_certification,
+        manufacturing_address=body.manufacturing_address,
     )
     await repo.save(product)
     return product_to_response(product)

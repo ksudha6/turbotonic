@@ -150,6 +150,12 @@
 				<span class="field-label">Payment Terms</span>
 				<span class="value">{resolve('payment_terms', po.payment_terms)}</span>
 			</div>
+			{#if po.marketplace}
+				<div class="info-item">
+					<span class="field-label">Marketplace</span>
+					<span class="value">{po.marketplace}</span>
+				</div>
+			{/if}
 		</div>
 	</div>
 

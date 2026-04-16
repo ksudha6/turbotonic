@@ -32,14 +32,15 @@ class ProductRepository:
             await self._conn.execute(
                 """
                 INSERT INTO products (id, vendor_id, part_number, description,
-                    requires_certification, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    requires_certification, manufacturing_address, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 """,
                 product.id,
                 product.vendor_id,
                 product.part_number,
                 product.description,
                 1 if product.requires_certification else 0,
+                product.manufacturing_address,
                 _iso(product.created_at),
                 _iso(product.updated_at),
             )
@@ -47,13 +48,14 @@ class ProductRepository:
             await self._conn.execute(
                 """
                 UPDATE products SET vendor_id = $1, part_number = $2, description = $3,
-                    requires_certification = $4, updated_at = $5
-                WHERE id = $6
+                    requires_certification = $4, manufacturing_address = $5, updated_at = $6
+                WHERE id = $7
                 """,
                 product.vendor_id,
                 product.part_number,
                 product.description,
                 1 if product.requires_certification else 0,
+                product.manufacturing_address,
                 _iso(product.updated_at),
                 product.id,
             )
@@ -98,6 +100,7 @@ def _reconstruct(row: asyncpg.Record) -> Product:
         part_number=row["part_number"],
         description=row["description"],
         requires_certification=bool(row["requires_certification"]),
+        manufacturing_address=row["manufacturing_address"] or "",
         created_at=_parse_dt(row["created_at"]),
         updated_at=_parse_dt(row["updated_at"]),
     )

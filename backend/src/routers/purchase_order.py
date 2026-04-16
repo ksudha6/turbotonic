@@ -78,6 +78,7 @@ def _build_line_items(data: PurchaseOrderCreate | PurchaseOrderUpdate) -> list[L
             unit_price=item.unit_price,
             hs_code=item.hs_code,
             country_of_origin=item.country_of_origin,
+            product_id=item.product_id,
         )
         for item in data.line_items
     ]
@@ -117,6 +118,7 @@ async def create_po(body: PurchaseOrderCreate, repo: RepoDep, vendor_repo: Vendo
             country_of_destination=body.country_of_destination,
             line_items=line_items,
             po_type=po_type,
+            marketplace=body.marketplace,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -133,6 +135,7 @@ async def list_pos(
     vendor_id: str | None = None,
     currency: str | None = None,
     milestone: str | None = None,
+    marketplace: str | None = None,
     sort_by: str = "created_at",
     sort_dir: str = "desc",
     page: int = 1,
@@ -169,6 +172,7 @@ async def list_pos(
             vendor_id=vendor_id,
             currency=currency,
             milestone=milestone,
+            marketplace=marketplace,
             search=search,
             sort_by=sort_by,
             sort_dir=sort_dir,
@@ -194,6 +198,7 @@ async def list_pos(
             total_value=str(row["total_value"]),
             currency=row["currency"],
             current_milestone=row["current_milestone"],
+            marketplace=row.get("marketplace"),
         )
         for row in rows
     ]
@@ -367,6 +372,7 @@ async def update_po(po_id: str, body: PurchaseOrderUpdate, repo: RepoDep, vendor
             country_of_origin=body.country_of_origin,
             country_of_destination=body.country_of_destination,
             line_items=line_items,
+            marketplace=body.marketplace,
         )
     except ValueError as exc:
         status_code = 422 if str(exc).startswith("invalid ") else 409

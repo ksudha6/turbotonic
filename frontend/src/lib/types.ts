@@ -11,6 +11,8 @@ export interface VendorListItem {
 	country: string;
 	status: VendorStatus;
 	vendor_type: VendorType;
+	address: string;
+	account_details: string;
 }
 
 export interface Vendor {
@@ -19,6 +21,8 @@ export interface Vendor {
 	country: string;
 	status: VendorStatus;
 	vendor_type: VendorType;
+	address: string;
+	account_details: string;
 	created_at: string;
 	updated_at: string;
 }
@@ -27,6 +31,8 @@ export interface VendorInput {
 	name: string;
 	country: string;
 	vendor_type: VendorType;
+	address: string;
+	account_details: string;
 }
 
 export interface LineItem {
@@ -37,6 +43,7 @@ export interface LineItem {
 	unit_price: string;
 	hs_code: string;
 	country_of_origin: string;
+	product_id: string | null;
 }
 
 export interface RejectionRecord {
@@ -59,6 +66,7 @@ export interface PurchaseOrderListItem {
 	total_value: string;
 	currency: string;
 	current_milestone: string | null;
+	marketplace: string | null;
 }
 
 export interface PaginatedPOList {
@@ -91,6 +99,7 @@ export interface LineItemInput {
 	unit_price: string;
 	hs_code: string;
 	country_of_origin: string;
+	product_id: string | null;
 }
 
 export interface ReferenceDataItem {
@@ -126,6 +135,7 @@ export interface PurchaseOrderInput {
 	port_of_discharge: string;
 	country_of_origin: string;
 	country_of_destination: string;
+	marketplace: string | null;
 	line_items: LineItemInput[];
 }
 
@@ -285,6 +295,7 @@ export interface ProductListItem {
 	part_number: string;
 	description: string;
 	requires_certification: boolean;
+	manufacturing_address: string;
 }
 
 export interface Product extends ProductListItem {
@@ -297,6 +308,7 @@ export interface ProductInput {
 	part_number: string;
 	description: string;
 	requires_certification: boolean;
+	manufacturing_address: string;
 }
 
 export type UserRole = 'ADMIN' | 'PROCUREMENT_MANAGER' | 'SM' | 'VENDOR' | 'QUALITY_LAB' | 'FREIGHT_MANAGER';

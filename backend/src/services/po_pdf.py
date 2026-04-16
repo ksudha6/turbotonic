@@ -101,6 +101,7 @@ def generate_po_pdf(
     story.append(Paragraph("PURCHASE ORDER", title_style))
 
     # PO number (left) and status (right) in a two-cell table
+    marketplace_text = f"<b>Marketplace:</b> {po.marketplace}" if po.marketplace else ""
     po_header_data = [
         [
             Paragraph(f"<b>PO Number:</b> {po.po_number}", body_style),
@@ -108,7 +109,7 @@ def generate_po_pdf(
         ],
         [
             Paragraph(f"<b>Currency:</b> {po.currency} - {currency_label(po.currency)}", body_style),
-            Paragraph("", body_style),
+            Paragraph(marketplace_text, body_style),
         ],
     ]
     po_header_table = Table(po_header_data, colWidths=[_PAGE_WIDTH / 2, _PAGE_WIDTH / 2])

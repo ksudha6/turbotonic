@@ -139,6 +139,16 @@
 |------|-----------|-----------------|
 | Vendor-Scoped Access | Query-level filtering that restricts VENDOR users to data belonging to their vendor. Applied to PO lists/details, invoices, milestones, activity, and dashboard. Non-VENDOR roles pass through unfiltered. Uses 404 (not 403) on ownership mismatch to avoid leaking entity existence. | Auth |
 
+## Document Storage
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| FileMetadata | Metadata record for an uploaded file: entity association (type + id), file classification (file_type), storage path, original name, content type, size. Not the file itself. Aggregate root of the document storage module. | Documents |
+| Entity Attachment | The pattern of associating a file to a domain entity via (entity_type, entity_id). Free-text entity_type avoids schema changes as new attachment targets are added. | Documents |
+| Marketplace | Target sales channel for a PO: AMZ, 3PL_1, 3PL_2, 3PL_3. Validated against reference data. Optional (nullable). Determines packaging and certification requirements downstream. | Procurement |
+| Manufacturing Address | Physical location where a product is manufactured. Stored on Product. Used by certificates of origin and compliance documents. | Procurement |
+| Vendor Account Details | Bank/payment information for a vendor. Free-text. Used by shipping and export documents. | Procurement |
+
 ## Compliance (deferred)
 
 | Term | Definition | Bounded Context |

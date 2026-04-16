@@ -52,6 +52,7 @@
 			country_of_origin: po.country_of_origin,
 			country_of_destination: po.country_of_destination,
 			terms_and_conditions: po.terms_and_conditions,
+			marketplace: po.marketplace,
 			line_items: po.line_items.map((item) => ({
 				part_number: item.part_number,
 				description: item.description,
@@ -59,7 +60,8 @@
 				uom: item.uom,
 				unit_price: item.unit_price,
 				hs_code: item.hs_code,
-				country_of_origin: item.country_of_origin
+				country_of_origin: item.country_of_origin,
+				product_id: item.product_id
 			}))
 		}}
 		onSubmit={handleSubmit}

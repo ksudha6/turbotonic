@@ -24,6 +24,7 @@ class LineItemCreate(BaseModel):
     unit_price: Decimal
     hs_code: str
     country_of_origin: str
+    product_id: str | None = None
 
     @field_validator("part_number")
     @classmethod
@@ -73,6 +74,7 @@ class PurchaseOrderCreate(BaseModel):
     country_of_destination: str
     line_items: list[LineItemCreate]
     po_type: str = "PROCUREMENT"
+    marketplace: str | None = None
 
     @field_validator("line_items")
     @classmethod
@@ -106,6 +108,7 @@ class PurchaseOrderUpdate(BaseModel):
     country_of_origin: str
     country_of_destination: str
     line_items: list[LineItemCreate]
+    marketplace: str | None = None
 
     @field_validator("line_items")
     @classmethod
@@ -180,6 +183,7 @@ class LineItemResponse(BaseModel):
     unit_price: str
     hs_code: str
     country_of_origin: str
+    product_id: str | None = None
 
 
 class RejectionResponse(BaseModel):
@@ -208,6 +212,7 @@ class PurchaseOrderResponse(BaseModel):
     port_of_discharge: str
     country_of_origin: str
     country_of_destination: str
+    marketplace: str | None = None
     line_items: list[LineItemResponse]
     rejection_history: list[RejectionResponse]
     total_value: str
@@ -230,6 +235,7 @@ class PurchaseOrderListItem(BaseModel):
     total_value: str
     currency: str
     current_milestone: str | None = None
+    marketplace: str | None = None
 
 
 class PaginatedPOList(BaseModel):
@@ -248,6 +254,7 @@ def _line_item_to_response(item: LineItem) -> LineItemResponse:
         unit_price=str(item.unit_price),
         hs_code=item.hs_code,
         country_of_origin=item.country_of_origin,
+        product_id=item.product_id,
     )
 
 
@@ -280,6 +287,7 @@ def po_to_response(po: PurchaseOrder, vendor_name: str = "", vendor_country: str
         port_of_discharge=po.port_of_discharge,
         country_of_origin=po.country_of_origin,
         country_of_destination=po.country_of_destination,
+        marketplace=po.marketplace,
         line_items=[_line_item_to_response(i) for i in po.line_items],
         rejection_history=[_rejection_record_to_response(r) for r in po.rejection_history],
         total_value=str(po.total_value),
@@ -303,6 +311,7 @@ def po_to_list_item(po: PurchaseOrder, vendor_name: str = "", vendor_country: st
         required_delivery_date=po.required_delivery_date,
         total_value=str(po.total_value),
         currency=po.currency,
+        marketplace=po.marketplace,
     )
 
 

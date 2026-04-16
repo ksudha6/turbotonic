@@ -190,6 +190,8 @@ VALID_PORTS: frozenset[str] = frozenset(code for code, _ in PORTS)
 VALID_VENDOR_TYPES: frozenset[str] = frozenset(code for code, _ in VENDOR_TYPES)
 VALID_PO_TYPES: frozenset[str] = frozenset(code for code, _ in PO_TYPES)
 
+VALID_MARKETPLACES: tuple[str, ...] = ("AMZ", "3PL_1", "3PL_2", "3PL_3")
+
 # Static USD exchange rates: 1 unit of currency = this many USD.
 # Approximate indicative rates; not for financial calculations.
 USD_EXCHANGE_RATES: tuple[tuple[str, str], ...] = (

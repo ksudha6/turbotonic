@@ -102,6 +102,8 @@ The system has no file handling; all data is structured records in SQLite. This 
   - Upload with path traversal in filename (e.g. `../../etc/passwd.pdf`), verify filename is sanitized
   - Download nonexistent file_id, verify 404
   - Download when file exists in DB but missing from disk, verify 404
+  - Upload with empty entity_type via form, verify 400 rejection
+  - Upload with empty entity_id via form, verify 400 rejection
 
 ### Tests (scratch)
 
@@ -118,7 +120,7 @@ Not needed. Permanent API tests cover stored_path structure and directory creati
 
 ## Notes
 
-Added document storage infrastructure: `files` table with `(entity_type, entity_id)` index, `FileMetadata` domain model with validation, `DocumentRepository` for CRUD, `FileStorageService` for disk operations with path traversal protection, and a router with four endpoints (upload, download, delete, list). All endpoints require authentication; role guards deferred. PDF-only restriction at upload. Filename sanitization strips path separators on both storage and DB metadata. Added `python-multipart` dependency for FastAPI file uploads. Conftest updated with temp upload directory per test fixture and cleanup on teardown. 19 new tests (7 domain + 12 API) all pass alongside 265 existing.
+Document storage is API-only with local filesystem backing at `uploads/`. PDF-only restriction and 10 MB limit are constants in the router. Entity association uses free-text entity_type/entity_id to avoid schema changes per consuming feature. Path traversal sanitization strips separators from uploaded filenames. Role guards deferred to the backlog until consuming features define access rules.
 
 ## Files created
 - `backend/src/domain/document.py`
