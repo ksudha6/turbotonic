@@ -1,8 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { fetchUnreadCount, fetchActivity, markActivityRead } from '$lib/api';
 	import type { ActivityLogEntry } from '$lib/types';
+
+	const role = $derived(page.data.user?.role);
 
 	let unreadCount: number = $state(0);
 	let open: boolean = $state(false);
@@ -34,7 +37,7 @@
 	}
 
 	async function refreshCount() {
-		const result = await fetchUnreadCount();
+		const result = await fetchUnreadCount(role);
 		unreadCount = result.count;
 	}
 
@@ -43,7 +46,7 @@
 			open = false;
 			return;
 		}
-		entries = await fetchActivity(10);
+		entries = await fetchActivity(10, role);
 		open = true;
 	}
 

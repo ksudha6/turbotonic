@@ -1,17 +1,19 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { getInvoice, submitInvoice, approveInvoice, payInvoice, disputeInvoice, resolveInvoice, downloadInvoicePdf } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import DisputeDialog from '$lib/components/DisputeDialog.svelte';
 	import ActivityTimeline from '$lib/components/ActivityTimeline.svelte';
 	import type { Invoice } from '$lib/types';
+	import { canSubmitInvoice, canApproveInvoice, canPayInvoice, canDisputeInvoice, canResolveInvoice } from '$lib/permissions';
 
 	let invoice: Invoice | null = $state(null);
 	let loading: boolean = $state(true);
 	let showDisputeDialog: boolean = $state(false);
 
-	const id: string = $page.params.id ?? '';
+	const id: string = page.params.id ?? '';
+	const role = $derived(page.data.user?.role);
 
 	async function fetchInvoice() {
 		loading = true;
@@ -118,14 +120,18 @@
 
 	<div class="actions">
 		<button class="btn btn-secondary" onclick={() => downloadInvoicePdf(id)}>Download PDF</button>
-		{#if invoice.status === 'DRAFT'}
+		{#if invoice.status === 'DRAFT' && role && canSubmitInvoice(role)}
 			<button class="btn btn-primary" onclick={handleSubmit}>Submit</button>
 		{:else if invoice.status === 'SUBMITTED'}
-			<button class="btn btn-success" onclick={handleApprove}>Approve</button>
-			<button class="btn btn-danger" onclick={() => (showDisputeDialog = true)}>Dispute</button>
-		{:else if invoice.status === 'APPROVED'}
+			{#if role && canApproveInvoice(role)}
+				<button class="btn btn-success" onclick={handleApprove}>Approve</button>
+			{/if}
+			{#if role && canDisputeInvoice(role)}
+				<button class="btn btn-danger" onclick={() => (showDisputeDialog = true)}>Dispute</button>
+			{/if}
+		{:else if invoice.status === 'APPROVED' && role && canPayInvoice(role)}
 			<button class="btn btn-primary" onclick={handlePay}>Pay</button>
-		{:else if invoice.status === 'DISPUTED'}
+		{:else if invoice.status === 'DISPUTED' && role && canResolveInvoice(role)}
 			<button class="btn btn-secondary" onclick={handleResolve}>Resolve</button>
 		{:else if invoice.status === 'PAID'}
 			<p class="paid-message">This invoice has been paid.</p>

@@ -1,7 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { page } from '$app/state';
 	import { listProducts, listVendors } from '$lib/api';
+	import { canManageProducts } from '$lib/permissions';
 	import type { ProductListItem, VendorListItem } from '$lib/types';
+
+	const role = $derived(page.data.user?.role);
 
 	let products: ProductListItem[] = $state([]);
 	let vendors: VendorListItem[] = $state([]);
@@ -34,7 +38,9 @@
 
 <div class="page-header">
 	<h1>Products</h1>
-	<a href="/products/new" class="btn btn-primary">New Product</a>
+	{#if role && canManageProducts(role)}
+		<a href="/products/new" class="btn btn-primary">New Product</a>
+	{/if}
 </div>
 
 <div class="filter-bar">
@@ -76,7 +82,9 @@
 							{/if}
 						</td>
 						<td>
-							<a href="/products/{product.id}/edit" class="btn btn-secondary btn-sm">Edit</a>
+							{#if role && canManageProducts(role)}
+								<a href="/products/{product.id}/edit" class="btn btn-secondary btn-sm">Edit</a>
+							{/if}
 						</td>
 					</tr>
 				{/each}

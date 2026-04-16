@@ -15,7 +15,7 @@ The frontend has auth and user context in layout (iter 033), but renders every b
 ## Tasks
 
 ### Role helper utility
-- [ ] Create `frontend/src/lib/permissions.ts`
+- [x] Create `frontend/src/lib/permissions.ts`
   - `canDoEverything(role)` -- ADMIN only (ADMIN inherits all SM permissions plus user management)
   - Each `can*` function should return true for ADMIN (ADMIN passes every permission check)
   - `canCreatePO(role)` -- SM only
@@ -33,98 +33,96 @@ The frontend has auth and user context in layout (iter 033), but renders every b
   - `canViewProducts(role)` -- SM, QUALITY_LAB
   - `canPostMilestone(role)` -- VENDOR only
   - `canViewInvoices(role)` -- SM, VENDOR
-  - `canViewPOs(role)` -- all roles
+  - `canViewPOs(role)` -- all roles except QUALITY_LAB
   - Each function takes UserRole and returns boolean
   - Single source of truth for frontend permission checks
 
 ### Navigation: role-based menu items
-- [ ] Update `frontend/src/routes/+layout.svelte`
+- [x] Update `frontend/src/routes/+layout.svelte`
   - SM: Dashboard, POs, Invoices, Vendors, Products (all nav links)
   - VENDOR: Dashboard, POs, Invoices (no Vendors, no Products)
   - QUALITY_LAB: Dashboard, Products (no POs, no Invoices, no Vendors)
   - FREIGHT_MANAGER: Dashboard, POs (no Invoices, no Vendors, no Products)
-  - ADMIN: same as SM plus Users link (user management page)
+  - ADMIN: same as SM (no Users link yet; user management page is a backlog item, show link once `/users` page exists)
   - PROCUREMENT_MANAGER: Dashboard only (permissions not yet wired; future iteration will expand access)
   - Use `canManageVendors`, `canViewProducts`, `canViewInvoices`, `canViewPOs` to control visibility
   - Display current user's display_name and role in header/nav
 
 ### PO list page (`frontend/src/routes/po/+page.svelte`)
-- [ ] Hide "Create PO" button unless `canCreatePO(role)`
-- [ ] Bulk action buttons:
+- [x] Hide "Create PO" button unless `canCreatePO(role)`
+- [x] Bulk action buttons:
   - SM sees: Submit, Resubmit
   - VENDOR sees: Accept, Reject
   - Neither role sees the other's actions
-- [ ] All roles see the PO list table (data scoping is backend's job)
+- [x] All roles see the PO list table (data scoping is backend's job)
 
 ### PO detail page (`frontend/src/routes/po/[id]/+page.svelte`)
-- [ ] SM sees: Edit button (on REJECTED POs), Submit button (on DRAFT), Resubmit button (on REVISED)
-- [ ] VENDOR sees: Accept button (on PENDING), Reject button (on PENDING), Milestone form (on ACCEPTED PROCUREMENT POs)
-- [ ] QUALITY_LAB and FREIGHT_MANAGER: no action buttons, read-only view
-- [ ] All roles see: PO details, line items, milestone timeline, activity timeline, PDF download
+- [x] SM sees: Edit button (on REJECTED POs), Submit button (on DRAFT), Resubmit button (on REVISED)
+- [x] VENDOR sees: Accept button (on PENDING), Reject button (on PENDING), Create Invoice button (on ACCEPTED POs), Milestone form (on ACCEPTED PROCUREMENT POs)
+- [x] QUALITY_LAB and FREIGHT_MANAGER: no action buttons, read-only view
+- [x] All roles see: PO details, line items, milestone timeline, activity timeline, PDF download
 
 ### PO create page (`frontend/src/routes/po/new/+page.svelte`)
-- [ ] Redirect non-SM users to /po with an error message or toast
-- [ ] Check role on mount; if not SM, `goto('/po')`
+- [x] Redirect non-SM users to /po: use `+page.ts` load function with `throw redirect(307, '/po')` (prevents page content flash)
 
 ### PO edit page (`frontend/src/routes/po/[id]/edit/+page.svelte`)
-- [ ] Redirect non-SM users to /po/[id]
-- [ ] Check role on mount; if not SM, `goto('/po/' + id)`
+- [x] Redirect non-SM users to /po/[id]: use `+page.ts` load function with `throw redirect(307, '/po/' + id)` (prevents page content flash)
 
 ### Invoice list page (`frontend/src/routes/invoices/+page.svelte`)
-- [ ] Redirect QUALITY_LAB and FREIGHT_MANAGER to /dashboard (they cannot view invoices)
-- [ ] SM sees: no create button (invoices are created from PO detail), bulk PDF download
-- [ ] VENDOR sees: bulk PDF download
-- [ ] Both SM and VENDOR see the invoice list table
+- [x] Redirect QUALITY_LAB and FREIGHT_MANAGER to /dashboard: use `+page.ts` load function (prevents page content flash)
+- [x] SM sees: no create button (invoices are created from PO detail), bulk PDF download
+- [x] VENDOR sees: bulk PDF download
+- [x] Both SM and VENDOR see the invoice list table
 
 ### Invoice detail page (`frontend/src/routes/invoice/[id]/+page.svelte`)
-- [ ] Redirect QUALITY_LAB and FREIGHT_MANAGER to /dashboard
-- [ ] SM sees: Approve button (on SUBMITTED), Pay button (on APPROVED), Dispute button (on SUBMITTED/APPROVED), Resolve button (on DISPUTED)
-- [ ] VENDOR sees: Submit button (on DRAFT)
-- [ ] Both SM and VENDOR see: invoice details, line items, activity timeline, PDF download
+- [x] Redirect QUALITY_LAB and FREIGHT_MANAGER to /dashboard: use `+page.ts` load function
+- [x] SM sees: Approve button (on SUBMITTED), Pay button (on APPROVED), Dispute button (on SUBMITTED/APPROVED), Resolve button (on DISPUTED)
+- [x] VENDOR sees: Submit button (on DRAFT)
+- [x] Both SM and VENDOR see: invoice details, line items, activity timeline, PDF download
 
 ### Vendor list page (`frontend/src/routes/vendors/+page.svelte`)
-- [ ] Redirect non-SM users to /dashboard
-- [ ] SM sees: Create Vendor button, deactivate/reactivate actions, full vendor list
+- [x] Redirect non-SM users to /dashboard: use `+page.ts` load function
+- [x] SM sees: Create Vendor button, deactivate/reactivate actions, full vendor list
 
 ### Vendor create page (`frontend/src/routes/vendors/new/+page.svelte`)
-- [ ] Redirect non-SM users to /dashboard
+- [x] Redirect non-SM users to /dashboard: use `+page.ts` load function
 
 ### Product list page (`frontend/src/routes/products/+page.svelte`)
-- [ ] Redirect VENDOR and FREIGHT_MANAGER to /dashboard (they cannot view products)
-- [ ] SM sees: Create Product button
-- [ ] QUALITY_LAB sees: read-only list, no create button
+- [x] Redirect VENDOR and FREIGHT_MANAGER to /dashboard: use `+page.ts` load function
+- [x] SM sees: Create Product button
+- [x] QUALITY_LAB sees: read-only list, no create button
 
 ### Product create page (`frontend/src/routes/products/new/+page.svelte`)
-- [ ] Redirect non-SM users to /products (QUALITY_LAB can view but not create) or /dashboard (others)
+- [x] Redirect non-SM users: QUALITY_LAB to /products, others to /dashboard. Use `+page.ts` load function
 
 ### Product edit page (`frontend/src/routes/products/[id]/edit/+page.svelte`)
-- [ ] Redirect non-SM users to /products/[id] or /dashboard
+- [x] Redirect non-SM users: QUALITY_LAB to /products/[id], others to /dashboard. Use `+page.ts` load function
 
 ### Dashboard (`frontend/src/routes/dashboard/+page.svelte`)
-- [ ] Activity feed: filter by `target_role` matching current user's role
+- [x] Activity feed: filter by `target_role` matching current user's role
   - SM sees events targeted at SM
   - VENDOR sees events targeted at VENDOR
   - QUALITY_LAB and FREIGHT_MANAGER: currently no events target them (Phase 3 adds QUALITY_LAB and FREIGHT_MANAGER to TargetRole). Show empty feed or all-role events for now.
-- [ ] Notification bell (if in nav): filter unread count by target_role (requires backend change or client-side filter)
+- [x] Notification bell (if in nav): filter unread count by target_role (requires backend change or client-side filter)
   - Note: if the backend unread count endpoint does not filter by role, pass target_role query parameter to the backend (may need a small backend change: add `target_role` filter to `unread_count()` and `list_recent()` in ActivityLogRepository)
-- [ ] Dashboard cards/widgets:
+- [x] Dashboard cards/widgets:
   - SM: PO summary, invoice summary, vendor summary, production pipeline, overdue POs, recent POs
   - VENDOR: PO summary (own), invoice summary (own), production pipeline (own), overdue POs (own)
   - QUALITY_LAB: products count, activity feed (no PO/invoice/vendor summaries)
   - FREIGHT_MANAGER: PO summary (read-only context), production pipeline (read-only context)
   - ADMIN: same view as SM (full visibility)
 
-### Backend: target_role filter on activity endpoints (small addition)
-- [ ] Add optional `target_role` query parameter to `GET /api/v1/activity/` and `GET /api/v1/activity/unread-count`
-- [ ] Update `ActivityLogRepository.list_recent()` and `unread_count()` to accept optional `target_role` filter
-- [ ] This is a minor backend change needed to support role-filtered activity on the frontend
+### Backend: target_role filter on activity endpoints (blocking -- frontend cannot filter by role without this)
+- [x] Add required `target_role` query parameter to `GET /api/v1/activity/` and `GET /api/v1/activity/unread-count`
+- [x] Update `ActivityLogRepository.list_recent()` and `unread_count()` to accept `target_role` filter
+- [x] Frontend passes current user's role as `target_role` on every activity/unread-count call
 
 ### Existing test impact
 - No existing tests break. This iteration only hides/shows UI elements based on role. All existing Playwright tests use the SM-authenticated fixture from iteration 033, and SM sees all controls.
 - New tests mock different roles via /api/v1/auth/me to verify conditional rendering.
 
 ### Tests (permanent)
-- [ ] `frontend/tests/role-rendering.spec.ts` (Playwright)
+- [x] `frontend/tests/role-rendering.spec.ts` (Playwright)
   - SM user: nav shows Dashboard, POs, Invoices, Vendors, Products
   - VENDOR user: nav shows Dashboard, POs, Invoices; does not show Vendors, Products
   - QUALITY_LAB user: nav shows Dashboard, Products; does not show POs, Invoices, Vendors
@@ -136,29 +134,32 @@ The frontend has auth and user context in layout (iter 033), but renders every b
   - VENDOR visiting /po/new redirects to /po
   - VENDOR visiting /vendors redirects to /dashboard
   - QUALITY_LAB visiting /invoices redirects to /dashboard
-  - ADMIN user: nav shows Dashboard, POs, Invoices, Vendors, Products, Users
+  - ADMIN user: nav shows Dashboard, POs, Invoices, Vendors, Products (no Users link yet)
   - ADMIN on PO detail: same buttons as SM
+  - ADMIN on invoice detail (SUBMITTED): same buttons as SM (Approve, Dispute)
+  - PROCUREMENT_MANAGER: nav shows Dashboard only
+  - VENDOR on PO detail (ACCEPTED): Create Invoice button visible
   - Note: these tests require mocking /api/v1/auth/me to return different user roles
 
 ### Tests (scratch)
-- [ ] Screenshot: SM nav with all links visible
-- [ ] Screenshot: VENDOR nav with limited links
-- [ ] Screenshot: VENDOR PO detail with accept/reject buttons, no edit/submit
-- [ ] Screenshot: SM PO detail with edit/submit buttons, no accept/reject
-- [ ] Screenshot: SM invoice detail with approve/pay/dispute buttons
-- [ ] Screenshot: VENDOR invoice detail with submit button only
-- [ ] Screenshot: QUALITY_LAB dashboard (products-focused)
+
+Carried forward: scratch screenshot tests not done this iteration.
 
 ## Acceptance criteria
-- [ ] Navigation links are role-conditional: each role sees only their permitted sections
-- [ ] Current user display_name and role are shown in the header/nav
-- [ ] PO list: Create button visible only for SM; bulk actions differ by role
-- [ ] PO detail: action buttons match role (SM: edit/submit/resubmit, VENDOR: accept/reject/milestone)
-- [ ] PO create/edit pages redirect non-SM users away
-- [ ] Invoice list/detail: visible only to SM and VENDOR; action buttons match role
-- [ ] Vendor pages: visible only to SM
-- [ ] Product pages: visible to SM (full CRUD) and QUALITY_LAB (read-only); hidden from VENDOR and FREIGHT_MANAGER
-- [ ] Dashboard activity feed filters by current user's target_role
-- [ ] Dashboard widgets adjust per role (VENDOR sees own data, QUALITY_LAB sees products)
-- [ ] Page-level redirects prevent unauthorized page access (not just hidden buttons)
-- [ ] `make test-browser` passes with new Playwright tests
+- [x] Navigation links are role-conditional: each role sees only their permitted sections
+- [x] Current user display_name and role are shown in the header/nav
+- [x] PO list: Create button visible only for SM; bulk actions differ by role
+- [x] PO detail: action buttons match role (SM: edit/submit/resubmit, VENDOR: accept/reject/create invoice/milestone)
+- [x] PO create/edit pages redirect non-SM users away
+- [x] Invoice list/detail: visible only to SM and VENDOR; action buttons match role
+- [x] Vendor pages: visible only to SM
+- [x] Product pages: visible to SM (full CRUD) and QUALITY_LAB (read-only); hidden from VENDOR and FREIGHT_MANAGER
+- [x] Dashboard activity feed filters by current user's target_role
+- [x] Dashboard widgets adjust per role (VENDOR sees own data, QUALITY_LAB sees products)
+- [x] Page-level redirects prevent unauthorized page access (not just hidden buttons)
+- [x] All page-level role redirects use `+page.ts` load functions (no content flash before redirect)
+- [x] `make test-browser` passes with new Playwright tests
+
+## Notes
+
+Created permissions.ts with `is()` (ADMIN-inheriting) and `isExact()` (VENDOR-only) helpers covering 16 permission functions. Layout nav links are role-conditional. All page-level redirects use +page.ts load functions to prevent content flash. PO detail buttons split between SM actions (edit/submit/resubmit) and VENDOR actions (accept/reject/create invoice/post milestone). Dashboard widgets and activity feed filter by role via a new `target_role` query parameter on the backend activity endpoints. QUALITY_LAB removed from canViewPOs since they should only see Products. Existing po-lifecycle tests updated: accept/reject tests use VENDOR mock override, full-cycle test uses dynamic role switching via closure variable. 84 Playwright tests pass (68 existing + 16 new role-rendering).

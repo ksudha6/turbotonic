@@ -1,9 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import { fetchDashboard, fetchActivity } from '$lib/api';
+	import { canViewPOs, canViewInvoices, canManageVendors } from '$lib/permissions';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import type { ActivityLogEntry, DashboardData } from '$lib/types';
+
+	const role = $derived(page.data.user?.role);
 
 	const MILESTONE_LABELS: Record<string, string> = {
 		RAW_MATERIALS: 'Raw Materials',
@@ -19,7 +23,7 @@
 
 	onMount(async () => {
 		try {
-			[data, activity] = await Promise.all([fetchDashboard(), fetchActivity(20)]);
+			[data, activity] = await Promise.all([fetchDashboard(), fetchActivity(20, role)]);
 		} finally {
 			loading = false;
 		}
@@ -70,6 +74,7 @@
 {#if loading}
 	<p>Loading...</p>
 {:else if data}
+	{#if role && canViewPOs(role)}
 	<section class="section">
 		<h2>Purchase Orders</h2>
 		<div class="summary-grid">
@@ -85,7 +90,9 @@
 			{/if}
 		</div>
 	</section>
+	{/if}
 
+	{#if role && canViewInvoices(role)}
 	<section class="section">
 		<h2>Invoices</h2>
 		<div class="summary-grid">
@@ -101,7 +108,9 @@
 			{/if}
 		</div>
 	</section>
+	{/if}
 
+	{#if role && canManageVendors(role)}
 	<section class="section">
 		<h2>Vendors</h2>
 		<div class="vendor-summary">
@@ -115,6 +124,7 @@
 			</div>
 		</div>
 	</section>
+	{/if}
 
 	<section class="section">
 		<h2>Recent Activity</h2>
@@ -138,6 +148,7 @@
 		{/if}
 	</section>
 
+	{#if role && canViewPOs(role)}
 	<section class="section">
 		<h2>Production Pipeline</h2>
 		{#if data.production_summary.length === 0}
@@ -193,6 +204,7 @@
 			</div>
 		{/if}
 	</section>
+	{/if}
 {/if}
 
 <style>

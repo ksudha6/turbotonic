@@ -2,7 +2,9 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page as pageStore } from '$app/stores';
+	import { page as appPage } from '$app/state';
 	import { listPOs, listVendors, fetchReferenceData, bulkTransition } from '$lib/api';
+	import { canCreatePO, canSubmitPO, canAcceptRejectPO } from '$lib/permissions';
 	import type { POListParams } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import type { BulkTransitionItemResult, PurchaseOrderListItem, VendorListItem, ReferenceDataItem } from '$lib/types';
@@ -61,6 +63,8 @@
 	let showRejectModal: boolean = $state(false);
 
 	let crossPageSelected: boolean = $state(false);
+
+	const role = $derived(appPage.data.user?.role);
 
 	async function selectAllMatching() {
 		const params: POListParams = {};
@@ -264,7 +268,9 @@
 
 <div class="page-header">
 	<h1>Purchase Orders</h1>
-	<a href="/po/new" class="btn btn-primary">New PO</a>
+	{#if role && canCreatePO(role)}
+		<a href="/po/new" class="btn btn-primary">New PO</a>
+	{/if}
 </div>
 
 <div class="filter-bar">
@@ -319,9 +325,15 @@
 			{#if validActions.length > 0}
 				<div class="bulk-actions">
 					{#each validActions as action}
-						<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction(action)}>
-							{action[0].toUpperCase() + action.slice(1)}
-						</button>
+						{#if (action === 'submit' || action === 'resubmit') && role && canSubmitPO(role)}
+							<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction(action)}>
+								{action[0].toUpperCase() + action.slice(1)}
+							</button>
+						{:else if (action === 'accept' || action === 'reject') && role && canAcceptRejectPO(role)}
+							<button class="btn btn-secondary" disabled={bulkLoading} onclick={() => handleBulkAction(action)}>
+								{action[0].toUpperCase() + action.slice(1)}
+							</button>
+						{/if}
 					{/each}
 				</div>
 			{:else}

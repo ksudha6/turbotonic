@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
+	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf, createInvoice, listInvoicesByPO, fetchReferenceData, getRemainingQuantities, listMilestones, postMilestone, listProducts } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
@@ -10,6 +10,7 @@
 	import ActivityTimeline from '$lib/components/ActivityTimeline.svelte';
 	import type { PurchaseOrder, InvoiceListItem, ReferenceData, RemainingLine, InvoiceLineItemCreate, MilestoneUpdate, ProductListItem } from '$lib/types';
 	import { buildLabelResolver } from '$lib/labels';
+	import { canEditPO, canSubmitPO, canAcceptRejectPO, canCreateInvoice, canPostMilestone } from '$lib/permissions';
 
 	let po: PurchaseOrder | null = $state(null);
 	let loading: boolean = $state(true);
@@ -24,7 +25,8 @@
 	let milestones: MilestoneUpdate[] = $state([]);
 	let certRequired: Set<string> = $state(new Set());
 
-	const id: string = $page.params.id ?? '';
+	const id: string = page.params.id ?? '';
+	const role = $derived(page.data.user?.role);
 
 	function resolve(category: string, code: string): string {
 		if (!resolver) return code;
@@ -258,7 +260,7 @@
 	{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT'}
 		<div class="section card">
 			<h2>Production Status</h2>
-			<MilestoneTimeline milestones={milestones} onPost={handlePostMilestone} />
+			<MilestoneTimeline milestones={milestones} onPost={role && canPostMilestone(role) ? handlePostMilestone : null} />
 		</div>
 	{/if}
 
@@ -307,17 +309,17 @@
 
 	<div class="actions">
 		<button class="btn btn-secondary" onclick={() => downloadPoPdf(id)}>Download PDF</button>
-		{#if po.status === 'DRAFT'}
+		{#if po.status === 'DRAFT' && role && canEditPO(role)}
 			<a href="/po/{po.id}/edit" class="btn btn-secondary">Edit</a>
 			<button class="btn btn-primary" onclick={handleSubmit}>Submit</button>
-		{:else if po.status === 'PENDING'}
+		{:else if po.status === 'PENDING' && role && canAcceptRejectPO(role)}
 			<button class="btn btn-success" onclick={handleAccept}>Accept</button>
 			<button class="btn btn-danger" onclick={() => (showRejectDialog = true)}>Reject</button>
-		{:else if po.status === 'REJECTED'}
+		{:else if po.status === 'REJECTED' && role && canEditPO(role)}
 			<a href="/po/{po.id}/edit" class="btn btn-secondary">Edit</a>
-		{:else if po.status === 'REVISED'}
+		{:else if po.status === 'REVISED' && role && canSubmitPO(role)}
 			<button class="btn btn-primary" onclick={handleResubmit}>Resubmit</button>
-		{:else if po.status === 'ACCEPTED'}
+		{:else if po.status === 'ACCEPTED' && role && canCreateInvoice(role)}
 			{#if po.po_type === 'PROCUREMENT'}
 				<button class="btn btn-primary" onclick={handleCreateInvoice}>Create Invoice</button>
 			{:else if po.po_type === 'OPEX'}
