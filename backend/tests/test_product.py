@@ -15,7 +15,7 @@ def test_create_product_defaults() -> None:
     assert product.vendor_id == "v-1"
     assert product.part_number == "PN-001"
     assert product.description == ""
-    assert product.requires_certification is False
+    assert product.manufacturing_address == ""
 
 
 def test_create_product_generates_uuid() -> None:
@@ -29,13 +29,13 @@ def test_create_product_sets_timestamps() -> None:
     assert product.created_at == product.updated_at
 
 
-def test_create_product_with_certification() -> None:
+def test_create_product_with_manufacturing_address() -> None:
     product = Product.create(
         vendor_id="v-1", part_number="PN-001",
-        description="Widget", requires_certification=True,
+        description="Widget", manufacturing_address="123 Factory Rd",
     )
-    assert product.requires_certification is True
     assert product.description == "Widget"
+    assert product.manufacturing_address == "123 Factory Rd"
 
 
 def test_create_product_rejects_empty_vendor_id() -> None:
@@ -71,17 +71,17 @@ def test_update_description() -> None:
     assert product.updated_at >= old_updated
 
 
-def test_update_requires_certification() -> None:
+def test_update_manufacturing_address() -> None:
     product = Product.create(vendor_id="v-1", part_number="PN-001")
-    product.update(requires_certification=True)
-    assert product.requires_certification is True
+    product.update(manufacturing_address="456 Plant Ave")
+    assert product.manufacturing_address == "456 Plant Ave"
 
 
 def test_update_noop_preserves_values() -> None:
     product = Product.create(
         vendor_id="v-1", part_number="PN-001",
-        description="Original", requires_certification=True,
+        description="Original", manufacturing_address="789 Works Blvd",
     )
     product.update()
     assert product.description == "Original"
-    assert product.requires_certification is True
+    assert product.manufacturing_address == "789 Works Blvd"

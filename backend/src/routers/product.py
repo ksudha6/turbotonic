@@ -17,6 +17,8 @@ from src.product_dto import (
     product_to_response,
 )
 from src.product_repository import ProductRepository
+from src.qualification_type_dto import qualification_type_to_list_item
+from src.qualification_type_repository import QualificationTypeRepository
 
 router = APIRouter(prefix="/api/v1/products", tags=["products"])
 
@@ -41,7 +43,6 @@ async def create_product(body: ProductCreate, repo: ProductRepoDep, _user: User 
         vendor_id=body.vendor_id,
         part_number=body.part_number,
         description=body.description,
-        requires_certification=body.requires_certification,
         manufacturing_address=body.manufacturing_address,
     )
     try:
@@ -53,7 +54,8 @@ async def create_product(body: ProductCreate, repo: ProductRepoDep, _user: User 
                 detail="Product with this vendor_id and part_number already exists",
             ) from exc
         raise
-    return product_to_response(product)
+    # New product has no qualifications yet
+    return product_to_response(product, [])
 
 
 @router.get("/", response_model=list[ProductListItem])
@@ -61,7 +63,16 @@ async def list_products(
     repo: ProductRepoDep, vendor_id: str | None = None, _user: User = require_role(UserRole.SM, UserRole.QUALITY_LAB)
 ) -> list[ProductListItem]:
     products = await repo.list_products(vendor_id)
-    return [product_to_list_item(p) for p in products]
+    if not products:
+        return []
+    async with get_db() as conn:
+        qt_repo = QualificationTypeRepository(conn)
+        product_ids = [p.id for p in products]
+        quals_by_product = await qt_repo.list_by_products(product_ids)
+    return [
+        product_to_list_item(p, [qualification_type_to_list_item(qt) for qt in quals_by_product.get(p.id, [])])
+        for p in products
+    ]
 
 
 @router.get("/{product_id}", response_model=ProductResponse)
@@ -69,7 +80,11 @@ async def get_product(product_id: str, repo: ProductRepoDep, _user: User = requi
     product = await repo.get_by_id(product_id)
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
-    return product_to_response(product)
+    async with get_db() as conn:
+        qt_repo = QualificationTypeRepository(conn)
+        qts = await qt_repo.list_by_product(product_id)
+    qualifications = [qualification_type_to_list_item(qt) for qt in qts]
+    return product_to_response(product, qualifications)
 
 
 @router.patch("/{product_id}", response_model=ProductResponse)
@@ -81,8 +96,11 @@ async def update_product(
         raise HTTPException(status_code=404, detail="Product not found")
     product.update(
         description=body.description,
-        requires_certification=body.requires_certification,
         manufacturing_address=body.manufacturing_address,
     )
     await repo.save(product)
-    return product_to_response(product)
+    async with get_db() as conn:
+        qt_repo = QualificationTypeRepository(conn)
+        qts = await qt_repo.list_by_product(product_id)
+    qualifications = [qualification_type_to_list_item(qt) for qt in qts]
+    return product_to_response(product, qualifications)

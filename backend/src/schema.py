@@ -201,3 +201,55 @@ async def init_db(conn: asyncpg.Connection) -> None:
         ON files (entity_type, entity_id)
         """
     )
+
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS qualification_types (
+            id                    TEXT PRIMARY KEY,
+            name                  TEXT UNIQUE NOT NULL,
+            description           TEXT NOT NULL DEFAULT '',
+            target_market         TEXT NOT NULL,
+            applies_to_category   TEXT NOT NULL DEFAULT '',
+            created_at            TEXT NOT NULL
+        )
+        """
+    )
+
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS product_qualifications (
+            product_id            TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+            qualification_type_id TEXT NOT NULL REFERENCES qualification_types(id),
+            PRIMARY KEY (product_id, qualification_type_id)
+        )
+        """
+    )
+
+    # Migration: products with requires_certification=1 get a QUALITY_CERTIFICATE qualification
+    cert_exists = await conn.fetchval(
+        "SELECT COUNT(*) FROM qualification_types WHERE name = 'QUALITY_CERTIFICATE'"
+    )
+    if (cert_exists or 0) == 0:
+        from datetime import UTC, datetime
+        from uuid import uuid4
+        cert_id = str(uuid4())
+        now = datetime.now(UTC).isoformat()
+        await conn.execute(
+            """
+            INSERT INTO qualification_types (id, name, description, target_market, applies_to_category, created_at)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (name) DO NOTHING
+            """,
+            cert_id, "QUALITY_CERTIFICATE", "General quality certificate requirement", "ALL", "", now,
+        )
+
+    await conn.execute(
+        """
+        INSERT INTO product_qualifications (product_id, qualification_type_id)
+        SELECT p.id, qt.id
+        FROM products p
+        JOIN qualification_types qt ON qt.name = 'QUALITY_CERTIFICATE'
+        WHERE p.requires_certification = 1
+        ON CONFLICT DO NOTHING
+        """
+    )

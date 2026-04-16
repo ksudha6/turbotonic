@@ -13,7 +13,6 @@ class Product:
         vendor_id: str,
         part_number: str,
         description: str,
-        requires_certification: bool,
         created_at: datetime,
         updated_at: datetime,
         manufacturing_address: str = "",
@@ -22,7 +21,6 @@ class Product:
         self.vendor_id = vendor_id
         self.part_number = part_number
         self.description = description
-        self.requires_certification = requires_certification
         self.manufacturing_address = manufacturing_address
         self._created_at = created_at
         self.updated_at = updated_at
@@ -42,7 +40,6 @@ class Product:
         vendor_id: str,
         part_number: str,
         description: str = "",
-        requires_certification: bool = False,
         manufacturing_address: str = "",
     ) -> Product:
         if not vendor_id or not vendor_id.strip():
@@ -55,7 +52,6 @@ class Product:
             vendor_id=vendor_id,
             part_number=part_number,
             description=description,
-            requires_certification=requires_certification,
             manufacturing_address=manufacturing_address,
             created_at=now,
             updated_at=now,
@@ -65,13 +61,10 @@ class Product:
         self,
         *,
         description: str | None = None,
-        requires_certification: bool | None = None,
         manufacturing_address: str | None = None,
     ) -> None:
         if description is not None:
             self.description = description
-        if requires_certification is not None:
-            self.requires_certification = requires_certification
         if manufacturing_address is not None:
             self.manufacturing_address = manufacturing_address
         self.updated_at = datetime.now(UTC)

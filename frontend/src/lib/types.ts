@@ -289,13 +289,25 @@ export interface ActivityLogEntry {
 	created_at: string;
 }
 
+export interface QualificationTypeListItem {
+	id: string;
+	name: string;
+	target_market: string;
+	applies_to_category: string;
+}
+
+export interface QualificationType extends QualificationTypeListItem {
+	description: string;
+	created_at: string;
+}
+
 export interface ProductListItem {
 	id: string;
 	vendor_id: string;
 	part_number: string;
 	description: string;
-	requires_certification: boolean;
 	manufacturing_address: string;
+	qualifications: QualificationTypeListItem[];
 }
 
 export interface Product extends ProductListItem {
@@ -307,7 +319,6 @@ export interface ProductInput {
 	vendor_id: string;
 	part_number: string;
 	description: string;
-	requires_certification: boolean;
 	manufacturing_address: string;
 }
 

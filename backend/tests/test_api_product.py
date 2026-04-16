@@ -24,7 +24,7 @@ async def _create_product(
     vendor_id: str,
     part_number: str = "PN-001",
     description: str = "",
-    requires_certification: bool = False,
+    manufacturing_address: str = "",
 ) -> dict:
     resp = await client.post(
         "/api/v1/products/",
@@ -32,7 +32,7 @@ async def _create_product(
             "vendor_id": vendor_id,
             "part_number": part_number,
             "description": description,
-            "requires_certification": requires_certification,
+            "manufacturing_address": manufacturing_address,
         },
     )
     assert resp.status_code == 201
@@ -53,7 +53,6 @@ async def test_create_product_returns_201(authenticated_client: AsyncClient) -> 
             "vendor_id": vendor["id"],
             "part_number": "PN-001",
             "description": "Widget A",
-            "requires_certification": True,
         },
     )
     assert resp.status_code == 201
@@ -61,7 +60,7 @@ async def test_create_product_returns_201(authenticated_client: AsyncClient) -> 
     assert data["vendor_id"] == vendor["id"]
     assert data["part_number"] == "PN-001"
     assert data["description"] == "Widget A"
-    assert data["requires_certification"] is True
+    assert data["qualifications"] == []
     assert "id" in data
     assert "created_at" in data
     assert "updated_at" in data
@@ -72,7 +71,8 @@ async def test_create_product_defaults(authenticated_client: AsyncClient) -> Non
     vendor = await _create_vendor(client)
     product = await _create_product(client, vendor["id"])
     assert product["description"] == ""
-    assert product["requires_certification"] is False
+    assert product["manufacturing_address"] == ""
+    assert product["qualifications"] == []
 
 
 async def test_create_product_rejects_empty_part_number(authenticated_client: AsyncClient) -> None:
@@ -128,6 +128,7 @@ async def test_get_product_by_id(authenticated_client: AsyncClient) -> None:
     data = resp.json()
     assert data["id"] == created["id"]
     assert data["description"] == "Detail test"
+    assert data["qualifications"] == []
 
 
 async def test_get_nonexistent_product_returns_404(authenticated_client: AsyncClient) -> None:
@@ -151,6 +152,10 @@ async def test_list_products_returns_array(authenticated_client: AsyncClient) ->
     data = resp.json()
     assert isinstance(data, list)
     assert len(data) == 2
+    # each list item includes qualifications
+    for item in data:
+        assert "qualifications" in item
+        assert isinstance(item["qualifications"], list)
 
 
 async def test_list_products_filters_by_vendor_id(authenticated_client: AsyncClient) -> None:
@@ -173,21 +178,6 @@ async def test_list_products_filters_by_vendor_id(authenticated_client: AsyncCli
 # ---------------------------------------------------------------------------
 
 
-async def test_update_requires_certification(authenticated_client: AsyncClient) -> None:
-    client = authenticated_client
-    vendor = await _create_vendor(client)
-    product = await _create_product(client, vendor["id"])
-    assert product["requires_certification"] is False
-
-    resp = await client.patch(
-        f"/api/v1/products/{product['id']}",
-        json={"requires_certification": True},
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["requires_certification"] is True
-
-
 async def test_update_description(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
     vendor = await _create_vendor(client)
@@ -197,7 +187,9 @@ async def test_update_description(authenticated_client: AsyncClient) -> None:
         json={"description": "Updated desc"},
     )
     assert resp.status_code == 200
-    assert resp.json()["description"] == "Updated desc"
+    data = resp.json()
+    assert data["description"] == "Updated desc"
+    assert data["qualifications"] == []
 
 
 async def test_update_nonexistent_product_returns_404(authenticated_client: AsyncClient) -> None:
@@ -213,7 +205,7 @@ async def test_partial_update_preserves_other_fields(authenticated_client: Async
     client = authenticated_client
     vendor = await _create_vendor(client)
     product = await _create_product(
-        client, vendor["id"], description="Original", requires_certification=True,
+        client, vendor["id"], description="Original", manufacturing_address="123 Factory Rd",
     )
     resp = await client.patch(
         f"/api/v1/products/{product['id']}",
@@ -222,4 +214,16 @@ async def test_partial_update_preserves_other_fields(authenticated_client: Async
     assert resp.status_code == 200
     data = resp.json()
     assert data["description"] == "Changed"
-    assert data["requires_certification"] is True
+    assert data["manufacturing_address"] == "123 Factory Rd"
+
+
+async def test_update_manufacturing_address(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
+    vendor = await _create_vendor(client)
+    product = await _create_product(client, vendor["id"])
+    resp = await client.patch(
+        f"/api/v1/products/{product['id']}",
+        json={"manufacturing_address": "456 Plant Ave"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["manufacturing_address"] == "456 Plant Ave"

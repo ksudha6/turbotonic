@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PaginatedInvoiceList, PaginatedPOList, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PaginatedInvoiceList, PaginatedPOList, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -283,7 +283,7 @@ export function createProduct(data: ProductInput): Promise<Product> {
 	return apiPost<Product>('/api/v1/products/', data);
 }
 
-export async function updateProduct(id: string, data: { description?: string; requires_certification?: boolean; manufacturing_address?: string }): Promise<Product> {
+export async function updateProduct(id: string, data: { description?: string; manufacturing_address?: string }): Promise<Product> {
 	const res = await fetch(`/api/v1/products/${id}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
@@ -301,4 +301,37 @@ export async function updateProduct(id: string, data: { description?: string; re
 		throw new Error(`PATCH /api/v1/products/${id} failed: ${res.status} ${res.statusText}`);
 	}
 	return res.json() as Promise<Product>;
+}
+
+export function listQualificationTypes(): Promise<QualificationTypeListItem[]> {
+	return apiGet<QualificationTypeListItem[]>('/api/v1/qualification-types');
+}
+
+export function createQualificationType(data: { name: string; description?: string; target_market: string; applies_to_category?: string }): Promise<QualificationType> {
+	return apiPost<QualificationType>('/api/v1/qualification-types', data);
+}
+
+export function assignQualification(productId: string, qualificationTypeId: string): Promise<{ product_id: string; qualification_type_id: string }> {
+	return apiPost('/api/v1/products/' + productId + '/qualifications', { qualification_type_id: qualificationTypeId });
+}
+
+export async function removeQualification(productId: string, qualificationTypeId: string): Promise<void> {
+	const res = await fetch(`/api/v1/products/${productId}/qualifications/${qualificationTypeId}`, {
+		method: 'DELETE',
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		throw new Error(`DELETE /api/v1/products/${productId}/qualifications/${qualificationTypeId} failed: ${res.status}`);
+	}
+}
+
+export function listProductQualifications(productId: string): Promise<QualificationTypeListItem[]> {
+	return apiGet<QualificationTypeListItem[]>(`/api/v1/products/${productId}/qualifications`);
 }

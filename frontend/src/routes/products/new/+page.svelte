@@ -7,7 +7,6 @@
 	let vendor_id: string = $state('');
 	let part_number: string = $state('');
 	let description: string = $state('');
-	let requires_certification: boolean = $state(false);
 	let manufacturing_address: string = $state('');
 	let submitting: boolean = $state(false);
 	let error: string = $state('');
@@ -36,7 +35,6 @@
 				vendor_id,
 				part_number: part_number.trim(),
 				description: description.trim(),
-				requires_certification,
 				manufacturing_address
 			});
 			goto('/products');
@@ -75,12 +73,6 @@
 				<label for="description">Description</label>
 				<input id="description" class="input" type="text" bind:value={description} />
 			</div>
-			<div class="form-group form-group-checkbox">
-				<label>
-					<input type="checkbox" bind:checked={requires_certification} />
-					Requires Certification
-				</label>
-			</div>
 			<div class="form-group span-2">
 				<label for="manufacturing_address">Manufacturing Address</label>
 				<textarea id="manufacturing_address" class="textarea" bind:value={manufacturing_address}></textarea>
@@ -118,18 +110,6 @@
 
 	.form-grid .span-2 {
 		grid-column: span 2;
-	}
-
-	.form-group-checkbox {
-		display: flex;
-		align-items: center;
-	}
-
-	.form-group-checkbox label {
-		display: flex;
-		align-items: center;
-		gap: var(--space-2);
-		cursor: pointer;
 	}
 
 	.form-actions {

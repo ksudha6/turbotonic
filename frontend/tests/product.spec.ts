@@ -18,8 +18,8 @@ const PRODUCT = {
 	vendor_id: 'v1',
 	part_number: 'PN-001',
 	description: 'Test Part',
-	requires_certification: false,
 	manufacturing_address: EXISTING_MANUFACTURING_ADDRESS,
+	qualifications: [],
 	created_at: '2026-01-01T00:00:00Z',
 	updated_at: '2026-01-01T00:00:00Z',
 };
@@ -47,6 +47,9 @@ test.beforeEach(async ({ page }) => {
 	});
 	await page.route('**/api/v1/activity/unread-count', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ count: 0 }) });
+	});
+	await page.route('**/api/v1/qualification-types', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
 	});
 });
 
