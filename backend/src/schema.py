@@ -253,3 +253,27 @@ async def init_db(conn: asyncpg.Connection) -> None:
         ON CONFLICT DO NOTHING
         """
     )
+
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS packaging_specs (
+            id                TEXT PRIMARY KEY,
+            product_id        TEXT NOT NULL REFERENCES products(id),
+            marketplace       TEXT NOT NULL,
+            spec_name         TEXT NOT NULL,
+            description       TEXT NOT NULL DEFAULT '',
+            requirements_text TEXT NOT NULL DEFAULT '',
+            status            TEXT NOT NULL DEFAULT 'PENDING',
+            created_at        TEXT NOT NULL,
+            updated_at        TEXT NOT NULL,
+            UNIQUE(product_id, marketplace, spec_name)
+        )
+        """
+    )
+
+    await conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_packaging_specs_product
+        ON packaging_specs (product_id)
+        """
+    )

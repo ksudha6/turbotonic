@@ -322,6 +322,34 @@ export interface ProductInput {
 	manufacturing_address: string;
 }
 
+export type PackagingSpecStatus = 'PENDING';
+
+export interface PackagingSpec {
+	id: string;
+	product_id: string;
+	marketplace: string;
+	spec_name: string;
+	description: string;
+	requirements_text: string;
+	status: PackagingSpecStatus;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface PackagingSpecInput {
+	product_id: string;
+	marketplace: string;
+	spec_name: string;
+	description: string;
+	requirements_text: string;
+}
+
+export interface PackagingSpecUpdate {
+	spec_name?: string;
+	description?: string;
+	requirements_text?: string;
+}
+
 export type UserRole = 'ADMIN' | 'PROCUREMENT_MANAGER' | 'SM' | 'VENDOR' | 'QUALITY_LAB' | 'FREIGHT_MANAGER';
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'PENDING';
 

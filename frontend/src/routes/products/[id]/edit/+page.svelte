@@ -2,11 +2,12 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { getProduct, updateProduct, listVendors, listQualificationTypes, assignQualification, removeQualification } from '$lib/api';
+	import { getProduct, updateProduct, listVendors, listQualificationTypes, assignQualification, removeQualification, listPackagingSpecs, createPackagingSpec, deletePackagingSpec } from '$lib/api';
 	import { canManageProducts } from '$lib/permissions';
-	import type { Product, VendorListItem, QualificationTypeListItem } from '$lib/types';
+	import type { Product, VendorListItem, QualificationTypeListItem, PackagingSpec } from '$lib/types';
 
 	const role = $derived(page.data.user?.role);
+	const isSM = $derived(role === 'SM' || role === 'ADMIN');
 
 	let product: Product | null = $state(null);
 	let vendors: VendorListItem[] = $state([]);
@@ -21,6 +22,25 @@
 	let selectedQtId: string = $state('');
 	let qualificationError: string = $state('');
 
+	let specs: PackagingSpec[] = $state([]);
+	let specsError: string = $state('');
+	let showAddSpec: boolean = $state(false);
+	let newMarketplace: string = $state('');
+	let newSpecName: string = $state('');
+	let newDescription: string = $state('');
+	let newRequirementsText: string = $state('');
+	let addingSpec: boolean = $state(false);
+	let addSpecError: string = $state('');
+
+	const specsByMarketplace = $derived(() => {
+		const groups: Record<string, PackagingSpec[]> = {};
+		for (const spec of specs) {
+			if (!groups[spec.marketplace]) groups[spec.marketplace] = [];
+			groups[spec.marketplace].push(spec);
+		}
+		return groups;
+	});
+
 	onMount(async () => {
 		const id = page.params.id ?? '';
 		const [fetched, fetchedVendors, allQts] = await Promise.all([
@@ -34,8 +54,53 @@
 		description = fetched.description;
 		manufacturing_address = fetched.manufacturing_address;
 		currentQualifications = fetched.qualifications ?? [];
+		await loadSpecs(id);
 		loading = false;
 	});
+
+	async function loadSpecs(productId: string) {
+		try {
+			specs = await listPackagingSpecs(productId);
+		} catch (err) {
+			specsError = err instanceof Error ? err.message : 'Failed to load packaging specs';
+		}
+	}
+
+	async function handleAddSpec(e: SubmitEvent) {
+		e.preventDefault();
+		if (!product) return;
+		addSpecError = '';
+		addingSpec = true;
+		try {
+			const spec = await createPackagingSpec({
+				product_id: product.id,
+				marketplace: newMarketplace.trim(),
+				spec_name: newSpecName.trim(),
+				description: newDescription.trim(),
+				requirements_text: newRequirementsText.trim(),
+			});
+			specs = [...specs, spec];
+			showAddSpec = false;
+			newMarketplace = '';
+			newSpecName = '';
+			newDescription = '';
+			newRequirementsText = '';
+		} catch (err) {
+			addSpecError = err instanceof Error ? err.message : 'Failed to add spec.';
+		} finally {
+			addingSpec = false;
+		}
+	}
+
+	async function handleDeleteSpec(specId: string) {
+		if (!confirm('Delete this packaging spec?')) return;
+		try {
+			await deletePackagingSpec(specId);
+			specs = specs.filter((s) => s.id !== specId);
+		} catch (err) {
+			specsError = err instanceof Error ? err.message : 'Failed to delete spec.';
+		}
+	}
 
 	function vendorName(vendor_id: string): string {
 		return vendors.find((v) => v.id === vendor_id)?.name ?? vendor_id;
@@ -189,6 +254,81 @@
 			</div>
 		{/if}
 	</form>
+
+	<div class="section card">
+		<div class="section-header">
+			<h2>Packaging Specs</h2>
+			{#if isSM}
+				<button type="button" class="btn btn-secondary" onclick={() => { showAddSpec = !showAddSpec; addSpecError = ''; }}>
+					{showAddSpec ? 'Cancel' : 'Add Spec'}
+				</button>
+			{/if}
+		</div>
+
+		{#if specsError}
+			<p class="error-message">{specsError}</p>
+		{/if}
+
+		{#if isSM && showAddSpec}
+			<form class="add-spec-form card-inner" onsubmit={handleAddSpec}>
+				<h3>New Packaging Spec</h3>
+				<div class="form-grid">
+					<div class="form-group">
+						<label for="new-marketplace">Marketplace</label>
+						<input id="new-marketplace" class="input" type="text" bind:value={newMarketplace} required placeholder="e.g. AMAZON" />
+					</div>
+					<div class="form-group">
+						<label for="new-spec-name">Spec Name</label>
+						<input id="new-spec-name" class="input" type="text" bind:value={newSpecName} required placeholder="e.g. FNSKU Label" />
+					</div>
+					<div class="form-group span-2">
+						<label for="new-description">Description</label>
+						<input id="new-description" class="input" type="text" bind:value={newDescription} placeholder="Short description" />
+					</div>
+					<div class="form-group span-2">
+						<label for="new-requirements">Requirements</label>
+						<textarea id="new-requirements" class="textarea" bind:value={newRequirementsText} placeholder="Detailed requirements for the vendor"></textarea>
+					</div>
+				</div>
+				{#if addSpecError}
+					<p class="error-message">{addSpecError}</p>
+				{/if}
+				<div class="action-buttons">
+					<button type="submit" class="btn btn-primary" disabled={addingSpec}>
+						{addingSpec ? 'Adding...' : 'Add Spec'}
+					</button>
+				</div>
+			</form>
+		{/if}
+
+		{#if specs.length === 0}
+			<p class="empty-message">No packaging specs defined yet.</p>
+		{:else}
+			{#each Object.entries(specsByMarketplace()) as [marketplace, group]}
+				<div class="marketplace-group">
+					<h3 class="marketplace-heading">{marketplace}</h3>
+					<div class="spec-list">
+						{#each group as spec (spec.id)}
+							<div class="spec-row">
+								<div class="spec-info">
+									<span class="spec-name">{spec.spec_name}</span>
+									{#if spec.description}
+										<span class="spec-description">{spec.description}</span>
+									{/if}
+								</div>
+								<div class="spec-meta">
+									<span class="status-pill status-{spec.status.toLowerCase()}">{spec.status}</span>
+									{#if isSM && spec.status === 'PENDING'}
+										<button type="button" class="btn btn-danger btn-sm" onclick={() => handleDeleteSpec(spec.id)}>Delete</button>
+									{/if}
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/each}
+		{/if}
+	</div>
 {/if}
 
 <style>

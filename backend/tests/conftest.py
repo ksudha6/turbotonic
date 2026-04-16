@@ -43,9 +43,12 @@ from src.routers.purchase_order import get_invoice_repo as po_get_invoice_repo
 from src.routers.purchase_order import get_repo
 from src.routers.purchase_order import get_vendor_repo as po_get_vendor_repo
 from src.routers.product import get_product_repo as product_get_product_repo
+from src.routers.packaging import get_packaging_repo as packaging_get_packaging_repo
+from src.routers.packaging import get_product_repo_for_packaging as packaging_get_product_repo
 from src.routers.qualification_type import get_qt_repo as qt_get_qt_repo
 from src.routers.vendor import get_vendor_repo as vendor_get_vendor_repo
 from src.schema import init_db
+from src.packaging_repository import PackagingSpecRepository
 from src.product_repository import ProductRepository
 from src.qualification_type_repository import QualificationTypeRepository
 from src.services.file_storage import FileStorageService
@@ -80,6 +83,9 @@ async def _setup_overrides(conn: asyncpg.Connection, upload_dir: Path) -> None:
     async def override_get_product_repo() -> AsyncIterator[ProductRepository]:
         yield ProductRepository(conn)
 
+    async def override_get_packaging_repo() -> AsyncIterator[PackagingSpecRepository]:
+        yield PackagingSpecRepository(conn)
+
     async def override_get_qt_repo() -> AsyncIterator[QualificationTypeRepository]:
         yield QualificationTypeRepository(conn)
 
@@ -111,6 +117,8 @@ async def _setup_overrides(conn: asyncpg.Connection, upload_dir: Path) -> None:
     app.dependency_overrides[milestone_get_activity_repo] = override_get_activity_repo
     app.dependency_overrides[activity_get_activity_repo] = override_get_activity_repo
     app.dependency_overrides[product_get_product_repo] = override_get_product_repo
+    app.dependency_overrides[packaging_get_packaging_repo] = override_get_packaging_repo
+    app.dependency_overrides[packaging_get_product_repo] = override_get_product_repo
     app.dependency_overrides[qt_get_qt_repo] = override_get_qt_repo
     app.dependency_overrides[auth_get_user_repo] = override_get_user_repo
     app.dependency_overrides[document_get_document_repo] = override_get_document_repo

@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PaginatedInvoiceList, PaginatedPOList, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -283,7 +283,7 @@ export function createProduct(data: ProductInput): Promise<Product> {
 	return apiPost<Product>('/api/v1/products/', data);
 }
 
-export async function updateProduct(id: string, data: { description?: string; manufacturing_address?: string }): Promise<Product> {
+export async function updateProduct(id: string, data: { description?: string; requires_certification?: boolean; manufacturing_address?: string }): Promise<Product> {
 	const res = await fetch(`/api/v1/products/${id}`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': 'application/json' },
@@ -334,4 +334,52 @@ export async function removeQualification(productId: string, qualificationTypeId
 
 export function listProductQualifications(productId: string): Promise<QualificationTypeListItem[]> {
 	return apiGet<QualificationTypeListItem[]>(`/api/v1/products/${productId}/qualifications`);
+}
+
+export function listPackagingSpecs(productId: string, marketplace?: string): Promise<PackagingSpec[]> {
+	const query = new URLSearchParams({ product_id: productId });
+	if (marketplace) query.set('marketplace', marketplace);
+	return apiGet<PackagingSpec[]>(`/api/v1/packaging-specs/?${query.toString()}`);
+}
+
+export function createPackagingSpec(data: PackagingSpecInput): Promise<PackagingSpec> {
+	return apiPost<PackagingSpec>('/api/v1/packaging-specs/', data);
+}
+
+export async function updatePackagingSpec(id: string, data: PackagingSpecUpdate): Promise<PackagingSpec> {
+	const res = await fetch(`/api/v1/packaging-specs/${id}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(data),
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		throw new Error(`PATCH /api/v1/packaging-specs/${id} failed: ${res.status} ${res.statusText}`);
+	}
+	return res.json() as Promise<PackagingSpec>;
+}
+
+export async function deletePackagingSpec(id: string): Promise<void> {
+	const res = await fetch(`/api/v1/packaging-specs/${id}`, {
+		method: 'DELETE',
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail ?? `DELETE /api/v1/packaging-specs/${id} failed: ${res.status}`);
+	}
 }

@@ -51,6 +51,9 @@ test.beforeEach(async ({ page }) => {
 	await page.route('**/api/v1/qualification-types', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
 	});
+	await page.route('**/api/v1/packaging-specs**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
 });
 
 // ---------------------------------------------------------------------------
