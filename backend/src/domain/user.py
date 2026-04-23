@@ -32,6 +32,7 @@ class User:
         status: UserStatus,
         vendor_id: str | None,
         created_at: datetime,
+        email: str | None = None,
     ) -> None:
         self._id = id
         self.username = username
@@ -40,6 +41,7 @@ class User:
         self.status = status
         self.vendor_id = vendor_id
         self._created_at = created_at
+        self.email = email
 
     @property
     def id(self) -> str:
@@ -57,6 +59,7 @@ class User:
         display_name: str,
         role: UserRole,
         vendor_id: str | None = None,
+        email: str | None = None,
     ) -> User:
         _validate_fields(username, display_name, role, vendor_id)
         return cls(
@@ -67,6 +70,7 @@ class User:
             status=UserStatus.ACTIVE,
             vendor_id=vendor_id,
             created_at=datetime.now(UTC),
+            email=email,
         )
 
     @classmethod
@@ -77,6 +81,7 @@ class User:
         display_name: str,
         role: UserRole,
         vendor_id: str | None = None,
+        email: str | None = None,
     ) -> User:
         _validate_fields(username, display_name, role, vendor_id)
         return cls(
@@ -87,6 +92,7 @@ class User:
             status=UserStatus.PENDING,
             vendor_id=vendor_id,
             created_at=datetime.now(UTC),
+            email=email,
         )
 
     def activate(self) -> None:

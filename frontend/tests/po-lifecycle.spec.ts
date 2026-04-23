@@ -180,7 +180,9 @@ test('draft PO shows Edit and Submit buttons', async ({ page }) => {
 	await expect(page.getByRole('button', { name: 'Submit' })).toBeVisible();
 });
 
-test('pending PO shows Accept and Reject buttons', async ({ page }) => {
+test('pending PO shows Accept button and per-line negotiation controls', async ({ page }) => {
+	// Iter 057: the top-level Reject button is gone. Vendors now work through
+	// per-line Modify / Accept / Remove on each line item and then Submit Response.
 	const po = makePO('PENDING');
 
 	// Override beforeEach SM mock — LIFO priority means this handler runs first.
@@ -202,7 +204,9 @@ test('pending PO shows Accept and Reject buttons', async ({ page }) => {
 	await page.waitForSelector('h1');
 
 	await expect(page.locator('.actions').getByRole('button', { name: 'Accept' })).toBeVisible();
-	await expect(page.locator('.actions').getByRole('button', { name: 'Reject' })).toBeVisible();
+	// Reject is removed in iter 056/057. Per-line Modify and Remove take its place.
+	await expect(page.locator('.actions').getByRole('button', { name: 'Reject' })).toHaveCount(0);
+	await expect(page.locator('[data-testid="modify-btn-PART-001"]')).toBeVisible();
 });
 
 test('accepted PO shows read-only view', async ({ page }) => {
@@ -322,242 +326,11 @@ test('create PO form rejects quantity <= 0', async ({ page }) => {
 	await expect(page.locator('.error-message')).toContainText('Quantity must be greater than 0');
 });
 
-test('reject modal requires non-empty comment', async ({ page }) => {
-	const po = makePO('PENDING');
+// Iter 056 removed the PO-level reject endpoint and the single-shot accept-lines flow.
+// The reject-modal test and the full-cycle reject/revise/resubmit test were tied to
+// those endpoints and are removed here. Iter 057 rebuilds the negotiation flow end-to-end
+// with line-level modify / accept / remove / submit-response and brings back lifecycle coverage.
 
-	// Override beforeEach SM mock — LIFO priority means this handler runs first.
-	await page.route('**/api/v1/auth/me', (route) => {
-		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'test-user-id', username: 'test-vendor', display_name: 'Test Vendor', role: 'VENDOR', status: 'ACTIVE', vendor_id: 'vendor-1' } }) });
-	});
-
-	await page.route('**/api/v1/po/*/invoices', (route) => {
-		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-	});
-	await page.route('**/api/v1/reference-data/**', (route) => {
-		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(REFERENCE_DATA) });
-	});
-	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
-		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
-	});
-
-	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('h1');
-
-	await page.locator('.actions').getByRole('button', { name: 'Reject' }).click();
-	await page.waitForSelector('.dialog');
-
-	// Confirm button is disabled when comment is empty
-	const confirmBtn = page.locator('.dialog .btn-danger');
-	await expect(confirmBtn).toBeDisabled();
-
-	// Type a comment
-	await page.locator('.dialog textarea').fill('Price is too high');
-
-	// Confirm button becomes enabled
-	await expect(confirmBtn).toBeEnabled();
-});
-
-test('full cycle: create, submit, reject, revise, resubmit, accept', async ({ page }) => {
-	// Mutable state tracking current PO status for the detail endpoint
-	let currentPO = makePO('DRAFT');
-
-	// Dynamic auth mock — role switches mid-test as VENDOR-only actions require it.
-	// The beforeEach SM handler has lower LIFO priority; this one intercepts first.
-	let currentRole = 'SM';
-	let currentVendorId: string | null = null;
-	await page.route('**/api/v1/auth/me', (route) => {
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify({
-				user: {
-					id: 'test-user-id',
-					username: `test-${currentRole.toLowerCase()}`,
-					display_name: `Test ${currentRole}`,
-					role: currentRole,
-					status: 'ACTIVE',
-					vendor_id: currentVendorId
-				}
-			})
-		});
-	});
-
-	// Mock supporting APIs for PO detail page
-	await page.route('**/api/v1/po/*/invoices', (route) => {
-		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-	});
-	await page.route('**/api/v1/invoices/po/*/remaining', (route) => {
-		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ po_id: PO_ID, lines: [] }) });
-	});
-	await page.route('**/api/v1/po/*/milestones', (route) => {
-		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
-	});
-
-	// Mock the create endpoint (POST /api/v1/po/)
-	await page.route('**/api/v1/po/', (route) => {
-		const method = route.request().method();
-		if (method === 'POST') {
-			route.fulfill({
-				status: 201,
-				contentType: 'application/json',
-				body: JSON.stringify(currentPO)
-			});
-		} else {
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify([currentPO])
-			});
-		}
-	});
-
-	// Mock detail GET and PUT on the same route (Playwright checks routes in
-	// reverse registration order; a second handler for the same pattern would
-	// shadow the first and route.continue() sends to the network, not the next handler)
-	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
-		const method = route.request().method();
-		if (method === 'GET') {
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify(currentPO)
-			});
-		} else if (method === 'PUT') {
-			currentPO = makePO('REVISED');
-			route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify(currentPO)
-			});
-		} else {
-			route.fallback();
-		}
-	});
-
-	// Mock submit action
-	await page.route(`**/api/v1/po/${PO_ID}/submit`, (route) => {
-		currentPO = makePO('PENDING');
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify(currentPO)
-		});
-	});
-
-	// Mock reject action
-	await page.route(`**/api/v1/po/${PO_ID}/reject`, (route) => {
-		currentPO = makePO('REJECTED', {
-			rejection_history: [{ comment: 'Need revision', rejected_at: '2026-03-16T10:00:00+00:00' }]
-		});
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify(currentPO)
-		});
-	});
-
-	// Mock resubmit action
-	await page.route(`**/api/v1/po/${PO_ID}/resubmit`, (route) => {
-		currentPO = makePO('PENDING');
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify(currentPO)
-		});
-	});
-
-	// Mock accept action
-	await page.route(`**/api/v1/po/${PO_ID}/accept`, (route) => {
-		currentPO = makePO('ACCEPTED');
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify(currentPO)
-		});
-	});
-
-	// Mock active vendors for the vendor dropdown (new and edit pages)
-	await page.route('**/api/v1/vendors**', (route) => {
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify([{ id: 'vendor-uuid-1', name: 'Acme Corp', country: 'CN', status: 'ACTIVE', vendor_type: 'PROCUREMENT' }])
-		});
-	});
-
-	// Mock reference data for PO form dropdowns
-	await page.route('**/api/v1/reference-data**', (route) => {
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify(REFERENCE_DATA)
-		});
-	});
-
-	// Step 1: Create PO
-	await page.goto('/po/new');
-	await page.waitForSelector('form');
-	await page.selectOption('#vendor_id', 'vendor-uuid-1');
-	await page.selectOption('#currency', 'USD');
-	await page.fill('#issued_date', '2026-03-16');
-	await page.fill('#required_delivery_date', '2026-04-16');
-	await page.locator('input[placeholder="Part No."]').fill('PART-001');
-
-	await page.getByRole('button', { name: 'Create PO' }).click();
-	await page.waitForURL(`**/po/${PO_ID}`);
-	await page.waitForSelector('h1');
-	await expect(page.locator('body')).toContainText('Draft');
-
-	// Step 2: Submit
-	await page.getByRole('button', { name: 'Submit' }).click();
-	await expect(page.locator('body')).toContainText('Pending');
-
-	// Step 3: Reject — VENDOR-only action; switch role before reload.
-	currentRole = 'VENDOR';
-	currentVendorId = 'vendor-1';
-	await page.reload();
-	await page.waitForSelector('h1');
-	await page.locator('.actions').getByRole('button', { name: 'Reject' }).click();
-	await page.waitForSelector('.dialog');
-	await page.locator('.dialog textarea').fill('Need revision');
-	await page.locator('.dialog .btn-danger').click();
-	await expect(page.locator('body')).toContainText('Rejected');
-	await expect(page.locator('body')).toContainText('Need revision');
-
-	// Step 4: Edit — SM-only action; switch back before reload.
-	currentRole = 'SM';
-	currentVendorId = null;
-	await page.reload();
-	await page.waitForSelector('h1');
-	await page.locator('a[href*="/edit"]').click();
-	await page.waitForURL(`**/po/${PO_ID}/edit`);
-	await page.waitForSelector('form');
-
-	// Wait for vendors to load then select the vendor
-	// (the $effect in POForm clears vendor_id before vendors fetch completes)
-	await page.waitForFunction(() => {
-		const sel = document.querySelector('#vendor_id') as HTMLSelectElement | null;
-		return sel && sel.options.length > 1;
-	});
-	await page.selectOption('#vendor_id', 'vendor-uuid-1');
-
-	// Step 5: Save revision
-	await page.getByRole('button', { name: 'Save & Revise' }).click();
-	await page.waitForURL(`**/po/${PO_ID}`);
-	await expect(page.locator('body')).toContainText('Revised');
-
-	// Step 6: Resubmit
-	await page.getByRole('button', { name: 'Resubmit' }).click();
-	await expect(page.locator('body')).toContainText('Pending');
-
-	// Step 7: Accept — VENDOR-only action; switch role before reload.
-	currentRole = 'VENDOR';
-	currentVendorId = 'vendor-1';
-	await page.reload();
-	await page.waitForSelector('h1');
-	await page.locator('.actions').getByRole('button', { name: 'Accept' }).click();
-	await expect(page.locator('body')).toContainText('Accepted');
-});
 
 test('download PDF button is visible for every PO status', async ({ page }) => {
 	await page.route('**/api/v1/po/*/invoices', (route) => {

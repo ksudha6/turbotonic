@@ -284,6 +284,7 @@
 		<option value="">All Statuses</option>
 		<option value="DRAFT">Draft</option>
 		<option value="PENDING">Pending</option>
+		<option value="MODIFIED">Modified</option>
 		<option value="ACCEPTED">Accepted</option>
 		<option value="REJECTED">Rejected</option>
 		<option value="REVISED">Revised</option>
@@ -390,7 +391,14 @@
 						<td>{formatDate(po.issued_date)}</td>
 						<td>{formatDate(po.required_delivery_date)}</td>
 						<td>{formatValue(po.total_value, po.currency)}</td>
-						<td><StatusPill status={po.status} /></td>
+						<td>
+							{#if po.status === 'ACCEPTED' && po.has_removed_line}
+								<!-- Iter 058: Partial = ACCEPTED with at least one REMOVED line. -->
+								<StatusPill status={po.status} label="Partial" />
+							{:else}
+								<StatusPill status={po.status} />
+							{/if}
+						</td>
 						<td class="milestone-cell">
 							{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT' && po.current_milestone}
 								{MILESTONE_LABELS[po.current_milestone] ?? po.current_milestone}

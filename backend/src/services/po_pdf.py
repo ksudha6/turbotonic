@@ -14,7 +14,7 @@ from reportlab.platypus import (
     Spacer,
 )
 
-from src.domain.purchase_order import PurchaseOrder
+from src.domain.purchase_order import LineItemStatus, PurchaseOrder
 from src.domain.reference_labels import (
     currency_label,
     incoterm_label,
@@ -99,6 +99,20 @@ def generate_po_pdf(
         spaceAfter=12,
     )
     story.append(Paragraph("PURCHASE ORDER", title_style))
+
+    # Iter 058: flag negotiation activity. Any round that completed means the
+    # contract differs from the original order, so the PDF carries a MODIFIED stamp.
+    if po.round_count >= 1:
+        modified_style = ParagraphStyle(
+            "ModifiedStamp",
+            parent=normal,
+            fontSize=11,
+            fontName="Helvetica-Bold",
+            textColor=colors.Color(0.75, 0.15, 0.15),
+            alignment=1,  # center
+            spaceAfter=8,
+        )
+        story.append(Paragraph("MODIFIED", modified_style))
 
     # PO number (left) and status (right) in a two-cell table
     marketplace_text = f"<b>Marketplace:</b> {po.marketplace}" if po.marketplace else ""
@@ -257,8 +271,18 @@ def generate_po_pdf(
         Paragraph("<b>Line Total</b>", cell_bold),
     ]
 
+    # Iter 058: filter line items for rendering.
+    # - After convergence (PO ACCEPTED), only ACCEPTED lines appear: the contract
+    #   reflects what was agreed, with rejected proposals and removed scope dropped.
+    # - In every other status, REMOVED lines are excluded so a negotiation snapshot
+    #   never prints scope that was explicitly dropped.
+    if po.status.value == "ACCEPTED":
+        rendered_items = [i for i in po.line_items if i.status is LineItemStatus.ACCEPTED]
+    else:
+        rendered_items = [i for i in po.line_items if i.status is not LineItemStatus.REMOVED]
+
     line_rows = []
-    for idx, item in enumerate(po.line_items, start=1):
+    for idx, item in enumerate(rendered_items, start=1):
         line_total = item.quantity * item.unit_price
         line_rows.append([
             Paragraph(str(idx), cell_style),
@@ -272,6 +296,15 @@ def generate_po_pdf(
             Paragraph(f"{_money(line_total)}", cell_style),
         ])
 
+    # Iter 058: the footer total matches the rendered lines so an ACCEPTED PO's
+    # total reflects the agreed contract, not the original order before removals.
+    from decimal import Decimal  # local import: small numeric helper, avoids top-level churn
+
+    rendered_total = sum(
+        (i.quantity * i.unit_price for i in rendered_items),
+        Decimal("0"),
+    )
+
     # Total row
     total_row = [
         Paragraph("", cell_style),
@@ -282,7 +315,7 @@ def generate_po_pdf(
         Paragraph("", cell_style),
         Paragraph("", cell_style),
         Paragraph("<b>Total</b>", cell_bold),
-        Paragraph(f"<b>{_money(po.total_value)}</b>", cell_bold),
+        Paragraph(f"<b>{_money(rendered_total)}</b>", cell_bold),
     ]
 
     items_table_data = [header_row] + line_rows + [total_row]

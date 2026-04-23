@@ -262,7 +262,9 @@ test('SM on PO detail (PENDING) does not see Accept/Reject', async ({ page }) =>
 	await expect(page.getByRole('button', { name: 'Reject' })).toBeHidden();
 });
 
-test('VENDOR on PO detail (PENDING) sees Accept and Reject', async ({ page }) => {
+test('VENDOR on PO detail (PENDING) sees Accept plus per-line negotiation controls', async ({ page }) => {
+	// Iter 057: the top-level Reject button is gone; the vendor works through
+	// per-line Modify / Accept / Remove and a Submit Response bar.
 	await mockApiCatchAll(page);
 	await mockUser(page, 'VENDOR', 'vendor-1');
 	await mockUnreadCount(page);
@@ -275,7 +277,9 @@ test('VENDOR on PO detail (PENDING) sees Accept and Reject', async ({ page }) =>
 	await page.goto('/po/po-1');
 	await page.waitForSelector('h1');
 	await expect(page.locator('.actions').getByRole('button', { name: 'Accept' })).toBeVisible();
-	await expect(page.locator('.actions').getByRole('button', { name: 'Reject' })).toBeVisible();
+	await expect(page.locator('.actions').getByRole('button', { name: 'Reject' })).toHaveCount(0);
+	await expect(page.locator('[data-testid="modify-btn-P-1"]')).toBeVisible();
+	await expect(page.locator('[data-testid="submit-response-bar"]')).toBeVisible();
 });
 
 test('ADMIN on PO detail (DRAFT) has same buttons as SM', async ({ page }) => {

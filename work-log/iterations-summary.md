@@ -1,7 +1,7 @@
 # Iterations Summary
 
 > Single-file context for future conversations. Replaces reading 29 individual iteration docs.
-> Last updated: iteration 042 closed.
+> Last updated: iteration 060 closed.
 
 ---
 
@@ -13,10 +13,10 @@ Turbo Tonic is a vendor portal for purchase order confirmation, invoicing, produ
 
 Python 3.13, FastAPI, Postgres 16 (asyncpg, connection pool), WebAuthn/passkeys + cookie sessions. Frontend: SvelteKit 2 + Svelte 5, adapter-static. Package manager: uv (backend), npm (frontend), nvm for Node. Local dev: Postgres via Homebrew (docker-compose.yml available for Docker environments).
 
-## Current domain model (as of iteration 042)
+## Current domain model (as of iteration 056)
 
 ### Aggregates
-- **PurchaseOrder** — Draft > Pending > Accepted | Rejected > Revised > Pending. Contains LineItems (each with LineItemStatus: Pending/Accepted/Rejected for per-line accept/reject), RejectionHistory. Types: PROCUREMENT, OPEX.
+- **PurchaseOrder** — Draft > Pending > MODIFIED (ping-pong with vendor) > Accepted | Rejected (only via all-REMOVED convergence) > Revised > Pending. Contains LineItems each with LineItemStatus (PENDING/MODIFIED_BY_VENDOR/MODIFIED_BY_SM/ACCEPTED/REMOVED), line_edit_history. PO-scoped round_count (0-2), last_actor_role. Types: PROCUREMENT, OPEX.
 - **Invoice** — Draft > Submitted > Approved > Paid | Disputed > Resolved. Linked to PO. Over-invoicing guard checks cumulative quantities against PO line items.
 - **Vendor** — Active | Inactive. Types: PROCUREMENT, OPEX, FREIGHT, MISCELLANEOUS. Country validated against reference data.
 - **Product** — Vendor-scoped catalog (vendor_id + part_number unique). Qualifications managed via QualificationType join table (replaces requires_certification boolean).
@@ -30,7 +30,7 @@ Python 3.13, FastAPI, Postgres 16 (asyncpg, connection pool), WebAuthn/passkeys 
 - **Reference data** — 30 currencies, 11 incoterms, 17 payment terms, 31 countries, 50+ ports, USD exchange rates.
 
 ### Database tables
-purchase_orders, line_items, rejection_history, vendors, products, invoices, invoice_line_items, milestone_updates, activity_log, files, qualification_types, product_qualifications, certificates, packaging_specs.
+purchase_orders, line_items, rejection_history, vendors, products, invoices, invoice_line_items, milestone_updates, activity_log, files, qualification_types, product_qualifications, certificates, packaging_specs, line_edit_history.
 
 ## Frontend routes
 
@@ -54,7 +54,8 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 
 ## API surface
 
-- **PO**: CRUD, submit, accept, reject, resubmit, bulk transition, PDF export
+- **PO**: CRUD, submit, accept, resubmit, bulk transition, PDF export
+- **PO line negotiation**: per-line modify, accept, remove, force-accept, force-remove; submit-response for round hand-off
 - **Invoice**: CRUD, submit, approve, pay, dispute, resolve, remaining quantities, PDF export, bulk PDF
 - **Vendor**: CRUD, deactivate, reactivate
 - **Product**: CRUD (POST, GET list, GET by id, PATCH), packaging readiness per marketplace
@@ -114,6 +115,11 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 | 041 | 2026-04-16 | PackagingSpec entity for per-product per-marketplace packaging requirements, CRUD API, product edit UI section, 32 new tests |
 | 038 | 2026-04-16 | Certificate entity linking products to qualification types with cert details, computed EXPIRED status, document upload, CERT_UPLOADED activity event, 27 new tests |
 | 042 | 2026-04-16 | PackagingSpec file collection: COLLECTED status, document upload, packaging readiness endpoint, PACKAGING_COLLECTED activity event, 15 new tests |
+| 056 | 2026-04-19 | Line-level negotiation domain + API: replaces iter 037 accept_lines with modify/accept/remove/force-accept/force-remove/submit-response per-line endpoints, 2-round cap, convergence to ACCEPTED/REJECTED, line_edit_history table, new statuses MODIFIED_BY_VENDOR/MODIFIED_BY_SM/REMOVED, new PO status MODIFIED. Drops `reject()` and `/reject` entirely. 70+ new permanent tests. |
+| 057 | 2026-04-19 | Negotiation UI: LineNegotiationRow + ModifyLineModal + LineDiff + EditHistoryTimeline + SubmitResponseBar components; PO detail page replaces RejectDialog/accept-lines-table with per-line modify/accept/remove controls; Force Accept and Force Remove with confirmation dialog at round 2 for SM; 8 new Playwright specs. |
+| 058 | 2026-04-19 | PDF scoping + negotiation activity events: PO PDF filters to ACCEPTED lines only with MODIFIED stamp when round_count >= 1; 7 new event types (PO_LINE_MODIFIED, PO_LINE_ACCEPTED, PO_LINE_REMOVED, PO_FORCE_ACCEPTED, PO_FORCE_REMOVED, PO_MODIFIED, PO_CONVERGED); router wires events on every per-line endpoint; Partial + Modified pills on PO list. 15 new permanent tests. |
+| 059 | 2026-04-19 | Advance payment gate + post-acceptance line modification: payment_terms metadata with has_advance flag (4 terms flagged), advance_paid_at column on PO, mark_advance_paid + add_line_post_acceptance + remove_line_post_acceptance methods + endpoints (SM-only), downstream-artifact check via services layer, 3 new activity events (PO_ADVANCE_PAID, PO_LINE_ADDED_POST_ACCEPT, PO_LINE_REMOVED_POST_ACCEPT), minimal frontend UI. 37 new permanent tests. |
+| 060 | 2026-04-19 | Email notifications: aiosmtplib-backed EmailService with Jinja2 templates (po_accepted, po_modified, po_line_modified, po_advance_paid), NotificationDispatcher decoupled from activity repo, recipient resolution per role and vendor scope, users.email column + seed backfill, EMAIL_SEND_FAILED activity event on delivery failure, FakeEmailService fixture default in tests. 15 new permanent tests. |
 
 ---
 
@@ -150,8 +156,13 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - Product manufacturing_address field
 - QualificationType entity with join table replacing requires_certification boolean; CRUD and product assignment/removal API
 - Certificate entity with computed EXPIRED status (not persisted) and document upload; CERT_UPLOADED activity event
-- Per-line-item accept/reject on POs (LineItemStatus: PENDING/ACCEPTED/REJECTED); vendor-only Submit Response flow
+- Line-level PO negotiation: vendor and SM exchange modifications over up to 2 rounds via modify_line/accept_line/remove_line/submit_response; force-accept and force-remove overrides available at round 2 for SM; qty=0 on modify routes directly to REMOVED; line_edit_history audit trail per field change
 - PackagingSpec with COLLECTED status, file upload, packaging readiness endpoint per product/marketplace; PACKAGING_COLLECTED and PACKAGING_MISSING activity events
+- PDF export filters to ACCEPTED lines with MODIFIED stamp on negotiated POs; PO list shows Partial pill when ACCEPTED+REMOVED mix exists and Modified pill during negotiation
+- Advance payment gate: payment_terms.has_advance drives whether mark-advance-paid is required; once marked paid or first milestone posted, post-acceptance line add/remove window closes
+- Post-acceptance line modification: SM can add or remove lines on ACCEPTED POs while gate is open; removal blocked when any invoice or shipment references the line
+- PO line negotiation UI: vendor and SM exchange modifications per line with inline diff, edit-history timeline, force-override at round 2 behind a confirmation dialog; line-level status pills reflect PENDING/MODIFIED_BY_VENDOR/MODIFIED_BY_SM/ACCEPTED/REMOVED
+- Email notifications via SMTP: po_accepted, po_modified, po_line_modified, and po_advance_paid templates dispatched from activity events to role-scoped recipients; development mode logs without network access; failures recorded as EMAIL_SEND_FAILED activity rows
 
 ## What does not exist yet
 
@@ -178,6 +189,7 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - User management page (`/users`): ADMIN can list, invite, deactivate, reactivate users, reset credentials. Nav "Users" link hidden until page exists.
 - Invite token security: replace `/register?username=<name>` with `/register?token=<uuid>`. Add invite_token column to users table, set on invite, cleared after registration. Prevents guessable registration URLs.
 - Welcome email on invite: send registration link via email when admin invites a user. Currently manual link sharing.
+- ADMIN inherits all actions: `canPostMilestone` is currently exact-match VENDOR only. ADMIN should be able to exercise any role-scoped action (post milestones, submit vendor responses, etc.) for support and debugging. Audit every `isExact` usage in `permissions.ts` and the backend role guards; convert to `is(role, ...) || role === 'ADMIN'` unless there is a concrete reason to keep a capability VENDOR-only.
 
 ### From the backlog (UX)
 - Error handling across all users and workflows: define and surface user-facing error states for every endpoint (validation errors, conflict errors, not-found, auth failures). Currently errors are ad hoc per endpoint with no consistent frontend treatment.
@@ -252,6 +264,12 @@ These are the product differentiators. The CRUD workflow (items 1-3, 5, 7-10) is
 | 036 | Marketplace, ManufacturingAddress, VendorAccountDetails |
 | 036a | QualificationType, ProductQualification (join) |
 | 037 | LineItemStatus (Pending/Accepted/Rejected), AcceptLinesRequest |
+| 056 | LineItemStatus (new: MODIFIED_BY_VENDOR/MODIFIED_BY_SM/REMOVED), POStatus.MODIFIED, LineEditHistory, LineEditHistoryEntry, NegotiationRound, RoundCount, LastActorRole, ForceOverride, Convergence, EDITABLE_LINE_FIELDS, HandOff |
+| 057 | LineNegotiationRow, ModifyLineModal, LineDiff, EditHistoryTimeline, SubmitResponseBar (UI components); CanActOnNegotiation; ForceOverrideConfirmation |
 | 041 | PackagingSpec, PackagingSpecStatus |
 | 038 | Certificate, CertificateStatus (Pending/Valid/Expired-computed) |
 | 042 | PackagingCollection, PackagingReadiness |
+| 058 | ActivityEvent.{PO_LINE_MODIFIED, PO_LINE_ACCEPTED, PO_LINE_REMOVED, PO_FORCE_ACCEPTED, PO_FORCE_REMOVED, PO_MODIFIED, PO_CONVERGED}, PartialPill, ModifiedPill, PDFAcceptedOnly |
+| 059 | PaymentTermMetadata, AdvancePayment, RequiresAdvance, PostAcceptanceGate, DownstreamArtifact, LineHasDownstreamArtifactError, FirstMilestonePostedAt, PO_ADVANCE_PAID, PO_LINE_ADDED_POST_ACCEPT, PO_LINE_REMOVED_POST_ACCEPT |
+| 060 | EmailService, NotificationDispatcher, EmailTemplate, RecipientResolution, FakeEmailService, EMAIL_SEND_FAILED, SMTP_ENV_VARS |
+| 060 | EmailService, NotificationDispatcher, RecipientResolution, FakeEmailService |

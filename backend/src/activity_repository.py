@@ -15,6 +15,15 @@ from src.domain.activity import (
 )
 
 
+class _Unset:
+    # Sentinel that distinguishes "target_role argument omitted" from "target_role=None".
+    # None means "surface to every role"; absence means "use EVENT_METADATA default".
+    pass
+
+
+_UNSET = _Unset()
+
+
 def _iso(dt: datetime) -> str:
     return dt.isoformat()
 
@@ -36,8 +45,12 @@ class ActivityLogRepository:
         entity_id: str,
         event: ActivityEvent,
         detail: str | None = None,
+        target_role: TargetRole | None | _Unset = _UNSET,
     ) -> None:
-        category, target_role = EVENT_METADATA[event]
+        category, default_target = EVENT_METADATA[event]
+        # target_role defaults to EVENT_METADATA; explicit None and explicit value both override.
+        # The sentinel distinguishes "not passed" from "passed as None".
+        resolved_target = default_target if isinstance(target_role, _Unset) else target_role
         now = datetime.now(UTC)
         await self._conn.execute(
             """
@@ -50,7 +63,7 @@ class ActivityLogRepository:
             entity_id,
             event.value,
             category.value,
-            target_role.value if target_role is not None else None,
+            resolved_target.value if resolved_target is not None else None,
             detail,
             _iso(now),
         )

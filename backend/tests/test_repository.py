@@ -11,10 +11,11 @@ import pytest_asyncio
 
 from src.domain.purchase_order import (
     LineItem,
+    LineItemStatus,
     POStatus,
     PurchaseOrder,
-    RejectionRecord,
 )
+from src.domain.user import UserRole
 from src.repository import PurchaseOrderRepository
 from src.schema import init_db
 
@@ -163,25 +164,6 @@ async def test_list_with_status_filter(repo: PurchaseOrderRepository) -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_po_persists_rejection(repo: PurchaseOrderRepository) -> None:
-    rejection_comment = "Price is too high"
-
-    po = make_po("PO-20260101-0001")
-    await repo.save(po)
-
-    po.submit()
-    po.reject(rejection_comment)
-    await repo.save(po)
-
-    retrieved = await repo.get(po.id)
-
-    assert retrieved is not None
-    assert retrieved.status is POStatus.REJECTED
-    assert len(retrieved.rejection_history) == 1
-    assert retrieved.rejection_history[0].comment == rejection_comment
-
-
-@pytest.mark.asyncio
 async def test_next_po_number_sequential(repo: PurchaseOrderRepository) -> None:
     today = datetime.now(UTC).strftime("%Y%m%d")
     expected_first = f"PO-{today}-0001"
@@ -203,30 +185,81 @@ async def test_get_nonexistent_returns_none(repo: PurchaseOrderRepository) -> No
     assert result is None
 
 
+# ---------------------------------------------------------------------------
+# Iter 056: round_count, MODIFIED status, REMOVED line status, line_edit_history
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.asyncio
-async def test_rejection_history_accumulates_across_cycles(
-    repo: PurchaseOrderRepository,
-) -> None:
-    first_comment = "Price too high"
-    second_comment = "Delivery date still unacceptable"
-
-    po = make_po("PO-20260101-0001")
-    await repo.save(po)
-
-    # First rejection cycle.
+async def test_round_count_persists_through_save_and_get(repo: PurchaseOrderRepository) -> None:
+    items = [make_line_item(part_number="A"), make_line_item(part_number="B")]
+    po = make_po("PO-20260101-RC01", line_items=items)
     po.submit()
-    po.reject(first_comment)
-    await repo.save(po)
-
-    revision_item = make_line_item(part_number="PN-002", unit_price=Decimal("3.00"))
-    po.revise(**REVISE_KWARGS, line_items=[revision_item])
-    po.resubmit()
-    po.reject(second_comment)
+    po.modify_line("A", UserRole.VENDOR, {"quantity": 7})
+    po.submit_response(UserRole.VENDOR)
     await repo.save(po)
 
     retrieved = await repo.get(po.id)
-
     assert retrieved is not None
-    assert len(retrieved.rejection_history) == 2
-    assert retrieved.rejection_history[0].comment == first_comment
-    assert retrieved.rejection_history[1].comment == second_comment
+    assert retrieved.round_count == 1
+    assert retrieved.last_actor_role is UserRole.VENDOR
+
+
+@pytest.mark.asyncio
+async def test_modified_po_status_round_trips(repo: PurchaseOrderRepository) -> None:
+    items = [make_line_item(part_number="A"), make_line_item(part_number="B")]
+    po = make_po("PO-20260101-MOD1", line_items=items)
+    po.submit()
+    po.modify_line("A", UserRole.VENDOR, {"quantity": 7})
+    po.submit_response(UserRole.VENDOR)
+    await repo.save(po)
+
+    retrieved = await repo.get(po.id)
+    assert retrieved is not None
+    assert retrieved.status is POStatus.MODIFIED
+
+
+@pytest.mark.asyncio
+async def test_removed_line_status_round_trips(repo: PurchaseOrderRepository) -> None:
+    items = [make_line_item(part_number="A"), make_line_item(part_number="B")]
+    po = make_po("PO-20260101-REM1", line_items=items)
+    po.submit()
+    po.remove_line("A", UserRole.VENDOR)
+    await repo.save(po)
+
+    retrieved = await repo.get(po.id)
+    assert retrieved is not None
+    line_a = next(li for li in retrieved.line_items if li.part_number == "A")
+    assert line_a.status is LineItemStatus.REMOVED
+
+
+@pytest.mark.asyncio
+async def test_line_edit_history_persists_in_order(repo: PurchaseOrderRepository) -> None:
+    items = [make_line_item(part_number="A"), make_line_item(part_number="B")]
+    po = make_po("PO-20260101-HIS1", line_items=items)
+    po.submit()
+    po.modify_line("A", UserRole.VENDOR, {"quantity": 7})
+    po.submit_response(UserRole.VENDOR)
+    po.modify_line("A", UserRole.SM, {"quantity": 8})
+    await repo.save(po)
+
+    retrieved = await repo.get(po.id)
+    assert retrieved is not None
+    rounds = [e.round for e in retrieved.line_edit_history]
+    assert rounds == [0, 1]
+    actors = [e.actor_role for e in retrieved.line_edit_history]
+    assert actors == [UserRole.VENDOR, UserRole.SM]
+
+
+@pytest.mark.asyncio
+async def test_list_pagination_returns_round_count(repo: PurchaseOrderRepository) -> None:
+    items = [make_line_item(part_number="A"), make_line_item(part_number="B")]
+    po = make_po("PO-20260101-LST1", line_items=items)
+    po.submit()
+    po.modify_line("A", UserRole.VENDOR, {"quantity": 7})
+    po.submit_response(UserRole.VENDOR)
+    await repo.save(po)
+
+    rows, _ = await repo.list_pos_paginated(page=1, page_size=20)
+    assert len(rows) == 1
+    assert rows[0]["round_count"] == 1

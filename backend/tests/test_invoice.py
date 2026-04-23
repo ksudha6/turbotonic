@@ -508,7 +508,8 @@ async def test_list_invoices_filter_by_invoice_number(authenticated_client: Asyn
 async def test_list_invoices_filter_by_date_range(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
     # GET /api/v1/invoices/?date_from=X&date_to=Y must return invoices within the date range.
-    today = datetime.date.today().isoformat()
+    # Invoices are stored with UTC timestamps; match that to avoid local-tz boundary flakes.
+    today = datetime.datetime.now(datetime.UTC).date().isoformat()
     future_date = "2099-01-01"
     past_date = "2000-01-01"
 

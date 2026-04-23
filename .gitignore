@@ -31,6 +31,7 @@ frontend/test-results/
 
 # Claude Code
 .claude/
+.claire/
 
 # Scratch files
 po-detail-with-download-btn.jpeg

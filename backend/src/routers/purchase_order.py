@@ -8,29 +8,47 @@ from fastapi.responses import Response
 from src.activity_repository import ActivityLogRepository
 from src.auth.dependencies import check_vendor_access, require_auth, require_role
 from src.db import get_db
-from src.domain.activity import ActivityEvent, EntityType
-from src.domain.purchase_order import LineItem, POStatus, POType, PurchaseOrder
+from src.domain.activity import ActivityEvent, EntityType, TargetRole
+from src.domain.purchase_order import (
+    LineHasDownstreamArtifactError,
+    LineItem,
+    POStatus,
+    POType,
+    PurchaseOrder,
+)
 from src.domain.user import User, UserRole
 from src.domain.vendor import VendorStatus
+from src.services.email import EmailService
+from src.services.notifications import DispatchContext, NotificationDispatcher
+from src.user_repository import UserRepository
 from src.dto import (
-    AcceptLinesRequest,
+    AcceptLineRequest,
+    AddLinePostAcceptRequest,
     BulkTransitionItemResult,
     BulkTransitionRequest,
     BulkTransitionResult,
+    ForceAcceptRequest,
+    ForceRemoveRequest,
     InvoiceListItem,
+    MarkAdvancePaidRequest,
+    ModifyLineRequest,
     PaginatedPOList,
     PurchaseOrderCreate,
     PurchaseOrderListItem,
     PurchaseOrderResponse,
     PurchaseOrderUpdate,
-    RejectRequest,
+    RemoveLineRequest,
+    SubmitResponseRequest,
     invoice_to_list_item,
     po_to_list_item,
     po_to_response,
 )
 from src.invoice_repository import InvoiceRepository
+from src.milestone_repository import MilestoneRepository
 from src.repository import PurchaseOrderRepository
 from src.schema import init_db
+from src.services.downstream_artifacts import line_has_downstream_artifacts
+from src.services.po_modification_gate import first_milestone_posted_at
 from src.services.po_pdf import generate_po_pdf
 from src.vendor_repository import VendorRepository
 
@@ -67,6 +85,43 @@ async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
 
 
 ActivityRepoDep = Annotated[ActivityLogRepository, Depends(get_activity_repo)]
+
+
+def get_email_service() -> EmailService:
+    # Single shared EmailService instance per request scope. Env-driven config is
+    # read at construction; tests override this dep with a fake in conftest.
+    return EmailService()
+
+
+EmailServiceDep = Annotated[EmailService, Depends(get_email_service)]
+
+
+async def get_notification_dispatcher(
+    email_service: EmailServiceDep,
+    activity_repo: ActivityRepoDep,
+) -> AsyncIterator[NotificationDispatcher]:
+    # Dispatcher binds the EmailService, UserRepository, and ActivityRepository
+    # into one unit so routers can call `dispatch` without wiring three reps.
+    async with get_db() as conn:
+        yield NotificationDispatcher(
+            email_service=email_service,
+            user_repo=UserRepository(conn),
+            activity_repo=activity_repo,
+        )
+
+
+NotificationDispatcherDep = Annotated[
+    NotificationDispatcher, Depends(get_notification_dispatcher)
+]
+
+
+def _po_url(po_id: str) -> str:
+    # Single-source for the portal URL a recipient should open. The base URL
+    # is env-configured for deployment; tests read the default and assert on the
+    # suffix rather than the absolute URL.
+    import os as _os
+    base = _os.getenv("APP_BASE_URL", "http://localhost:5174")
+    return f"{base}/po/{po_id}"
 
 
 def _build_line_items(data: PurchaseOrderCreate | PurchaseOrderUpdate) -> list[LineItem]:
@@ -200,6 +255,8 @@ async def list_pos(
             currency=row["currency"],
             current_milestone=row["current_milestone"],
             marketplace=row.get("marketplace"),
+            round_count=row.get("round_count") or 0,
+            has_removed_line=bool(row.get("has_removed_line")),
         )
         for row in rows
     ]
@@ -208,6 +265,7 @@ async def list_pos(
 
 @router.post("/bulk/transition", response_model=BulkTransitionResult)
 async def bulk_transition(body: BulkTransitionRequest, user: User = require_role(UserRole.SM, UserRole.VENDOR)) -> BulkTransitionResult:
+    # Iter 056 dropped the 'reject' branch; DTO validation already narrows to submit/accept/resubmit.
     if user.role is UserRole.VENDOR and body.action in ("submit", "resubmit"):
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     results: list[BulkTransitionItemResult] = []
@@ -231,10 +289,6 @@ async def bulk_transition(body: BulkTransitionRequest, user: User = require_role
                     po.accept()
                     await repo.save(po)
                     await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_ACCEPTED)
-                elif body.action == "reject":
-                    po.reject(body.comment)
-                    await repo.save(po)
-                    await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_REJECTED, detail=body.comment)
                 elif body.action == "resubmit":
                     po.resubmit()
                     await repo.save(po)
@@ -321,48 +375,409 @@ async def accept_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activ
     return po_to_response(po, vendor_name=vname, vendor_country=vcountry)
 
 
-@router.post("/{po_id}/reject", response_model=PurchaseOrderResponse)
-async def reject_po(po_id: str, body: RejectRequest, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, user: User = require_role(UserRole.VENDOR, UserRole.SM)) -> PurchaseOrderResponse:
+def _actor_role_for_line(user: User) -> UserRole:
+    # SM and VENDOR are the only line-negotiation actors. ADMIN acts as SM so tests
+    # and operator overrides can drive negotiation without holding a VENDOR seat.
+    if user.role is UserRole.ADMIN:
+        return UserRole.SM
+    return user.role
+
+
+def _counterpart_target(actor: UserRole) -> TargetRole:
+    # Line-level events notify the party that must act next. Vendor-triggered events
+    # target SM; SM-triggered events target VENDOR.
+    return TargetRole.SM if actor is UserRole.VENDOR else TargetRole.VENDOR
+
+
+@router.post("/{po_id}/lines/{part_number}/modify", response_model=PurchaseOrderResponse)
+async def modify_line_endpoint(
+    po_id: str,
+    part_number: str,
+    body: ModifyLineRequest,
+    repo: RepoDep,
+    vendor_repo: VendorRepoDep,
+    activity_repo: ActivityRepoDep,
+    dispatcher: NotificationDispatcherDep,
+    user: User = require_role(UserRole.VENDOR, UserRole.SM),
+) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
     check_vendor_access(user, po.vendor_id)
+    actor = _actor_role_for_line(user)
     try:
-        po.reject(body.comment)
+        po.modify_line(part_number, actor, dict(body.fields))
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        msg = str(exc)
+        if "unknown part_number" in msg:
+            raise HTTPException(status_code=404, detail=msg) from exc
+        if "requires PENDING or MODIFIED status" in msg:
+            raise HTTPException(status_code=409, detail=msg) from exc
+        # Editable-field violations, terminal-status rejections: treat as 422.
+        raise HTTPException(status_code=422, detail=msg) from exc
     await repo.save(po)
-    await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_REJECTED, detail=body.comment)
+    # Detail payload: part_number plus the sorted list of changed field names.
+    # Full old/new values live in line_edit_history; keep activity rows compact.
+    changed = sorted(body.fields.keys())
+    detail = f"{part_number}: {', '.join(changed)}"
+    await activity_repo.append(
+        EntityType.PO,
+        po.id,
+        ActivityEvent.PO_LINE_MODIFIED,
+        detail=detail,
+        target_role=_counterpart_target(actor),
+    )
+    vendor = await vendor_repo.get_by_id(po.vendor_id)
+    vname = vendor.name if vendor else ""
+    vcountry = vendor.country if vendor else ""
+    await dispatcher.dispatch(
+        ActivityEvent.PO_LINE_MODIFIED,
+        po,
+        vendor_name=vname,
+        context=DispatchContext(
+            po_url=_po_url(po.id),
+            line_detail=detail,
+            round_indicator=f"Round {po.round_count + 1}",
+            actor_role=actor,
+        ),
+    )
+    return po_to_response(po, vendor_name=vname, vendor_country=vcountry)
+
+
+@router.post("/{po_id}/lines/{part_number}/accept", response_model=PurchaseOrderResponse)
+async def accept_line_endpoint(
+    po_id: str,
+    part_number: str,
+    body: AcceptLineRequest,
+    repo: RepoDep,
+    vendor_repo: VendorRepoDep,
+    activity_repo: ActivityRepoDep,
+    user: User = require_role(UserRole.VENDOR, UserRole.SM),
+) -> PurchaseOrderResponse:
+    po = await repo.get(po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
+    actor = _actor_role_for_line(user)
+    try:
+        po.accept_line(part_number, actor)
+    except ValueError as exc:
+        msg = str(exc)
+        if "unknown part_number" in msg:
+            raise HTTPException(status_code=404, detail=msg) from exc
+        raise HTTPException(status_code=409, detail=msg) from exc
+    await repo.save(po)
+    await activity_repo.append(
+        EntityType.PO,
+        po.id,
+        ActivityEvent.PO_LINE_ACCEPTED,
+        detail=part_number,
+        target_role=_counterpart_target(actor),
+    )
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vname = vendor.name if vendor else ""
     vcountry = vendor.country if vendor else ""
     return po_to_response(po, vendor_name=vname, vendor_country=vcountry)
 
 
-@router.post("/{po_id}/accept-lines", response_model=PurchaseOrderResponse)
-async def accept_lines_po(
+@router.post("/{po_id}/lines/{part_number}/remove", response_model=PurchaseOrderResponse)
+async def remove_line_endpoint(
     po_id: str,
-    body: AcceptLinesRequest,
+    part_number: str,
+    body: RemoveLineRequest,
     repo: RepoDep,
     vendor_repo: VendorRepoDep,
     activity_repo: ActivityRepoDep,
-    user: User = require_role(UserRole.VENDOR),
+    user: User = require_role(UserRole.VENDOR, UserRole.SM),
 ) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
     check_vendor_access(user, po.vendor_id)
-    decisions = [{"part_number": d.part_number, "status": d.status} for d in body.decisions]
+    actor = _actor_role_for_line(user)
     try:
-        po.accept_lines(decisions, body.comment)
+        po.remove_line(part_number, actor)
     except ValueError as exc:
-        status_code = 409 if "requires PENDING status" in str(exc) else 422
-        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+        msg = str(exc)
+        if "unknown part_number" in msg:
+            raise HTTPException(status_code=404, detail=msg) from exc
+        raise HTTPException(status_code=409, detail=msg) from exc
     await repo.save(po)
-    if po.status.value == "ACCEPTED":
-        await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_ACCEPTED)
+    await activity_repo.append(
+        EntityType.PO,
+        po.id,
+        ActivityEvent.PO_LINE_REMOVED,
+        detail=part_number,
+        target_role=_counterpart_target(actor),
+    )
+    vendor = await vendor_repo.get_by_id(po.vendor_id)
+    vname = vendor.name if vendor else ""
+    vcountry = vendor.country if vendor else ""
+    return po_to_response(po, vendor_name=vname, vendor_country=vcountry)
+
+
+@router.post("/{po_id}/lines/{part_number}/force-accept", response_model=PurchaseOrderResponse)
+async def force_accept_line_endpoint(
+    po_id: str,
+    part_number: str,
+    body: ForceAcceptRequest,
+    repo: RepoDep,
+    vendor_repo: VendorRepoDep,
+    activity_repo: ActivityRepoDep,
+    user: User = require_role(UserRole.SM),
+) -> PurchaseOrderResponse:
+    po = await repo.get(po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
+    try:
+        po.force_accept_line(part_number, _actor_role_for_line(user))
+    except ValueError as exc:
+        msg = str(exc)
+        if "unknown part_number" in msg:
+            raise HTTPException(status_code=404, detail=msg) from exc
+        if "force actions are only permitted" in msg:
+            raise HTTPException(status_code=403, detail=msg) from exc
+        raise HTTPException(status_code=409, detail=msg) from exc
+    await repo.save(po)
+    # Force actions are SM-only; target the vendor with an action-history row.
+    await activity_repo.append(
+        EntityType.PO,
+        po.id,
+        ActivityEvent.PO_FORCE_ACCEPTED,
+        detail=part_number,
+    )
+    vendor = await vendor_repo.get_by_id(po.vendor_id)
+    vname = vendor.name if vendor else ""
+    vcountry = vendor.country if vendor else ""
+    return po_to_response(po, vendor_name=vname, vendor_country=vcountry)
+
+
+@router.post("/{po_id}/lines/{part_number}/force-remove", response_model=PurchaseOrderResponse)
+async def force_remove_line_endpoint(
+    po_id: str,
+    part_number: str,
+    body: ForceRemoveRequest,
+    repo: RepoDep,
+    vendor_repo: VendorRepoDep,
+    activity_repo: ActivityRepoDep,
+    user: User = require_role(UserRole.SM),
+) -> PurchaseOrderResponse:
+    po = await repo.get(po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
+    try:
+        po.force_remove_line(part_number, _actor_role_for_line(user))
+    except ValueError as exc:
+        msg = str(exc)
+        if "unknown part_number" in msg:
+            raise HTTPException(status_code=404, detail=msg) from exc
+        if "force actions are only permitted" in msg:
+            raise HTTPException(status_code=403, detail=msg) from exc
+        raise HTTPException(status_code=409, detail=msg) from exc
+    await repo.save(po)
+    await activity_repo.append(
+        EntityType.PO,
+        po.id,
+        ActivityEvent.PO_FORCE_REMOVED,
+        detail=part_number,
+    )
+    vendor = await vendor_repo.get_by_id(po.vendor_id)
+    vname = vendor.name if vendor else ""
+    vcountry = vendor.country if vendor else ""
+    return po_to_response(po, vendor_name=vname, vendor_country=vcountry)
+
+
+@router.post("/{po_id}/submit-response", response_model=PurchaseOrderResponse)
+async def submit_response_endpoint(
+    po_id: str,
+    body: SubmitResponseRequest,
+    repo: RepoDep,
+    vendor_repo: VendorRepoDep,
+    activity_repo: ActivityRepoDep,
+    dispatcher: NotificationDispatcherDep,
+    user: User = require_role(UserRole.VENDOR, UserRole.SM),
+) -> PurchaseOrderResponse:
+    po = await repo.get(po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
+    actor = _actor_role_for_line(user)
+    try:
+        po.submit_response(actor)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await repo.save(po)
+    vendor = await vendor_repo.get_by_id(po.vendor_id)
+    vname = vendor.name if vendor else ""
+    vcountry = vendor.country if vendor else ""
+    # Convergence -> PO_CONVERGED (terminal). Otherwise -> PO_MODIFIED (hand-off).
+    # Detail on PO_CONVERGED records the final PO status for quick scanning.
+    if po.status in (POStatus.ACCEPTED, POStatus.REJECTED):
+        await activity_repo.append(
+            EntityType.PO,
+            po.id,
+            ActivityEvent.PO_CONVERGED,
+            detail=po.status.value,
+        )
+        # Only the ACCEPTED convergence mails the vendor; REJECTED means no
+        # production and nothing actionable to schedule.
+        if po.status is POStatus.ACCEPTED:
+            await dispatcher.dispatch(
+                ActivityEvent.PO_CONVERGED,
+                po,
+                vendor_name=vname,
+                context=DispatchContext(po_url=_po_url(po.id)),
+            )
     else:
-        await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_REJECTED, detail=body.comment)
+        await activity_repo.append(
+            EntityType.PO,
+            po.id,
+            ActivityEvent.PO_MODIFIED,
+            target_role=_counterpart_target(actor),
+        )
+        await dispatcher.dispatch(
+            ActivityEvent.PO_MODIFIED,
+            po,
+            vendor_name=vname,
+            context=DispatchContext(
+                po_url=_po_url(po.id),
+                round_indicator=f"Round {po.round_count}",
+                actor_role=actor,
+            ),
+        )
+    return po_to_response(po, vendor_name=vname, vendor_country=vcountry)
+
+
+# ---------------------------------------------------------------------------
+# Iter 059: advance-payment gate + post-acceptance line mutations (SM-only)
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{po_id}/mark-advance-paid", response_model=PurchaseOrderResponse)
+async def mark_advance_paid_endpoint(
+    po_id: str,
+    body: MarkAdvancePaidRequest,
+    repo: RepoDep,
+    vendor_repo: VendorRepoDep,
+    activity_repo: ActivityRepoDep,
+    dispatcher: NotificationDispatcherDep,
+    user: User = require_role(UserRole.SM),
+) -> PurchaseOrderResponse:
+    po = await repo.get(po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
+    was_already_paid = po.advance_paid_at is not None
+    try:
+        po.mark_advance_paid(user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    vendor = await vendor_repo.get_by_id(po.vendor_id)
+    vname = vendor.name if vendor else ""
+    vcountry = vendor.country if vendor else ""
+    # Idempotent: a repeat call does not emit another event or touch storage.
+    if not was_already_paid:
+        await repo.save(po)
+        await activity_repo.append(
+            EntityType.PO,
+            po.id,
+            ActivityEvent.PO_ADVANCE_PAID,
+        )
+        await dispatcher.dispatch(
+            ActivityEvent.PO_ADVANCE_PAID,
+            po,
+            vendor_name=vname,
+            context=DispatchContext(po_url=_po_url(po.id)),
+        )
+    return po_to_response(po, vendor_name=vname, vendor_country=vcountry)
+
+
+async def _get_first_milestone_ts(po_id: str) -> "datetime | None":
+    # Resolves the gate-close "first milestone posted at" observation. The
+    # router owns DB access; the domain stays pure.
+    async with get_db() as conn:
+        milestone_repo = MilestoneRepository(conn)
+        return await first_milestone_posted_at(milestone_repo, po_id)
+
+
+@router.post("/{po_id}/lines", response_model=PurchaseOrderResponse, status_code=201)
+async def add_line_post_accept_endpoint(
+    po_id: str,
+    body: AddLinePostAcceptRequest,
+    repo: RepoDep,
+    vendor_repo: VendorRepoDep,
+    activity_repo: ActivityRepoDep,
+    user: User = require_role(UserRole.SM),
+) -> PurchaseOrderResponse:
+    po = await repo.get(po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
+    first_ms = await _get_first_milestone_ts(po_id)
+    try:
+        new_line = LineItem(
+            part_number=body.line.part_number,
+            description=body.line.description,
+            quantity=body.line.quantity,
+            uom=body.line.uom,
+            unit_price=body.line.unit_price,
+            hs_code=body.line.hs_code,
+            country_of_origin=body.line.country_of_origin,
+            product_id=body.line.product_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    try:
+        po.add_line_post_acceptance(new_line, user.id, first_ms)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await repo.save(po)
+    await activity_repo.append(
+        EntityType.PO,
+        po.id,
+        ActivityEvent.PO_LINE_ADDED_POST_ACCEPT,
+        detail=new_line.part_number,
+    )
+    vendor = await vendor_repo.get_by_id(po.vendor_id)
+    vname = vendor.name if vendor else ""
+    vcountry = vendor.country if vendor else ""
+    return po_to_response(po, vendor_name=vname, vendor_country=vcountry)
+
+
+@router.delete("/{po_id}/lines/{part_number}", response_model=PurchaseOrderResponse)
+async def remove_line_post_accept_endpoint(
+    po_id: str,
+    part_number: str,
+    repo: RepoDep,
+    vendor_repo: VendorRepoDep,
+    activity_repo: ActivityRepoDep,
+    user: User = require_role(UserRole.SM),
+) -> PurchaseOrderResponse:
+    po = await repo.get(po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+    check_vendor_access(user, po.vendor_id)
+    first_ms = await _get_first_milestone_ts(po_id)
+    async with get_db() as conn:
+        has_artifact = await line_has_downstream_artifacts(conn, po_id, part_number)
+    try:
+        po.remove_line_post_acceptance(part_number, user.id, first_ms, has_artifact)
+    except LineHasDownstreamArtifactError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        msg = str(exc)
+        if "unknown part_number" in msg:
+            raise HTTPException(status_code=404, detail=msg) from exc
+        raise HTTPException(status_code=409, detail=msg) from exc
+    await repo.save(po)
+    await activity_repo.append(
+        EntityType.PO,
+        po.id,
+        ActivityEvent.PO_LINE_REMOVED_POST_ACCEPT,
+        detail=part_number,
+    )
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vname = vendor.name if vendor else ""
     vcountry = vendor.country if vendor else ""

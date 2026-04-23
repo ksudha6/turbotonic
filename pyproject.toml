@@ -15,6 +15,8 @@ dependencies = [
     "reportlab",
     "webauthn>=2",
     "python-multipart>=0.0.26",
+    "aiosmtplib>=3",
+    "jinja2>=3",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -27,3 +29,9 @@ dev = [
     "httpx",
     "pypdf",
 ]
+
+[tool.pytest.ini_options]
+# Scratch tests live outside version control (see .gitignore) and are tied to a
+# specific iteration's assumptions. Exclude them from the permanent suite so
+# `make test` only exercises committed, long-lived tests.
+norecursedirs = ["backend/tests/scratch", "frontend/tests/scratch", ".venv", "node_modules"]

@@ -198,11 +198,11 @@ async def login_verify(request: Request, response: Response, repo: UserRepoDep):
 
 
 @router.get("/dev-login")
-async def dev_login(response: Response, repo: UserRepoDep):
-    """Dev-only: auto-login as seed-admin. Remove before production."""
-    user = await repo.get_by_username("seed-admin")
+async def dev_login(response: Response, repo: UserRepoDep, username: str = "seed-admin"):
+    """Dev-only: log in as any seeded user by username. Remove before production."""
+    user = await repo.get_by_username(username)
     if user is None:
-        raise HTTPException(status_code=404, detail="No seed-admin user. Run: uv run python tools/seed_data.py")
+        raise HTTPException(status_code=404, detail=f"No user {username!r}. Run: uv run python tools/seed_data.py")
     _set_session_cookie(response, user.id)
     return {"user": _user_to_dict(user)}
 

@@ -75,7 +75,36 @@ PAYMENT_TERMS: tuple[tuple[str, str], ...] = (
     # Open account / consignment
     ("OA", "Open Account"),
     ("CONSIGN", "Consignment"),
+    # Split and full-advance terms carry an advance-payment gate: production is not
+    # considered authorised until the advance portion is recorded on the PO.
+    ("50_PCT_ADVANCE_50_PCT_BL", "50% Advance, 50% against B/L"),
+    ("100_PCT_ADVANCE", "100% Advance"),
 )
+
+# Iter 059: per-term metadata. `has_advance` marks terms whose production start
+# is gated by an advance payment; `ADV`, `CIA`, and both new split/full advance
+# codes require the advance to be recorded on the PO before production flows.
+PAYMENT_TERMS_METADATA: dict[str, dict[str, object]] = {
+    "ADV": {"has_advance": True},
+    "CIA": {"has_advance": True},
+    "COD": {"has_advance": False},
+    "NET15": {"has_advance": False},
+    "NET30": {"has_advance": False},
+    "NET45": {"has_advance": False},
+    "NET60": {"has_advance": False},
+    "NET90": {"has_advance": False},
+    "NET120": {"has_advance": False},
+    "2NET30": {"has_advance": False},
+    "DA": {"has_advance": False},
+    "DP": {"has_advance": False},
+    "LC": {"has_advance": False},
+    "SBLC": {"has_advance": False},
+    "TT": {"has_advance": False},
+    "OA": {"has_advance": False},
+    "CONSIGN": {"has_advance": False},
+    "50_PCT_ADVANCE_50_PCT_BL": {"has_advance": True},
+    "100_PCT_ADVANCE": {"has_advance": True},
+}
 
 COUNTRIES: tuple[tuple[str, str], ...] = (
     ("AE", "United Arab Emirates"),
@@ -184,7 +213,7 @@ PO_TYPES: tuple[tuple[str, str], ...] = (
 # Lookup sets for fast validation
 VALID_CURRENCIES: frozenset[str] = frozenset(code for code, _ in CURRENCIES)
 VALID_INCOTERMS: frozenset[str] = frozenset(code for code, _ in INCOTERMS)
-VALID_PAYMENT_TERMS: frozenset[str] = frozenset(code for code, _ in PAYMENT_TERMS)
+VALID_PAYMENT_TERMS: tuple[str, ...] = tuple(PAYMENT_TERMS_METADATA.keys())
 VALID_COUNTRIES: frozenset[str] = frozenset(code for code, _ in COUNTRIES)
 VALID_PORTS: frozenset[str] = frozenset(code for code, _ in PORTS)
 VALID_VENDOR_TYPES: frozenset[str] = frozenset(code for code, _ in VENDOR_TYPES)

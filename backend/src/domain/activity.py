@@ -11,6 +11,19 @@ class ActivityEvent(Enum):
     PO_ACCEPTED = "PO_ACCEPTED"
     PO_REJECTED = "PO_REJECTED"
     PO_REVISED = "PO_REVISED"
+    # Iter 058: per-line negotiation events.
+    PO_LINE_MODIFIED = "PO_LINE_MODIFIED"
+    PO_LINE_ACCEPTED = "PO_LINE_ACCEPTED"
+    PO_LINE_REMOVED = "PO_LINE_REMOVED"
+    PO_FORCE_ACCEPTED = "PO_FORCE_ACCEPTED"
+    PO_FORCE_REMOVED = "PO_FORCE_REMOVED"
+    # Iter 058: PO-level hand-off and convergence events.
+    PO_MODIFIED = "PO_MODIFIED"
+    PO_CONVERGED = "PO_CONVERGED"
+    # Iter 059: advance-payment gate and post-acceptance line mutations.
+    PO_ADVANCE_PAID = "PO_ADVANCE_PAID"
+    PO_LINE_ADDED_POST_ACCEPT = "PO_LINE_ADDED_POST_ACCEPT"
+    PO_LINE_REMOVED_POST_ACCEPT = "PO_LINE_REMOVED_POST_ACCEPT"
     INVOICE_CREATED = "INVOICE_CREATED"
     INVOICE_SUBMITTED = "INVOICE_SUBMITTED"
     INVOICE_APPROVED = "INVOICE_APPROVED"
@@ -21,6 +34,9 @@ class ActivityEvent(Enum):
     CERT_UPLOADED = "CERT_UPLOADED"
     PACKAGING_COLLECTED = "PACKAGING_COLLECTED"
     PACKAGING_MISSING = "PACKAGING_MISSING"
+    # Iter 060: emitted when the notification dispatcher catches a send failure.
+    # Operator can replay from activity_log; no automatic retry.
+    EMAIL_SEND_FAILED = "EMAIL_SEND_FAILED"
 
 
 class NotificationCategory(Enum):
@@ -61,6 +77,27 @@ EVENT_METADATA: dict[ActivityEvent, tuple[NotificationCategory, TargetRole | Non
     ActivityEvent.PO_ACCEPTED: (NotificationCategory.LIVE, TargetRole.SM),
     ActivityEvent.PO_REJECTED: (NotificationCategory.LIVE, TargetRole.SM),
     ActivityEvent.PO_REVISED: (NotificationCategory.ACTION_REQUIRED, TargetRole.VENDOR),
+    # Iter 058: line-level negotiation events. Category is LIVE; target_role is
+    # the counterparty and is supplied per-append by the router (VENDOR action
+    # targets SM; SM action targets VENDOR). The default below matches the most
+    # common SM-triggered case and is overridable in ActivityLogRepository.append.
+    ActivityEvent.PO_LINE_MODIFIED: (NotificationCategory.LIVE, TargetRole.VENDOR),
+    ActivityEvent.PO_LINE_ACCEPTED: (NotificationCategory.LIVE, TargetRole.VENDOR),
+    ActivityEvent.PO_LINE_REMOVED: (NotificationCategory.LIVE, TargetRole.VENDOR),
+    # Force events are SM-only by preconditions, so they always target VENDOR.
+    ActivityEvent.PO_FORCE_ACCEPTED: (NotificationCategory.LIVE, TargetRole.VENDOR),
+    ActivityEvent.PO_FORCE_REMOVED: (NotificationCategory.LIVE, TargetRole.VENDOR),
+    # PO_MODIFIED is the round hand-off: the counterparty must now act.
+    ActivityEvent.PO_MODIFIED: (NotificationCategory.ACTION_REQUIRED, TargetRole.VENDOR),
+    # PO_CONVERGED terminates the loop; both parties should see it. target_role=None
+    # means the row is surfaced to every role in list_recent / unread_count queries.
+    ActivityEvent.PO_CONVERGED: (NotificationCategory.LIVE, None),
+    # Iter 059. PO_ADVANCE_PAID notifies the vendor production can start; the
+    # other two events are SM-triggered scope adjustments and surface to both roles
+    # (target_role=None) so vendor and SM both see the line list change.
+    ActivityEvent.PO_ADVANCE_PAID: (NotificationCategory.LIVE, TargetRole.VENDOR),
+    ActivityEvent.PO_LINE_ADDED_POST_ACCEPT: (NotificationCategory.LIVE, None),
+    ActivityEvent.PO_LINE_REMOVED_POST_ACCEPT: (NotificationCategory.LIVE, None),
     ActivityEvent.INVOICE_CREATED: (NotificationCategory.LIVE, TargetRole.SM),
     ActivityEvent.INVOICE_SUBMITTED: (NotificationCategory.ACTION_REQUIRED, TargetRole.SM),
     ActivityEvent.INVOICE_APPROVED: (NotificationCategory.LIVE, TargetRole.VENDOR),
@@ -71,4 +108,6 @@ EVENT_METADATA: dict[ActivityEvent, tuple[NotificationCategory, TargetRole | Non
     ActivityEvent.CERT_UPLOADED: (NotificationCategory.LIVE, TargetRole.SM),
     ActivityEvent.PACKAGING_COLLECTED: (NotificationCategory.LIVE, TargetRole.SM),
     ActivityEvent.PACKAGING_MISSING: (NotificationCategory.ACTION_REQUIRED, TargetRole.SM),
+    # Iter 060: DELAYED because an operator must intervene; surfaced to every role.
+    ActivityEvent.EMAIL_SEND_FAILED: (NotificationCategory.DELAYED, None),
 }

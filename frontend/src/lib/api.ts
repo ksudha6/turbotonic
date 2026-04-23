@@ -1,4 +1,4 @@
-import type { AcceptLinesRequest, ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -96,16 +96,100 @@ export function acceptPO(id: string): Promise<PurchaseOrder> {
 	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/accept`);
 }
 
-export function rejectPO(id: string, comment: string): Promise<PurchaseOrder> {
-	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/reject`, { comment });
-}
-
 export function resubmitPO(id: string): Promise<PurchaseOrder> {
 	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/resubmit`);
 }
 
-export function acceptLinesPO(id: string, request: AcceptLinesRequest): Promise<PurchaseOrder> {
-	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/accept-lines`, request);
+// Iter 056 removed the /reject and /accept-lines endpoints in favour of per-line
+// modify / accept / remove / submit-response. Iter 057 wires the UI into these.
+
+// A ModifyLineFields payload carries only the fields the caller wants to change.
+// The backend rejects unknown keys and part_number changes.
+export type ModifyLineFields = {
+	quantity?: number;
+	unit_price?: string;
+	uom?: string;
+	description?: string;
+	hs_code?: string;
+	country_of_origin?: string;
+	required_delivery_date?: string | null;
+};
+
+export function modifyLine(poId: string, partNumber: string, fields: ModifyLineFields): Promise<PurchaseOrder> {
+	return apiPost<PurchaseOrder>(
+		`/api/v1/po/${poId}/lines/${encodeURIComponent(partNumber)}/modify`,
+		{ fields }
+	);
+}
+
+export function acceptLine(poId: string, partNumber: string): Promise<PurchaseOrder> {
+	return apiPost<PurchaseOrder>(`/api/v1/po/${poId}/lines/${encodeURIComponent(partNumber)}/accept`, {});
+}
+
+export function removeLine(poId: string, partNumber: string): Promise<PurchaseOrder> {
+	return apiPost<PurchaseOrder>(`/api/v1/po/${poId}/lines/${encodeURIComponent(partNumber)}/remove`, {});
+}
+
+export function forceAcceptLine(poId: string, partNumber: string): Promise<PurchaseOrder> {
+	return apiPost<PurchaseOrder>(
+		`/api/v1/po/${poId}/lines/${encodeURIComponent(partNumber)}/force-accept`,
+		{}
+	);
+}
+
+export function forceRemoveLine(poId: string, partNumber: string): Promise<PurchaseOrder> {
+	return apiPost<PurchaseOrder>(
+		`/api/v1/po/${poId}/lines/${encodeURIComponent(partNumber)}/force-remove`,
+		{}
+	);
+}
+
+export function submitResponse(poId: string): Promise<PurchaseOrder> {
+	return apiPost<PurchaseOrder>(`/api/v1/po/${poId}/submit-response`, {});
+}
+
+// Iter 059: advance-payment gate and post-accept line mutations. SM-only.
+export function markAdvancePaid(id: string): Promise<PurchaseOrder> {
+	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/mark-advance-paid`, {});
+}
+
+export interface PostAcceptLineInput {
+	part_number: string;
+	description: string;
+	quantity: number;
+	uom: string;
+	unit_price: string;
+	hs_code: string;
+	country_of_origin: string;
+	product_id?: string | null;
+}
+
+export function addLinePostAccept(
+	id: string,
+	line: PostAcceptLineInput
+): Promise<PurchaseOrder> {
+	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/lines`, { line });
+}
+
+export async function removeLinePostAccept(
+	id: string,
+	partNumber: string
+): Promise<{ ok: true; po: PurchaseOrder } | { ok: false; status: number; detail: string }> {
+	const res = await fetch(`/api/v1/po/${id}/lines/${encodeURIComponent(partNumber)}`, {
+		method: 'DELETE',
+		credentials: 'include'
+	});
+	if (res.ok) {
+		return { ok: true, po: (await res.json()) as PurchaseOrder };
+	}
+	let detail = `${res.status} ${res.statusText}`;
+	try {
+		const body = await res.json();
+		if (body && typeof body.detail === 'string') detail = body.detail;
+	} catch {
+		// non-JSON body; keep status-text fallback.
+	}
+	return { ok: false, status: res.status, detail };
 }
 
 export function downloadPoPdf(id: string): void {

@@ -5,11 +5,17 @@ from datetime import datetime
 from decimal import Decimal
 
 import asyncpg
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_validator
 
 from src.domain.invoice import Invoice
 from src.domain.invoice import InvoiceLineItem as DomainInvoiceLineItem
-from src.domain.purchase_order import LineItem, PurchaseOrder, RejectionRecord
+from src.domain.purchase_order import (
+    EDITABLE_LINE_FIELDS,
+    LineEditHistoryEntry,
+    LineItem,
+    PurchaseOrder,
+    RejectionRecord,
+)
 
 
 # HS code must contain only digits and dots and be at least 4 characters long.
@@ -118,12 +124,14 @@ class PurchaseOrderUpdate(BaseModel):
         return v
 
 
-_VALID_BULK_ACTIONS: tuple[str, ...] = ("submit", "accept", "reject", "resubmit")
+# Iter 056: 'reject' dropped — PO-level rejection is no longer a direct action.
+# REJECTED is only reachable via convergence when every line ends REMOVED.
+_VALID_BULK_ACTIONS: tuple[str, ...] = ("submit", "accept", "resubmit")
 
 
 class BulkTransitionRequest(BaseModel):
     po_ids: list[str]
-    action: str  # one of: submit, accept, reject, resubmit
+    action: str  # one of: submit, accept, resubmit
     comment: str | None = None
 
     @field_validator("action")
@@ -144,13 +152,6 @@ class BulkTransitionRequest(BaseModel):
             raise ValueError("po_ids must contain at most 200 items")
         return v
 
-    @model_validator(mode="after")
-    def reject_requires_comment(self) -> BulkTransitionRequest:
-        if self.action == "reject":
-            if not self.comment or not self.comment.strip():
-                raise ValueError("comment is required and must not be empty when action is 'reject'")
-        return self
-
 
 class BulkTransitionItemResult(BaseModel):
     po_id: str
@@ -163,50 +164,69 @@ class BulkTransitionResult(BaseModel):
     results: list[BulkTransitionItemResult]
 
 
-class RejectRequest(BaseModel):
-    comment: str
+# Iter 056: line-level negotiation request DTOs.
 
-    @field_validator("comment")
+
+class ModifyLineRequest(BaseModel):
+    # Only fields in EDITABLE_LINE_FIELDS are accepted; part_number is immutable.
+    fields: dict[str, object]
+
+    @field_validator("fields")
     @classmethod
-    def comment_not_whitespace(cls, v: str) -> str:
-        stripped = v.strip()
-        if not stripped:
-            raise ValueError("comment must not be empty or whitespace-only")
-        return stripped
-
-
-_VALID_LINE_DECISION_STATUSES: tuple[str, ...] = ("ACCEPTED", "REJECTED")
-
-
-class LineDecision(BaseModel):
-    part_number: str
-    status: str
-
-    @field_validator("part_number")
-    @classmethod
-    def part_number_not_empty(cls, v: str) -> str:
-        if not v or not v.strip():
-            raise ValueError("part_number must not be empty or whitespace-only")
-        return v
-
-    @field_validator("status")
-    @classmethod
-    def status_must_be_valid(cls, v: str) -> str:
-        if v not in _VALID_LINE_DECISION_STATUSES:
-            raise ValueError(f"status must be one of: {', '.join(_VALID_LINE_DECISION_STATUSES)}")
-        return v
-
-
-class AcceptLinesRequest(BaseModel):
-    decisions: list[LineDecision]
-    comment: str | None = None
-
-    @field_validator("decisions")
-    @classmethod
-    def decisions_not_empty(cls, v: list[LineDecision]) -> list[LineDecision]:
+    def fields_editable(cls, v: dict[str, object]) -> dict[str, object]:
         if not v:
-            raise ValueError("decisions must not be empty")
+            raise ValueError("fields must not be empty")
+        if "part_number" in v:
+            raise ValueError("part_number is immutable and cannot be modified")
+        invalid = [name for name in v if name not in EDITABLE_LINE_FIELDS]
+        if invalid:
+            raise ValueError(
+                f"fields not editable: {sorted(invalid)}; "
+                f"editable fields are {list(EDITABLE_LINE_FIELDS)}"
+            )
         return v
+
+
+class AcceptLineRequest(BaseModel):
+    # Empty body; the actor is derived from the authenticated user.
+    pass
+
+
+class RemoveLineRequest(BaseModel):
+    pass
+
+
+class ForceAcceptRequest(BaseModel):
+    pass
+
+
+class ForceRemoveRequest(BaseModel):
+    pass
+
+
+class SubmitResponseRequest(BaseModel):
+    pass
+
+
+class MarkAdvancePaidRequest(BaseModel):
+    # Empty body; the actor is derived from the authenticated user.
+    pass
+
+
+class AddLinePostAcceptRequest(BaseModel):
+    # SM-only post-acceptance line addition. Reuses the LineItemCreate shape so
+    # validation (hs_code pattern, quantity > 0, part_number non-empty) matches.
+    line: LineItemCreate
+
+
+class LineEditEntryDTO(BaseModel):
+    part_number: str
+    round: int
+    actor_role: str
+    field: str
+    old_value: str
+    new_value: str
+    edited_at: datetime
 
 
 class LineItemResponse(BaseModel):
@@ -219,6 +239,8 @@ class LineItemResponse(BaseModel):
     country_of_origin: str
     product_id: str | None = None
     status: str = "PENDING"
+    required_delivery_date: datetime | None = None
+    history: list[LineEditEntryDTO] = []
 
 
 class RejectionResponse(BaseModel):
@@ -253,6 +275,11 @@ class PurchaseOrderResponse(BaseModel):
     total_value: str
     created_at: datetime
     updated_at: datetime
+    round_count: int = 0
+    last_actor_role: str | None = None
+    # Iter 059: null when no advance recorded. UI uses this plus the reference
+    # metadata's has_advance flag to decide when to show the "Mark Advance Paid" button.
+    advance_paid_at: datetime | None = None
 
 
 class PurchaseOrderListItem(BaseModel):
@@ -271,6 +298,11 @@ class PurchaseOrderListItem(BaseModel):
     currency: str
     current_milestone: str | None = None
     marketplace: str | None = None
+    round_count: int = 0
+    # Iter 058: flags the "Partial" PO pill on the list page — an ACCEPTED PO with
+    # one or more REMOVED lines is partial, because some originally-ordered scope
+    # was agreed-out during negotiation.
+    has_removed_line: bool = False
 
 
 class PaginatedPOList(BaseModel):
@@ -280,7 +312,20 @@ class PaginatedPOList(BaseModel):
     page_size: int
 
 
-def _line_item_to_response(item: LineItem) -> LineItemResponse:
+def _line_edit_entry_to_dto(entry: LineEditHistoryEntry) -> LineEditEntryDTO:
+    return LineEditEntryDTO(
+        part_number=entry.part_number,
+        round=entry.round,
+        actor_role=entry.actor_role.value,
+        field=entry.field,
+        old_value=entry.old_value,
+        new_value=entry.new_value,
+        edited_at=entry.edited_at,
+    )
+
+
+def _line_item_to_response(item: LineItem, history: list[LineEditHistoryEntry]) -> LineItemResponse:
+    relevant = [e for e in history if e.part_number == item.part_number]
     return LineItemResponse(
         part_number=item.part_number,
         description=item.description,
@@ -291,6 +336,8 @@ def _line_item_to_response(item: LineItem) -> LineItemResponse:
         country_of_origin=item.country_of_origin,
         product_id=item.product_id,
         status=item.status.value,
+        required_delivery_date=item.required_delivery_date,
+        history=[_line_edit_entry_to_dto(e) for e in relevant],
     )
 
 
@@ -324,11 +371,14 @@ def po_to_response(po: PurchaseOrder, vendor_name: str = "", vendor_country: str
         country_of_origin=po.country_of_origin,
         country_of_destination=po.country_of_destination,
         marketplace=po.marketplace,
-        line_items=[_line_item_to_response(i) for i in po.line_items],
+        line_items=[_line_item_to_response(i, po.line_edit_history) for i in po.line_items],
         rejection_history=[_rejection_record_to_response(r) for r in po.rejection_history],
         total_value=str(po.total_value),
         created_at=po.created_at,
         updated_at=po.updated_at,
+        round_count=po.round_count,
+        last_actor_role=po.last_actor_role.value if po.last_actor_role else None,
+        advance_paid_at=po.advance_paid_at,
     )
 
 
@@ -348,6 +398,7 @@ def po_to_list_item(po: PurchaseOrder, vendor_name: str = "", vendor_country: st
         total_value=str(po.total_value),
         currency=po.currency,
         marketplace=po.marketplace,
+        round_count=po.round_count,
     )
 
 

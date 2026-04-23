@@ -2,19 +2,42 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { getPO, submitPO, acceptPO, rejectPO, resubmitPO, downloadPoPdf, createInvoice, listInvoicesByPO, fetchReferenceData, getRemainingQuantities, listMilestones, postMilestone, listProducts, acceptLinesPO } from '$lib/api';
+	import {
+		getPO,
+		submitPO,
+		acceptPO,
+		resubmitPO,
+		downloadPoPdf,
+		createInvoice,
+		listInvoicesByPO,
+		fetchReferenceData,
+		getRemainingQuantities,
+		listMilestones,
+		postMilestone,
+		listProducts,
+		markAdvancePaid,
+		addLinePostAccept,
+		removeLinePostAccept,
+		modifyLine,
+		acceptLine,
+		removeLine,
+		forceAcceptLine,
+		forceRemoveLine,
+		submitResponse
+	} from '$lib/api';
+	import type { ModifyLineFields } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
-	import RejectDialog from '$lib/components/RejectDialog.svelte';
 	import CreateInvoiceDialog from '$lib/components/CreateInvoiceDialog.svelte';
 	import MilestoneTimeline from '$lib/components/MilestoneTimeline.svelte';
 	import ActivityTimeline from '$lib/components/ActivityTimeline.svelte';
-	import type { PurchaseOrder, InvoiceListItem, ReferenceData, RemainingLine, InvoiceLineItemCreate, MilestoneUpdate, ProductListItem, LineItemStatus } from '$lib/types';
+	import LineNegotiationRow from '$lib/components/LineNegotiationRow.svelte';
+	import SubmitResponseBar from '$lib/components/SubmitResponseBar.svelte';
+	import type { PurchaseOrder, InvoiceListItem, ReferenceData, RemainingLine, InvoiceLineItemCreate, MilestoneUpdate, UserRole } from '$lib/types';
 	import { buildLabelResolver } from '$lib/labels';
-	import { canEditPO, canSubmitPO, canAcceptRejectPO, canCreateInvoice, canPostMilestone } from '$lib/permissions';
+	import { canEditPO, canSubmitPO, canAcceptRejectPO, canCreateInvoice, canPostMilestone, canMarkAdvancePaid, canModifyPostAccept } from '$lib/permissions';
 
 	let po: PurchaseOrder | null = $state(null);
 	let loading: boolean = $state(true);
-	let showRejectDialog: boolean = $state(false);
 	let invoices: InvoiceListItem[] = $state([]);
 	let refData: ReferenceData | null = $state(null);
 	let resolver: ReturnType<typeof buildLabelResolver> | null = $state(null);
@@ -24,13 +47,24 @@
 	let opexError: string = $state('');
 	let milestones: MilestoneUpdate[] = $state([]);
 	let certRequired: Set<string> = $state(new Set());
-	// Per-line decisions for accept-lines flow (VENDOR on PENDING PO)
-	let lineDecisions: Map<string, 'ACCEPTED' | 'REJECTED' | null> = $state(new Map());
-	let acceptLinesComment: string = $state('');
-	let acceptLinesError: string = $state('');
+	// Iter 057 negotiation errors surface next to the action that failed.
+	let lineErrors: Map<string, string> = $state(new Map());
+	let submitResponseError: string = $state('');
+	// Iter 059: advance-payment gate and post-accept mutation UI state.
+	let advanceError: string = $state('');
+	let showAddLineDialog: boolean = $state(false);
+	let addLineError: string = $state('');
+	let removeLineErrors: Map<string, string> = $state(new Map());
+	let newLinePart: string = $state('');
+	let newLineDescription: string = $state('');
+	let newLineQuantity: number = $state(1);
+	let newLineUom: string = $state('EA');
+	let newLineUnitPrice: string = $state('0.00');
+	let newLineHsCode: string = $state('8471.30');
+	let newLineCountry: string = $state('US');
 
 	const id: string = page.params.id ?? '';
-	const role = $derived(page.data.user?.role);
+	const role = $derived<UserRole | undefined>(page.data.user?.role);
 
 	function resolve(category: string, code: string): string {
 		if (!resolver) return code;
@@ -49,10 +83,6 @@
 				remainingMap = new Map(resp.lines.map((l) => [l.part_number, l]));
 				milestones = await listMilestones(id);
 			}
-			// Initialise per-line decisions when VENDOR lands on a PENDING PO
-			if (po.status === 'PENDING' && role && canAcceptRejectPO(role)) {
-				initLineDecisions();
-			}
 		} finally {
 			loading = false;
 		}
@@ -69,12 +99,6 @@
 
 	async function handleAccept() {
 		await acceptPO(id);
-		await fetchPO();
-	}
-
-	async function handleReject(comment: string) {
-		showRejectDialog = false;
-		await rejectPO(id, comment);
 		await fetchPO();
 	}
 
@@ -100,47 +124,172 @@
 		goto(`/invoice/${invoice.id}`);
 	}
 
-	function initLineDecisions() {
-		if (!po) return;
-		lineDecisions = new Map(po.line_items.map((item): [string, 'ACCEPTED' | 'REJECTED' | null] => [item.part_number, null]));
-		acceptLinesComment = '';
-		acceptLinesError = '';
-	}
+	// ---------------------------------------------------------------------------
+	// Iter 057 -- Line-level negotiation actions
+	// ---------------------------------------------------------------------------
 
-	function setLineDecision(partNumber: string, status: 'ACCEPTED' | 'REJECTED') {
-		const current = lineDecisions.get(partNumber);
-		// Toggle off if same status clicked again
-		lineDecisions = new Map(lineDecisions).set(partNumber, current === status ? null : status);
-	}
+	// Whether the current actor can act on a PENDING or MODIFIED PO. PENDING
+	// belongs to VENDOR (initial response). MODIFIED belongs to whichever role
+	// is not the last actor. ADMIN acts as SM for these purposes.
+	const canActOnNegotiation = $derived(computeCanActOnNegotiation());
 
-	function allLinesDecided(): boolean {
-		for (const v of lineDecisions.values()) {
-			if (v === null) return false;
+	function computeCanActOnNegotiation(): boolean {
+		if (!po || !role) return false;
+		if (po.status !== 'PENDING' && po.status !== 'MODIFIED') return false;
+		if (po.status === 'PENDING') {
+			return role === 'VENDOR';
 		}
-		return lineDecisions.size > 0;
+		// MODIFIED: whoever is NOT the last_actor_role must respond.
+		const actorRole: 'VENDOR' | 'SM' = role === 'VENDOR' ? 'VENDOR' : 'SM';
+		return po.last_actor_role !== actorRole;
 	}
 
-	function anyLineRejected(): boolean {
-		for (const v of lineDecisions.values()) {
-			if (v === 'REJECTED') return true;
+	function setLineError(partNumber: string, msg: string) {
+		const next = new Map(lineErrors);
+		if (msg) {
+			next.set(partNumber, msg);
+		} else {
+			next.delete(partNumber);
 		}
+		lineErrors = next;
+	}
+
+	async function handleModify(partNumber: string, fields: ModifyLineFields) {
+		setLineError(partNumber, '');
+		try {
+			await modifyLine(id, partNumber, fields);
+			await fetchPO();
+		} catch (err: unknown) {
+			setLineError(partNumber, err instanceof Error ? err.message : String(err));
+		}
+	}
+
+	async function handleAcceptNegotiation(partNumber: string) {
+		setLineError(partNumber, '');
+		try {
+			await acceptLine(id, partNumber);
+			await fetchPO();
+		} catch (err: unknown) {
+			setLineError(partNumber, err instanceof Error ? err.message : String(err));
+		}
+	}
+
+	async function handleRemoveNegotiation(partNumber: string) {
+		setLineError(partNumber, '');
+		try {
+			await removeLine(id, partNumber);
+			await fetchPO();
+		} catch (err: unknown) {
+			setLineError(partNumber, err instanceof Error ? err.message : String(err));
+		}
+	}
+
+	async function handleForceAccept(partNumber: string) {
+		setLineError(partNumber, '');
+		try {
+			await forceAcceptLine(id, partNumber);
+			await fetchPO();
+		} catch (err: unknown) {
+			setLineError(partNumber, err instanceof Error ? err.message : String(err));
+		}
+	}
+
+	async function handleForceRemove(partNumber: string) {
+		setLineError(partNumber, '');
+		try {
+			await forceRemoveLine(id, partNumber);
+			await fetchPO();
+		} catch (err: unknown) {
+			setLineError(partNumber, err instanceof Error ? err.message : String(err));
+		}
+	}
+
+	async function handleSubmitResponse() {
+		submitResponseError = '';
+		try {
+			await submitResponse(id);
+			await fetchPO();
+		} catch (err: unknown) {
+			submitResponseError = err instanceof Error ? err.message : String(err);
+		}
+	}
+
+	// Role hand-off indicator: the VENDOR on PENDING PO, or whoever is not the
+	// last actor on a MODIFIED PO.
+	function effectiveRole(r: UserRole): 'VENDOR' | 'SM' {
+		return r === 'VENDOR' ? 'VENDOR' : 'SM';
+	}
+
+	// ---------------------------------------------------------------------------
+	// Iter 059 -- Advance-payment gate and post-accept line mutations
+	// ---------------------------------------------------------------------------
+
+	async function handleMarkAdvancePaid() {
+		advanceError = '';
+		try {
+			await markAdvancePaid(id);
+			await fetchPO();
+		} catch (err: unknown) {
+			advanceError = err instanceof Error ? err.message : String(err);
+		}
+	}
+
+	function paymentTermHasAdvance(): boolean {
+		if (!po || !refData) return false;
+		const entry = refData.payment_terms.find((t) => t.code === po!.payment_terms);
+		return !!entry?.has_advance;
+	}
+
+	function postAcceptGateClosed(): boolean {
+		// The gate closes on either (a) a milestone posted, or (b) advance paid.
+		// Router returns a 409 with detail when closed; this is a client-side hint only.
+		if (!po) return true;
+		if (po.status !== 'ACCEPTED') return true;
+		if (milestones.length > 0) return true;
+		if (paymentTermHasAdvance() && po.advance_paid_at) return true;
 		return false;
 	}
 
-	async function handleAcceptLines() {
-		acceptLinesError = '';
-		const decisions = Array.from(lineDecisions.entries()).map(([part_number, status]) => ({
-			part_number,
-			status: status as 'ACCEPTED' | 'REJECTED'
-		}));
+	function openAddLineDialog() {
+		newLinePart = '';
+		newLineDescription = '';
+		newLineQuantity = 1;
+		newLineUom = 'EA';
+		newLineUnitPrice = '0.00';
+		newLineHsCode = '8471.30';
+		newLineCountry = 'US';
+		addLineError = '';
+		showAddLineDialog = true;
+	}
+
+	async function handleAddLineSubmit() {
+		addLineError = '';
 		try {
-			await acceptLinesPO(id, {
-				decisions,
-				comment: acceptLinesComment.trim() || null
+			await addLinePostAccept(id, {
+				part_number: newLinePart,
+				description: newLineDescription,
+				quantity: newLineQuantity,
+				uom: newLineUom,
+				unit_price: newLineUnitPrice,
+				hs_code: newLineHsCode,
+				country_of_origin: newLineCountry
 			});
+			showAddLineDialog = false;
 			await fetchPO();
 		} catch (err: unknown) {
-			acceptLinesError = err instanceof Error ? err.message : String(err);
+			addLineError = err instanceof Error ? err.message : String(err);
+		}
+	}
+
+	async function handleRemoveLinePostAccept(partNumber: string) {
+		removeLineErrors = new Map(removeLineErrors).set(partNumber, '');
+		const result = await removeLinePostAccept(id, partNumber);
+		if (result.ok) {
+			removeLineErrors = new Map(removeLineErrors);
+			removeLineErrors.delete(partNumber);
+			await fetchPO();
+		} else {
+			removeLineErrors = new Map(removeLineErrors).set(partNumber, result.detail);
 		}
 	}
 
@@ -166,10 +315,6 @@
 
 	function formatValue(value: string, currency: string): string {
 		return `${parseFloat(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
-	}
-
-	function formatPrice(price: string): string {
-		return parseFloat(price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 	}
 </script>
 
@@ -209,6 +354,20 @@
 				</div>
 			{/if}
 		</div>
+		{#if role && canMarkAdvancePaid(role) && paymentTermHasAdvance() && (po.status === 'ACCEPTED' || po.status === 'MODIFIED')}
+			<div class="advance-block" data-testid="advance-block">
+				{#if po.advance_paid_at}
+					<p class="advance-label">Advance paid on {formatDate(po.advance_paid_at)}</p>
+				{:else}
+					<button class="btn btn-primary" data-testid="mark-advance-paid-btn" onclick={handleMarkAdvancePaid}>
+						Mark advance paid
+					</button>
+					{#if advanceError}
+						<p class="error-message">{advanceError}</p>
+					{/if}
+				{/if}
+			</div>
+		{/if}
 	</div>
 
 	<div class="section card">
@@ -272,92 +431,115 @@
 
 	<div class="section card">
 		<h2>Line Items</h2>
-		<table class="table">
-			<thead>
-				<tr>
-					<th>Part Number</th>
-					<th>Description</th>
-					<th>Qty</th>
-					{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT'}
-						<th>Invoiced</th>
-						<th>Remaining</th>
-					{/if}
-					<th>UoM</th>
-					<th>Unit Price</th>
-					<th>HS Code</th>
-					<th>Origin</th>
-					<th>Cert</th>
-					{#if po.status !== 'PENDING' || !(role && canAcceptRejectPO(role))}
-						<th>Status</th>
-					{:else}
-						<th>Decision</th>
-					{/if}
-				</tr>
-			</thead>
-			<tbody>
-				{#each po.line_items as item}
-					<tr>
-						<td>{item.part_number}</td>
-						<td>{item.description}</td>
-						<td>{item.quantity}</td>
-						{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT'}
-							{@const r = remainingMap.get(item.part_number)}
-							<td>{r ? r.invoiced : 0}</td>
-							<td>{r ? r.remaining : 0}</td>
-						{/if}
-						<td>{item.uom}</td>
-						<td>{formatPrice(item.unit_price)}</td>
-						<td>{item.hs_code}</td>
-						<td>{resolve('countries', item.country_of_origin)}</td>
-						<td>
-							{#if certRequired.has(item.part_number)}
-								<span class="badge badge-cert">Required</span>
-							{/if}
-						</td>
-						<td>
-							{#if po.status === 'PENDING' && role && canAcceptRejectPO(role)}
-								<div class="line-decision-btns">
-									<button
-										class="btn-line-decision {lineDecisions.get(item.part_number) === 'ACCEPTED' ? 'active-accept' : ''}"
-										onclick={() => setLineDecision(item.part_number, 'ACCEPTED')}
-									>Accept</button>
-									<button
-										class="btn-line-decision {lineDecisions.get(item.part_number) === 'REJECTED' ? 'active-reject' : ''}"
-										onclick={() => setLineDecision(item.part_number, 'REJECTED')}
-									>Reject</button>
-								</div>
-							{:else}
-								<span class="badge badge-line-status badge-{item.status.toLowerCase()}">{item.status}</span>
-							{/if}
-						</td>
-					</tr>
-				{/each}
-			</tbody>
-		</table>
-
-		{#if po.status === 'PENDING' && role && canAcceptRejectPO(role)}
-			{#if anyLineRejected()}
-				<div class="accept-lines-comment">
-					<label for="accept-lines-comment" class="field-label">Rejection comment (required)</label>
-					<textarea
-						id="accept-lines-comment"
-						class="textarea"
-						bind:value={acceptLinesComment}
-						rows={3}
-						placeholder="Explain which items cannot be supplied and why"
-					></textarea>
-				</div>
-			{/if}
-			{#if acceptLinesError}
-				<p class="error-message">{acceptLinesError}</p>
-			{/if}
-			<div class="accept-lines-actions">
+		{#if po.status === 'ACCEPTED' && role && canModifyPostAccept(role)}
+			<div class="post-accept-toolbar">
 				<button
-					class="btn btn-primary"
-					disabled={!allLinesDecided() || (anyLineRejected() && !acceptLinesComment.trim())}
-					onclick={handleAcceptLines}
-				>Submit Response</button>
+					class="btn btn-secondary"
+					data-testid="add-line-btn"
+					disabled={postAcceptGateClosed()}
+					title={postAcceptGateClosed() ? 'Cannot add: advance paid or first milestone posted' : ''}
+					onclick={openAddLineDialog}
+				>Add Line</button>
 			</div>
+		{/if}
+
+		{#if po.status === 'PENDING' || po.status === 'MODIFIED'}
+			<!-- Iter 057: per-line negotiation list. Rows render their own actions
+				 based on role and round_count. -->
+			<div class="negotiation-list" data-testid="negotiation-list">
+				{#each po.line_items as item (item.part_number)}
+					<LineNegotiationRow
+						line={item}
+						role={role ? effectiveRole(role) : 'VENDOR'}
+						round_count={po.round_count ?? 0}
+						on_modify={(pn, fields) => handleModify(pn, fields)}
+						on_accept={(pn) => handleAcceptNegotiation(pn)}
+						on_remove={(pn) => handleRemoveNegotiation(pn)}
+						on_force_accept={(pn) => handleForceAccept(pn)}
+						on_force_remove={(pn) => handleForceRemove(pn)}
+					/>
+					{#if lineErrors.get(item.part_number)}
+						<p class="error-message" data-testid="line-error-{item.part_number}">{lineErrors.get(item.part_number)}</p>
+					{/if}
+				{/each}
+			</div>
+		{:else}
+			<table class="table">
+				<thead>
+					<tr>
+						<th>Part Number</th>
+						<th>Description</th>
+						<th>Qty</th>
+						{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT'}
+							<th>Invoiced</th>
+							<th>Remaining</th>
+						{/if}
+						<th>UoM</th>
+						<th>Unit Price</th>
+						<th>HS Code</th>
+						<th>Origin</th>
+						<th>Cert</th>
+						<th>Status</th>
+						{#if po.status === 'ACCEPTED' && role && canModifyPostAccept(role)}
+							<th>Actions</th>
+						{/if}
+					</tr>
+				</thead>
+				<tbody>
+					{#each po.line_items as item (item.part_number)}
+						<tr>
+							<td>{item.part_number}</td>
+							<td>{item.description}</td>
+							<td>{item.quantity}</td>
+							{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT'}
+								{@const r = remainingMap.get(item.part_number)}
+								<td>{r ? r.invoiced : 0}</td>
+								<td>{r ? r.remaining : 0}</td>
+							{/if}
+							<td>{item.uom}</td>
+							<td>{parseFloat(item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+							<td>{item.hs_code}</td>
+							<td>{resolve('countries', item.country_of_origin)}</td>
+							<td>
+								{#if certRequired.has(item.part_number)}
+									<span class="badge badge-cert">Required</span>
+								{/if}
+							</td>
+							<td>
+								<span class="badge badge-line-status badge-{item.status.toLowerCase()}">{item.status}</span>
+							</td>
+							{#if po.status === 'ACCEPTED' && role && canModifyPostAccept(role)}
+								<td>
+									{#if item.status !== 'REMOVED'}
+										<button
+											class="btn-remove-line"
+											data-testid="remove-line-{item.part_number}"
+											disabled={postAcceptGateClosed()}
+											title={removeLineErrors.get(item.part_number) || (postAcceptGateClosed() ? 'Cannot remove: advance paid or first milestone posted' : '')}
+											onclick={() => handleRemoveLinePostAccept(item.part_number)}
+										>Remove</button>
+										{#if removeLineErrors.get(item.part_number)}
+											<p class="error-message">{removeLineErrors.get(item.part_number)}</p>
+										{/if}
+									{/if}
+								</td>
+							{/if}
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		{/if}
+
+		{#if (po.status === 'PENDING' || po.status === 'MODIFIED') && role && canActOnNegotiation}
+			<SubmitResponseBar
+				lines={po.line_items}
+				role={effectiveRole(role)}
+				round_count={po.round_count ?? 0}
+				on_submit={handleSubmitResponse}
+			/>
+			{#if submitResponseError}
+				<p class="error-message" data-testid="submit-response-error">{submitResponseError}</p>
+			{/if}
 		{/if}
 	</div>
 
@@ -417,8 +599,11 @@
 			<a href="/po/{po.id}/edit" class="btn btn-secondary">Edit</a>
 			<button class="btn btn-primary" onclick={handleSubmit}>Submit</button>
 		{:else if po.status === 'PENDING' && role && canAcceptRejectPO(role)}
+			<!-- Iter 056/057: PO-level bulk Accept stays as a convenience for the
+				 vendor (SM accept() is also live but used by ADMIN/seed). Iter 056
+				 removed the top-level Reject button; negotiation goes through the
+				 per-line remove / submit-response flow above. -->
 			<button class="btn btn-success" onclick={handleAccept}>Accept</button>
-			<button class="btn btn-danger" onclick={() => (showRejectDialog = true)}>Reject</button>
 		{:else if po.status === 'REJECTED' && role && canEditPO(role)}
 			<a href="/po/{po.id}/edit" class="btn btn-secondary">Edit</a>
 		{:else if po.status === 'REVISED' && role && canSubmitPO(role)}
@@ -435,19 +620,57 @@
 		{/if}
 	</div>
 
-	{#if showRejectDialog}
-		<RejectDialog
-			onConfirm={handleReject}
-			onCancel={() => (showRejectDialog = false)}
-		/>
-	{/if}
-
 	{#if showInvoiceDialog}
 		<CreateInvoiceDialog
 			lines={remainingLines}
 			onConfirm={handleInvoiceConfirm}
 			onCancel={() => (showInvoiceDialog = false)}
 		/>
+	{/if}
+
+	{#if showAddLineDialog}
+		<div class="dialog-backdrop" data-testid="add-line-dialog">
+			<div class="dialog-card">
+				<h3>Add Line</h3>
+				<div class="add-line-fields">
+					<label>
+						<span class="field-label">Part Number</span>
+						<input type="text" bind:value={newLinePart} />
+					</label>
+					<label>
+						<span class="field-label">Description</span>
+						<input type="text" bind:value={newLineDescription} />
+					</label>
+					<label>
+						<span class="field-label">Quantity</span>
+						<input type="number" min="1" bind:value={newLineQuantity} />
+					</label>
+					<label>
+						<span class="field-label">UoM</span>
+						<input type="text" bind:value={newLineUom} />
+					</label>
+					<label>
+						<span class="field-label">Unit Price</span>
+						<input type="text" bind:value={newLineUnitPrice} />
+					</label>
+					<label>
+						<span class="field-label">HS Code</span>
+						<input type="text" bind:value={newLineHsCode} />
+					</label>
+					<label>
+						<span class="field-label">Country of Origin</span>
+						<input type="text" bind:value={newLineCountry} />
+					</label>
+				</div>
+				{#if addLineError}
+					<p class="error-message">{addLineError}</p>
+				{/if}
+				<div class="dialog-actions">
+					<button class="btn btn-secondary" onclick={() => (showAddLineDialog = false)}>Cancel</button>
+					<button class="btn btn-primary" onclick={handleAddLineSubmit}>Add</button>
+				</div>
+			</div>
+		</div>
 	{/if}
 {/if}
 
@@ -495,10 +718,6 @@
 		padding-top: var(--space-4);
 		border-top: 1px solid var(--gray-200);
 		margin-bottom: var(--space-6);
-	}
-
-	.accepted-message {
-		color: var(--gray-600);
 	}
 
 	.error-message {

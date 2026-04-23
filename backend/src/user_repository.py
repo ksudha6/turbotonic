@@ -31,21 +31,22 @@ class UserRepository:
         if not exists:
             await self._conn.execute(
                 """
-                INSERT INTO users (id, username, display_name, role, status, vendor_id, created_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                INSERT INTO users (id, username, display_name, role, status, vendor_id, created_at, email)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                 """,
                 user.id, user.username, user.display_name, user.role.value,
                 user.status.value, user.vendor_id, _iso(user.created_at),
+                user.email,
             )
         else:
             await self._conn.execute(
                 """
                 UPDATE users SET username = $1, display_name = $2, role = $3,
-                    status = $4, vendor_id = $5
-                WHERE id = $6
+                    status = $4, vendor_id = $5, email = $6
+                WHERE id = $7
                 """,
                 user.username, user.display_name, user.role.value,
-                user.status.value, user.vendor_id, user.id,
+                user.status.value, user.vendor_id, user.email, user.id,
             )
 
     async def get_by_id(self, user_id: str) -> User | None:
@@ -71,6 +72,40 @@ class UserRepository:
             UserRole.ADMIN.value, UserStatus.ACTIVE.value,
         )
 
+    async def list_active_emails_by_roles(self, roles: tuple[str, ...]) -> list[str]:
+        # Returns the non-null, non-empty emails of every ACTIVE user whose role is
+        # in `roles`. The caller is the notification dispatcher resolving SM-targeted
+        # recipients (SM + ADMIN) without pulling the full User rows.
+        rows = await self._conn.fetch(
+            """
+            SELECT email FROM users
+            WHERE status = $1
+              AND role = ANY($2::text[])
+              AND email IS NOT NULL
+              AND email <> ''
+            ORDER BY email
+            """,
+            UserStatus.ACTIVE.value, list(roles),
+        )
+        return [row["email"] for row in rows]
+
+    async def list_active_emails_by_vendor(self, vendor_id: str) -> list[str]:
+        # Vendor-scoped recipients: ACTIVE VENDOR users with matching vendor_id.
+        # Inactive users and null/empty emails are excluded at the query boundary.
+        rows = await self._conn.fetch(
+            """
+            SELECT email FROM users
+            WHERE status = $1
+              AND role = $2
+              AND vendor_id = $3
+              AND email IS NOT NULL
+              AND email <> ''
+            ORDER BY email
+            """,
+            UserStatus.ACTIVE.value, UserRole.VENDOR.value, vendor_id,
+        )
+        return [row["email"] for row in rows]
+
     async def save_credential(
         self, credential_id: str, user_id: str, public_key: bytes, sign_count: int
     ) -> None:
@@ -95,6 +130,12 @@ class UserRepository:
 
 
 def _reconstruct(row: asyncpg.Record) -> User:
+    # Older rows may not carry the email column depending on migration order;
+    # .get() on asyncpg.Record raises KeyError, so fall back via indexing in a try.
+    try:
+        email_value = row["email"]
+    except KeyError:
+        email_value = None
     return User(
         id=row["id"],
         username=row["username"],
@@ -103,4 +144,5 @@ def _reconstruct(row: asyncpg.Record) -> User:
         status=UserStatus(row["status"]),
         vendor_id=row["vendor_id"],
         created_at=_parse_dt(row["created_at"]),
+        email=email_value,
     )

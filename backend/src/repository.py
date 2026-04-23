@@ -8,6 +8,7 @@ from uuid import uuid4
 import asyncpg
 
 from src.domain.purchase_order import (
+    LineEditHistoryEntry,
     LineItem,
     LineItemStatus,
     POStatus,
@@ -15,6 +16,7 @@ from src.domain.purchase_order import (
     PurchaseOrder,
     RejectionRecord,
 )
+from src.domain.user import UserRole
 
 
 def _iso(dt: datetime) -> str:
@@ -50,6 +52,8 @@ class PurchaseOrderRepository:
         exists: bool = (exists_count or 0) > 0
 
         async with self._conn.transaction():
+            last_actor = po.last_actor_role.value if po.last_actor_role is not None else None
+            advance_paid_iso = _iso(po.advance_paid_at) if po.advance_paid_at is not None else None
             if not exists:
                 await self._conn.execute(
                     """
@@ -59,8 +63,9 @@ class PurchaseOrderRepository:
                         issued_date, required_delivery_date,
                         terms_and_conditions, incoterm, port_of_loading,
                         port_of_discharge, country_of_origin, country_of_destination,
-                        marketplace, created_at, updated_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+                        marketplace, created_at, updated_at,
+                        round_count, last_actor_role, advance_paid_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
                     """,
                     po.id,
                     po.po_number,
@@ -83,6 +88,9 @@ class PurchaseOrderRepository:
                     po.marketplace,
                     _iso(po.created_at),
                     _iso(po.updated_at),
+                    po.round_count,
+                    last_actor,
+                    advance_paid_iso,
                 )
 
                 for sort_order, item in enumerate(po.line_items):
@@ -90,8 +98,9 @@ class PurchaseOrderRepository:
                         """
                         INSERT INTO line_items (
                             id, po_id, part_number, description, quantity,
-                            uom, unit_price, hs_code, country_of_origin, product_id, sort_order, status
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                            uom, unit_price, hs_code, country_of_origin, product_id,
+                            sort_order, status, required_delivery_date
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                         """,
                         str(uuid4()),
                         po.id,
@@ -105,6 +114,7 @@ class PurchaseOrderRepository:
                         item.product_id,
                         sort_order,
                         item.status.value,
+                        _iso(item.required_delivery_date) if item.required_delivery_date else None,
                     )
 
                 for record in po.rejection_history:
@@ -114,6 +124,26 @@ class PurchaseOrderRepository:
                         VALUES ($1, $2, $3, $4)
                         """,
                         str(uuid4()), po.id, record.comment, _iso(record.rejected_at),
+                    )
+
+                for entry in po.line_edit_history:
+                    await self._conn.execute(
+                        """
+                        INSERT INTO line_edit_history (
+                            id, po_id, line_item_id, part_number, round,
+                            actor_role, field, old_value, new_value, edited_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                        """,
+                        str(uuid4()),
+                        po.id,
+                        None,
+                        entry.part_number,
+                        entry.round,
+                        entry.actor_role.value,
+                        entry.field,
+                        entry.old_value,
+                        entry.new_value,
+                        _iso(entry.edited_at),
                     )
 
             else:
@@ -127,8 +157,10 @@ class PurchaseOrderRepository:
                         terms_and_conditions = $12, incoterm = $13,
                         port_of_loading = $14, port_of_discharge = $15,
                         country_of_origin = $16, country_of_destination = $17,
-                        marketplace = $18, updated_at = $19
-                    WHERE id = $20
+                        marketplace = $18, updated_at = $19,
+                        round_count = $20, last_actor_role = $21,
+                        advance_paid_at = $22
+                    WHERE id = $23
                     """,
                     po.po_number,
                     po.status.value,
@@ -149,6 +181,9 @@ class PurchaseOrderRepository:
                     po.country_of_destination,
                     po.marketplace,
                     _iso(po.updated_at),
+                    po.round_count,
+                    last_actor,
+                    advance_paid_iso,
                     po.id,
                 )
 
@@ -161,8 +196,9 @@ class PurchaseOrderRepository:
                         """
                         INSERT INTO line_items (
                             id, po_id, part_number, description, quantity,
-                            uom, unit_price, hs_code, country_of_origin, product_id, sort_order, status
-                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                            uom, unit_price, hs_code, country_of_origin, product_id,
+                            sort_order, status, required_delivery_date
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                         """,
                         str(uuid4()),
                         po.id,
@@ -176,6 +212,7 @@ class PurchaseOrderRepository:
                         item.product_id,
                         sort_order,
                         item.status.value,
+                        _iso(item.required_delivery_date) if item.required_delivery_date else None,
                     )
 
                 # Append only new rejection records by comparing persisted count to
@@ -191,6 +228,30 @@ class PurchaseOrderRepository:
                         VALUES ($1, $2, $3, $4)
                         """,
                         str(uuid4()), po.id, record.comment, _iso(record.rejected_at),
+                    )
+
+                # line_edit_history is append-only; persist only the newly added entries.
+                persisted_edits: int = await self._conn.fetchval(
+                    "SELECT COUNT(*) FROM line_edit_history WHERE po_id = $1", po.id
+                )
+                for entry in po.line_edit_history[(persisted_edits or 0):]:
+                    await self._conn.execute(
+                        """
+                        INSERT INTO line_edit_history (
+                            id, po_id, line_item_id, part_number, round,
+                            actor_role, field, old_value, new_value, edited_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                        """,
+                        str(uuid4()),
+                        po.id,
+                        None,
+                        entry.part_number,
+                        entry.round,
+                        entry.actor_role.value,
+                        entry.field,
+                        entry.old_value,
+                        entry.new_value,
+                        _iso(entry.edited_at),
                     )
 
     async def get(self, po_id: str) -> PurchaseOrder | None:
@@ -211,7 +272,12 @@ class PurchaseOrderRepository:
             po_id,
         )
 
-        return _reconstruct(po_row, item_rows, rejection_rows)
+        edit_rows = await self._conn.fetch(
+            "SELECT * FROM line_edit_history WHERE po_id = $1 ORDER BY edited_at, id",
+            po_id,
+        )
+
+        return _reconstruct(po_row, item_rows, rejection_rows, edit_rows)
 
     _SORT_ALLOWLIST: dict[str, str] = {
         "po_number": "p.po_number",
@@ -299,6 +365,7 @@ class PurchaseOrderRepository:
                 p.buyer_country,
                 p.po_type,
                 p.marketplace,
+                p.round_count,
                 v.name AS vendor_name,
                 v.country AS vendor_country,
                 p.issued_date,
@@ -306,7 +373,9 @@ class PurchaseOrderRepository:
                 p.currency,
                 (SELECT COALESCE(SUM(quantity * CAST(unit_price AS REAL)), 0)
                  FROM line_items WHERE po_id = p.id) AS total_value,
-                lm.milestone AS current_milestone
+                lm.milestone AS current_milestone,
+                (EXISTS(SELECT 1 FROM line_items
+                        WHERE po_id = p.id AND status = 'REMOVED')) AS has_removed_line
             FROM purchase_orders p
             LEFT JOIN vendors v ON v.id = p.vendor_id
             {latest_milestones_subquery}
@@ -352,7 +421,12 @@ class PurchaseOrderRepository:
                 po_id,
             )
 
-            result.append(_reconstruct(po_row, item_rows, rejection_rows))
+            edit_rows = await self._conn.fetch(
+                "SELECT * FROM line_edit_history WHERE po_id = $1 ORDER BY edited_at, id",
+                po_id,
+            )
+
+            result.append(_reconstruct(po_row, item_rows, rejection_rows, edit_rows))
 
         return result
 
@@ -389,7 +463,7 @@ class PurchaseOrderRepository:
             for row in rows
         ]
 
-    async def recent_pos(self, limit: int = 10, vendor_id: str | None = None) -> list[PurchaseOrder]:
+    async def recent_pos(self, limit: int = 10, vendor_id: str | None = None) -> list[PurchaseOrder]:  # noqa: E501
         if vendor_id is not None:
             po_rows = await self._conn.fetch(
                 "SELECT * FROM purchase_orders WHERE vendor_id = $1 ORDER BY updated_at DESC LIMIT $2",
@@ -416,7 +490,12 @@ class PurchaseOrderRepository:
                 po_id,
             )
 
-            result.append(_reconstruct(po_row, item_rows, rejection_rows))
+            edit_rows_recent = await self._conn.fetch(
+                "SELECT * FROM line_edit_history WHERE po_id = $1 ORDER BY edited_at, id",
+                po_id,
+            )
+
+            result.append(_reconstruct(po_row, item_rows, rejection_rows, edit_rows_recent))
 
         return result
 
@@ -425,6 +504,7 @@ def _reconstruct(
     po_row: asyncpg.Record,
     item_rows: list[asyncpg.Record],
     rejection_rows: list[asyncpg.Record],
+    edit_rows: list[asyncpg.Record] | None = None,
 ) -> PurchaseOrder:
     line_items = [
         LineItem(
@@ -437,6 +517,11 @@ def _reconstruct(
             country_of_origin=row["country_of_origin"],
             product_id=row["product_id"],
             status=LineItemStatus(row["status"]) if row["status"] else LineItemStatus.PENDING,
+            required_delivery_date=(
+                _parse_dt(row["required_delivery_date"])
+                if row.get("required_delivery_date")
+                else None
+            ),
         )
         for row in item_rows
     ]
@@ -448,6 +533,26 @@ def _reconstruct(
         )
         for row in rejection_rows
     ]
+
+    line_edit_history: list[LineEditHistoryEntry] = []
+    if edit_rows is not None:
+        for row in edit_rows:
+            line_edit_history.append(
+                LineEditHistoryEntry(
+                    part_number=row["part_number"],
+                    round=int(row["round"]),
+                    actor_role=UserRole(row["actor_role"]),
+                    field=row["field"],
+                    old_value=row["old_value"] or "",
+                    new_value=row["new_value"] or "",
+                    edited_at=_parse_dt(row["edited_at"]),
+                )
+            )
+
+    last_actor = po_row["last_actor_role"] if po_row.get("last_actor_role") else None
+
+    raw_advance = po_row.get("advance_paid_at")
+    advance_paid_at = _parse_dt(raw_advance) if raw_advance else None
 
     return PurchaseOrder(
         id=po_row["id"],
@@ -473,4 +578,8 @@ def _reconstruct(
         rejection_history=rejection_history,
         created_at=_parse_dt(po_row["created_at"]),
         updated_at=_parse_dt(po_row["updated_at"]),
+        round_count=int(po_row.get("round_count") or 0),
+        last_actor_role=UserRole(last_actor) if last_actor else None,
+        line_edit_history=line_edit_history,
+        advance_paid_at=advance_paid_at,
     )

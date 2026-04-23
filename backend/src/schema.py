@@ -173,6 +173,10 @@ async def init_db(conn: asyncpg.Connection) -> None:
         """
     )
 
+    # Iter 060: optional email address per user. Nullable to preserve existing
+    # rows; recipient resolution skips users with NULL or empty email.
+    await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT")
+
     await conn.execute("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS marketplace TEXT")
     await conn.execute("ALTER TABLE line_items ADD COLUMN IF NOT EXISTS product_id TEXT REFERENCES products(id)")
     await conn.execute("ALTER TABLE line_items ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'PENDING'")
@@ -183,6 +187,63 @@ async def init_db(conn: asyncpg.Connection) -> None:
         SET status = 'ACCEPTED'
         WHERE po_id IN (SELECT id FROM purchase_orders WHERE status = 'ACCEPTED')
         """
+    )
+    # Iter 056: rename the old binary REJECTED line-item status to REMOVED; REJECTED
+    # is no longer a valid line-item status — line-level removal subsumes it.
+    await conn.execute("UPDATE line_items SET status = 'REMOVED' WHERE status = 'REJECTED'")
+    # Iter 056: per-line optional delivery date override; null means inherit from PO
+    await conn.execute("ALTER TABLE line_items ADD COLUMN IF NOT EXISTS required_delivery_date TEXT")
+    # Iter 056: PO-scoped negotiation round counter (0..2) and last-actor marker.
+    # round_count increments on submit_response; last_actor_role records who spoke last.
+    await conn.execute(
+        "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS round_count INTEGER NOT NULL DEFAULT 0"
+    )
+    await conn.execute("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS last_actor_role TEXT")
+    # Enforce the round cap at the database boundary; drop-and-recreate to stay idempotent.
+    await conn.execute(
+        "ALTER TABLE purchase_orders DROP CONSTRAINT IF EXISTS purchase_orders_round_count_check"
+    )
+    await conn.execute(
+        "ALTER TABLE purchase_orders ADD CONSTRAINT purchase_orders_round_count_check CHECK (round_count BETWEEN 0 AND 2)"
+    )
+
+    # Iter 059: advance-payment gate. Nullable; set by /mark-advance-paid.
+    # `requires_advance` is derived from payment_terms metadata, not stored.
+    await conn.execute(
+        "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS advance_paid_at TEXT"
+    )
+    # Backfill: ACCEPTED POs whose payment_terms carry an advance flag are treated
+    # as implicitly paid at creation so live production is not retroactively gated.
+    # Codes that set has_advance=True in PAYMENT_TERMS_METADATA.
+    await conn.execute(
+        """
+        UPDATE purchase_orders
+        SET advance_paid_at = created_at
+        WHERE status = 'ACCEPTED'
+          AND advance_paid_at IS NULL
+          AND payment_terms IN ('ADV', 'CIA', '50_PCT_ADVANCE_50_PCT_BL', '100_PCT_ADVANCE')
+        """
+    )
+
+    # Iter 056: one row per field edit; the negotiation audit trail.
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS line_edit_history (
+            id              TEXT PRIMARY KEY,
+            po_id           TEXT NOT NULL REFERENCES purchase_orders(id),
+            line_item_id    TEXT,
+            part_number     TEXT NOT NULL,
+            round           INTEGER NOT NULL,
+            actor_role      TEXT NOT NULL,
+            field           TEXT NOT NULL,
+            old_value       TEXT,
+            new_value       TEXT,
+            edited_at       TEXT NOT NULL
+        )
+        """
+    )
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_line_edit_history_po_round_line ON line_edit_history (po_id, round, line_item_id)"
     )
     await conn.execute("ALTER TABLE vendors ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT ''")
     await conn.execute("ALTER TABLE vendors ADD COLUMN IF NOT EXISTS account_details TEXT NOT NULL DEFAULT ''")
@@ -314,5 +375,48 @@ async def init_db(conn: asyncpg.Connection) -> None:
         """
         CREATE INDEX IF NOT EXISTS idx_certificates_product
         ON certificates (product_id)
+        """
+    )
+
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS shipments (
+            id               TEXT PRIMARY KEY,
+            po_id            TEXT NOT NULL REFERENCES purchase_orders(id),
+            shipment_number  TEXT UNIQUE NOT NULL,
+            marketplace      TEXT NOT NULL,
+            status           TEXT NOT NULL DEFAULT 'DRAFT',
+            created_at       TEXT NOT NULL,
+            updated_at       TEXT NOT NULL
+        )
+        """
+    )
+
+    await conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_shipments_po
+        ON shipments (po_id)
+        """
+    )
+
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS shipment_line_items (
+            id           TEXT PRIMARY KEY,
+            shipment_id  TEXT NOT NULL REFERENCES shipments(id),
+            part_number  TEXT NOT NULL,
+            product_id   TEXT,
+            description  TEXT NOT NULL DEFAULT '',
+            quantity     INTEGER NOT NULL,
+            uom          TEXT NOT NULL,
+            sort_order   INTEGER NOT NULL
+        )
+        """
+    )
+
+    await conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_shipment_line_items_shipment
+        ON shipment_line_items (shipment_id)
         """
     )

@@ -188,9 +188,10 @@
 | Status | Definition |
 |--------|-----------|
 | Draft | PO is being composed, not yet visible to vendor. |
-| Pending | PO submitted to vendor, awaiting accept or reject. |
-| Accepted | Vendor formally accepted. Unlocks invoicing for Procurement and OPEX POs. Terminal. |
-| Rejected | Vendor rejected with mandatory comment. |
+| Pending | PO submitted to vendor, awaiting first response. |
+| Modified | At least one line has been modified by vendor or SM; awaiting counterparty response or further hand-off. |
+| Accepted | Convergence reached with at least one line ACCEPTED. Unlocks invoicing for Procurement and OPEX POs. Terminal. |
+| Rejected | Convergence reached with every line REMOVED. Reachable only via the negotiation loop, not via an explicit reject action. |
 | Revised | Previously rejected PO updated and resubmitted, awaiting vendor action. |
 
 ### Status Transitions
@@ -198,8 +199,11 @@
 | From | To | Trigger |
 |------|----|---------|
 | Draft | Pending | PO submitted to vendor |
-| Pending | Accepted | Vendor accepts |
-| Pending | Rejected | Vendor rejects with comment |
+| Pending | Modified | Either party issues modify_line or accept_line + submit_response with unresolved lines remaining |
+| Pending | Accepted | All lines accepted in round 0 via submit_response |
+| Modified | Modified | Counterparty submit_response with unresolved lines; round_count increments (cap 2) |
+| Modified | Accepted | Every line ACCEPTED or REMOVED with at least one ACCEPTED at submit_response |
+| Modified | Rejected | Every line REMOVED at submit_response (convergence without any accepted line) |
 | Rejected | Revised | Creator updates PO fields |
 | Revised | Pending | Revised PO resubmitted to vendor |
 
@@ -209,9 +213,34 @@
 stateDiagram-v2
     [*] --> Draft
     Draft --> Pending : Submit to vendor
-    Pending --> Accepted : Vendor accepts
-    Pending --> Rejected : Vendor rejects (with comment)
+    Pending --> Accepted : All lines accepted (round 0)
+    Pending --> Modified : Any modify_line submitted
+    Modified --> Modified : Counter-propose (round_count <= 2)
+    Modified --> Accepted : Convergence with any ACCEPTED line
+    Modified --> Rejected : Convergence with all REMOVED
     Rejected --> Revised : Creator updates fields
     Revised --> Pending : Resubmitted to vendor
     Accepted --> [*]
 ```
+
+## Line Negotiation
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| Negotiation Round | One complete hand-off between vendor and SM. PO-scoped, 0-indexed, capped at 2. Counter lives on `PurchaseOrder.round_count`. | Procurement |
+| Line Item Modification | A single per-field edit captured in `line_edit_history`. Holds round, actor_role, field, old_value, new_value, edited_at. | Procurement |
+| Line Edit History | Ordered list of Line Item Modifications attached to a PO. Persisted as a child table keyed by `(po_id, line_item_id, round)`. Append-only. | Procurement |
+| Hand-Off | The state change where the negotiating side flips between SM and vendor. Fires via `submit_response`, increments `round_count`, flips `last_actor_role`. | Procurement |
+| Force Override | SM-only terminal action reaching ACCEPTED or REMOVED unilaterally via `force_accept_line` or `force_remove_line`. Permitted only at `round_count == 2`. | Procurement |
+| Convergence | State where every line on a PO is ACCEPTED or REMOVED. Triggers PO transition to ACCEPTED (at least one ACCEPTED) or REJECTED (all REMOVED). | Procurement |
+| Editable Line Fields | Whitelisted set a party may modify via `modify_line`: quantity, unit_price, uom, description, hs_code, country_of_origin, required_delivery_date. `part_number` is immutable. | Procurement |
+| Line Item Status | PENDING, MODIFIED_BY_VENDOR, MODIFIED_BY_SM, ACCEPTED, or REMOVED. REJECTED removed in iter 056; REMOVED now represents a line dropped from the PO. | Procurement |
+
+## Advance Payment and Post-Acceptance Modification
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| Advance Payment | A payment term component where a portion or all of PO value is collected before production starts. Derived from `payment_terms.has_advance`; not a separate entity. Recorded paid via `advance_paid_at` timestamp on the PO. | Procurement |
+| Payment Term Metadata | Reference data per payment term code carrying behavior flags (currently `has_advance: bool`). Extensible; additional flags can be added without schema changes. | Procurement |
+| Post-Acceptance Gate | Window during which an SM may add or remove lines on an ACCEPTED PO. Closes when the first milestone is posted OR when the advance is marked paid (for advance-required terms). Whichever fires first closes the window. | Procurement |
+| Downstream Artifact | An invoice line or shipment line that references a PO line item. Presence blocks post-acceptance line removal via `remove_line_post_acceptance`. | Procurement |

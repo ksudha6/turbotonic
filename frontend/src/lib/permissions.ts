@@ -26,3 +26,6 @@ export const canViewProducts = (role: UserRole) => is(role, 'SM', 'QUALITY_LAB')
 export const canPostMilestone = (role: UserRole) => isExact(role, 'VENDOR');
 export const canViewInvoices = (role: UserRole) => is(role, 'SM', 'VENDOR');
 export const canViewPOs = (role: UserRole) => is(role, 'SM', 'VENDOR', 'FREIGHT_MANAGER');
+// Iter 059: advance-paid toggle and post-accept line mutations are SM-only.
+export const canMarkAdvancePaid = (role: UserRole) => is(role, 'SM');
+export const canModifyPostAccept = (role: UserRole) => is(role, 'SM');

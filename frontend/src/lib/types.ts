@@ -1,4 +1,5 @@
-export type POStatus = 'DRAFT' | 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'REVISED';
+// Iter 056/058: MODIFIED is the in-flight negotiation status. Legacy statuses kept as-is.
+export type POStatus = 'DRAFT' | 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'REVISED' | 'MODIFIED';
 
 export type VendorStatus = 'ACTIVE' | 'INACTIVE';
 
@@ -35,7 +36,26 @@ export interface VendorInput {
 	account_details: string;
 }
 
-export type LineItemStatus = 'PENDING' | 'ACCEPTED' | 'REJECTED';
+export type LineItemStatus =
+	| 'PENDING'
+	| 'ACCEPTED'
+	| 'MODIFIED_BY_VENDOR'
+	| 'MODIFIED_BY_SM'
+	| 'REMOVED'
+	// Retained for backward compatibility with pre-iter-056 fixtures; not emitted
+	// by the backend any longer.
+	| 'REJECTED';
+
+// Iter 056: one audit row per changed field per modify call.
+export interface LineEditEntry {
+	part_number: string;
+	round: number;
+	actor_role: string;
+	field: string;
+	old_value: string;
+	new_value: string;
+	edited_at: string;
+}
 
 export interface LineItem {
 	part_number: string;
@@ -47,6 +67,10 @@ export interface LineItem {
 	country_of_origin: string;
 	product_id: string | null;
 	status: LineItemStatus;
+	// Iter 056: null means inherit from PO. ISO-8601 timestamp when overridden.
+	required_delivery_date?: string | null;
+	// Iter 056: full per-line edit history, in order.
+	history?: LineEditEntry[];
 }
 
 export interface LineDecision {
@@ -80,6 +104,10 @@ export interface PurchaseOrderListItem {
 	currency: string;
 	current_milestone: string | null;
 	marketplace: string | null;
+	// Iter 058: flag for the Partial pill. True when any line on this PO is REMOVED.
+	// A PO is "Partial" iff status is ACCEPTED AND has_removed_line is true.
+	has_removed_line?: boolean;
+	round_count?: number;
 }
 
 export interface PaginatedPOList {
@@ -102,6 +130,12 @@ export interface PurchaseOrder extends PurchaseOrderListItem {
 	rejection_history: RejectionRecord[];
 	created_at: string;
 	updated_at: string;
+	// Iter 059: null when no advance recorded; ISO-8601 timestamp once paid.
+	advance_paid_at?: string | null;
+	// Iter 056: the role that most recently submitted a response; used by the UI
+	// to decide which party is on the clock. round_count is inherited from the
+	// list-item view.
+	last_actor_role?: string | null;
 }
 
 export interface LineItemInput {
@@ -120,10 +154,16 @@ export interface ReferenceDataItem {
 	label: string;
 }
 
+// Iter 059: payment_terms entries carry a has_advance flag; other lists remain
+// plain code/label pairs.
+export interface PaymentTermsReferenceItem extends ReferenceDataItem {
+	has_advance: boolean;
+}
+
 export interface ReferenceData {
 	currencies: ReferenceDataItem[];
 	incoterms: ReferenceDataItem[];
-	payment_terms: ReferenceDataItem[];
+	payment_terms: PaymentTermsReferenceItem[];
 	countries: ReferenceDataItem[];
 	ports: ReferenceDataItem[];
 	vendor_types: ReferenceDataItem[];

@@ -13,6 +13,16 @@
 		PO_ACCEPTED: 'PO accepted',
 		PO_REJECTED: 'PO rejected',
 		PO_REVISED: 'PO revised',
+		// Iter 058: per-line negotiation events. The timeline surfaces one row per
+		// triggering action; the detail field carries the part_number and, for
+		// modify events, the sorted list of changed field names.
+		PO_LINE_MODIFIED: 'Line modified',
+		PO_LINE_ACCEPTED: 'Line accepted',
+		PO_LINE_REMOVED: 'Line removed',
+		PO_FORCE_ACCEPTED: 'Override: line force-accepted',
+		PO_FORCE_REMOVED: 'Override: line force-removed',
+		PO_MODIFIED: 'Round submitted',
+		PO_CONVERGED: 'Negotiation converged',
 		INVOICE_CREATED: 'Invoice created',
 		INVOICE_SUBMITTED: 'Invoice submitted',
 		INVOICE_APPROVED: 'Invoice approved',
@@ -20,6 +30,18 @@
 		INVOICE_DISPUTED: 'Invoice disputed',
 		MILESTONE_POSTED: 'Milestone posted',
 		MILESTONE_OVERDUE: 'Milestone overdue'
+	};
+
+	// Iter 058: per-event icon glyph for the negotiation events. Icons stay minimal
+	// so the timeline does not require an icon library.
+	const EVENT_ICONS: Record<string, string> = {
+		PO_LINE_MODIFIED: 'pencil',
+		PO_LINE_ACCEPTED: 'check',
+		PO_LINE_REMOVED: 'x',
+		PO_FORCE_ACCEPTED: 'shield-check',
+		PO_FORCE_REMOVED: 'shield-x',
+		PO_MODIFIED: 'arrow-right',
+		PO_CONVERGED: 'flag'
 	};
 
 	const CATEGORY_COLORS: Record<string, string> = {
@@ -45,7 +67,12 @@
 			<div class="timeline-entry">
 				<div class="timeline-dot" style="background: {CATEGORY_COLORS[entry.category] ?? '#6b7280'}"></div>
 				<div class="timeline-body">
-					<span class="entry-label">{EVENT_LABELS[entry.event] ?? entry.event}</span>
+					<span class="entry-label">
+						{#if EVENT_ICONS[entry.event]}
+							<span class="entry-icon" data-icon={EVENT_ICONS[entry.event]} aria-hidden="true"></span>
+						{/if}
+						{EVENT_LABELS[entry.event] ?? entry.event}
+					</span>
 					{#if entry.detail}
 						<p class="entry-detail">{entry.detail}</p>
 					{/if}
@@ -95,7 +122,28 @@
 		font-size: var(--font-size-sm);
 		font-weight: 500;
 		color: var(--gray-900);
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
 	}
+
+	/* Iter 058: small glyph marker per event type. data-icon carries the name so
+	   the icon is observable in markup without pulling in an icon library. */
+	.entry-icon {
+		display: inline-block;
+		width: 10px;
+		height: 10px;
+		border-radius: 2px;
+		background-color: var(--gray-400);
+	}
+
+	.entry-icon[data-icon='check'] { background-color: #10b981; }
+	.entry-icon[data-icon='x'] { background-color: #ef4444; }
+	.entry-icon[data-icon='pencil'] { background-color: #3b82f6; }
+	.entry-icon[data-icon='arrow-right'] { background-color: #f59e0b; }
+	.entry-icon[data-icon='flag'] { background-color: #6366f1; }
+	.entry-icon[data-icon='shield-check'] { background-color: #059669; }
+	.entry-icon[data-icon='shield-x'] { background-color: #b91c1c; }
 
 	.entry-detail {
 		font-size: var(--font-size-sm);

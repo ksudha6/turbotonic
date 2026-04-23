@@ -109,21 +109,22 @@ async def test_pdf_exports_for_every_status(authenticated_client: AsyncClient) -
     accept_resp = await client.post(f"/api/v1/po/{po_accepted['id']}/accept")
     assert accept_resp.json()["status"] == POStatus.ACCEPTED.value
 
-    # REJECTED: create + submit + reject
+    # REJECTED: create + submit + remove all lines + submit-response
+    # (iter 056: PO REJECTED is reachable only via convergence when all lines REMOVED)
     po_rejected = await _create_po(client)
     await client.post(f"/api/v1/po/{po_rejected['id']}/submit")
-    reject_resp = await client.post(
-        f"/api/v1/po/{po_rejected['id']}/reject", json={"comment": "Too expensive"}
-    )
-    assert reject_resp.json()["status"] == POStatus.REJECTED.value
+    for li in po_rejected["line_items"]:
+        await client.post(f"/api/v1/po/{po_rejected['id']}/lines/{li['part_number']}/remove", json={})
+    rejected_resp = await client.post(f"/api/v1/po/{po_rejected['id']}/submit-response", json={})
+    assert rejected_resp.json()["status"] == POStatus.REJECTED.value
 
-    # REVISED: create + submit + reject + update (revise)
+    # REVISED: create + submit + converge to REJECTED + update (revise)
     po_revised = await _create_po(client)
     vendor_id = po_revised["vendor_id"]
     await client.post(f"/api/v1/po/{po_revised['id']}/submit")
-    await client.post(
-        f"/api/v1/po/{po_revised['id']}/reject", json={"comment": "Needs changes"}
-    )
+    for li in po_revised["line_items"]:
+        await client.post(f"/api/v1/po/{po_revised['id']}/lines/{li['part_number']}/remove", json={})
+    await client.post(f"/api/v1/po/{po_revised['id']}/submit-response", json={})
     revise_resp = await client.put(
         f"/api/v1/po/{po_revised['id']}",
         json={**_PO_PAYLOAD, "vendor_id": vendor_id, "currency": "EUR"},
@@ -177,21 +178,24 @@ async def test_pdf_contains_resolved_labels(authenticated_client: AsyncClient) -
 
 
 async def test_pdf_excludes_rejection_history(authenticated_client: AsyncClient) -> None:
+    # Iter 056: rejection_history is no longer written by the negotiation flow, but the
+    # PDF must still not surface legacy comments if any were seeded. Drive a PO through
+    # convergence to REJECTED and assert no stray comment text appears.
     client = authenticated_client
-    rejection_comment = "UNIQUE_REJECTION_MARKER_12345"
+    rejection_marker = "UNIQUE_REJECTION_MARKER_12345"
 
     po = await _create_po(client)
     await client.post(f"/api/v1/po/{po['id']}/submit")
-    reject_resp = await client.post(
-        f"/api/v1/po/{po['id']}/reject", json={"comment": rejection_comment}
-    )
-    assert reject_resp.status_code == 200
+    for li in po["line_items"]:
+        await client.post(f"/api/v1/po/{po['id']}/lines/{li['part_number']}/remove", json={})
+    rejected_resp = await client.post(f"/api/v1/po/{po['id']}/submit-response", json={})
+    assert rejected_resp.status_code == 200
 
     pdf_resp = await client.get(f"/api/v1/po/{po['id']}/pdf")
     assert pdf_resp.status_code == 200
 
     pdf_text = _extract_pdf_text(pdf_resp.content)
-    assert rejection_comment not in pdf_text
+    assert rejection_marker not in pdf_text
 
 
 # ---------------------------------------------------------------------------
@@ -220,3 +224,122 @@ async def test_pdf_currency_in_header_not_line_items(authenticated_client: Async
     # If the code were still appended, "5.00 USD" or "50.00 USD" would appear.
     assert f"{unit_price} {currency_code}" not in pdf_text
     assert f"{line_total} {currency_code}" not in pdf_text
+
+
+# ---------------------------------------------------------------------------
+# Iter 058 -- PDF filters to ACCEPTED-only scope and stamps MODIFIED after negotiation
+# ---------------------------------------------------------------------------
+
+
+_LINE_ITEM_KEEP: dict = {
+    "part_number": "PN-KEEP",
+    "description": "Keep widget",
+    "quantity": 10,
+    "uom": "EA",
+    "unit_price": "5.00",
+    "hs_code": "8471.30",
+    "country_of_origin": "US",
+}
+
+_LINE_ITEM_DROP: dict = {
+    "part_number": "PN-DROP",
+    "description": "Drop widget",
+    "quantity": 20,
+    "uom": "EA",
+    "unit_price": "3.00",
+    "hs_code": "8471.30",
+    "country_of_origin": "US",
+}
+
+
+async def _create_two_line_po(client: AsyncClient) -> dict:
+    vendor_resp = await client.post(
+        "/api/v1/vendors/", json={"name": "Two Line Vendor", "country": "US", "vendor_type": "PROCUREMENT"}
+    )
+    assert vendor_resp.status_code == 201
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_resp.json()["id"]}
+    payload["line_items"] = [_LINE_ITEM_KEEP, _LINE_ITEM_DROP]
+    resp = await client.post("/api/v1/po/", json=payload)
+    assert resp.status_code == 201
+    return resp.json()
+
+
+async def test_pdf_excludes_removed_line_from_rendered_output(authenticated_client: AsyncClient) -> None:
+    # After a PO converges to ACCEPTED with one line REMOVED, the PDF must not
+    # render the REMOVED part_number.
+    client = authenticated_client
+    po = await _create_two_line_po(client)
+    po_id = po["id"]
+    await client.post(f"/api/v1/po/{po_id}/submit")
+    # Accept one, remove the other, then submit-response to converge.
+    await client.post(f"/api/v1/po/{po_id}/lines/PN-KEEP/accept", json={})
+    await client.post(f"/api/v1/po/{po_id}/lines/PN-DROP/remove", json={})
+    converge_resp = await client.post(f"/api/v1/po/{po_id}/submit-response", json={})
+    assert converge_resp.status_code == 200
+    assert converge_resp.json()["status"] == POStatus.ACCEPTED.value
+
+    pdf_resp = await client.get(f"/api/v1/po/{po_id}/pdf")
+    assert pdf_resp.status_code == 200
+
+    pdf_text = _extract_pdf_text(pdf_resp.content)
+    assert "PN-KEEP" in pdf_text, (
+        "accepted line PN-KEEP must appear in PDF"
+    )
+    assert "PN-DROP" not in pdf_text, (
+        "removed line PN-DROP must not appear in the PDF after convergence"
+    )
+
+
+async def test_pdf_modified_stamp_absent_before_first_round(authenticated_client: AsyncClient) -> None:
+    # round_count == 0 means the PO has not been through any negotiation round; the
+    # MODIFIED stamp must not appear.
+    client = authenticated_client
+    po = await _create_po(client)
+    pdf_resp = await client.get(f"/api/v1/po/{po['id']}/pdf")
+    assert pdf_resp.status_code == 200
+    pdf_text = _extract_pdf_text(pdf_resp.content)
+    assert "MODIFIED" not in pdf_text, (
+        f"MODIFIED stamp must only appear with round_count >= 1; DRAFT PDF: {pdf_text[:200]!r}"
+    )
+
+
+async def test_pdf_modified_stamp_present_after_first_round(authenticated_client: AsyncClient) -> None:
+    # After one completed round (round_count >= 1) the stamp must appear in the PDF.
+    client = authenticated_client
+    po = await _create_two_line_po(client)
+    po_id = po["id"]
+    await client.post(f"/api/v1/po/{po_id}/submit")
+    await client.post(f"/api/v1/po/{po_id}/lines/PN-KEEP/modify", json={"fields": {"quantity": 8}})
+    submit_resp = await client.post(f"/api/v1/po/{po_id}/submit-response", json={})
+    assert submit_resp.status_code == 200
+    # Mid-loop: round_count should be 1.
+    assert submit_resp.json()["round_count"] == 1
+
+    pdf_resp = await client.get(f"/api/v1/po/{po_id}/pdf")
+    assert pdf_resp.status_code == 200
+    pdf_text = _extract_pdf_text(pdf_resp.content)
+    assert "MODIFIED" in pdf_text, (
+        f"MODIFIED stamp must appear once round_count >= 1; got PDF: {pdf_text[:300]!r}"
+    )
+
+
+async def test_pdf_line_count_matches_accepted_lines_only(authenticated_client: AsyncClient) -> None:
+    # A converged PO with one ACCEPTED and one REMOVED line must render exactly one
+    # numbered line row in the PDF. Each rendered row starts with an index cell,
+    # so counting part_numbers is a robust check.
+    client = authenticated_client
+    po = await _create_two_line_po(client)
+    po_id = po["id"]
+    await client.post(f"/api/v1/po/{po_id}/submit")
+    await client.post(f"/api/v1/po/{po_id}/lines/PN-KEEP/accept", json={})
+    await client.post(f"/api/v1/po/{po_id}/lines/PN-DROP/remove", json={})
+    converge_resp = await client.post(f"/api/v1/po/{po_id}/submit-response", json={})
+    assert converge_resp.json()["status"] == POStatus.ACCEPTED.value
+
+    pdf_resp = await client.get(f"/api/v1/po/{po_id}/pdf")
+    pdf_text = _extract_pdf_text(pdf_resp.content)
+    # Only the ACCEPTED part_number must appear.
+    assert pdf_text.count("PN-KEEP") >= 1
+    assert pdf_text.count("PN-DROP") == 0, (
+        f"PN-DROP must not appear in the rendered PDF; got: {pdf_text!r}"
+    )

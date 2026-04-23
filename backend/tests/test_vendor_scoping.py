@@ -96,7 +96,8 @@ def _po_payload(vendor_id: str) -> dict:
 async def vendor_scoping_env():
     """Create two vendors, three users, and two POs in a single transaction."""
     conn = await asyncpg.connect(TEST_DATABASE_URL)
-    await init_db(conn)
+    # Schema already initialised by conftest session fixture; re-running init_db
+    # here racey-ALTERs the users table while other connections hold locks.
     tx = conn.transaction()
     await tx.start()
 
@@ -187,7 +188,9 @@ async def vendor_scoping_env():
 
     # Dependency overrides for this connection
     _upload_dir = Path(tempfile.mkdtemp())
-    await _setup_overrides(conn, _upload_dir)
+    from tests.conftest import FakeEmailService
+    _fake_email = FakeEmailService()
+    await _setup_overrides(conn, _upload_dir, _fake_email)
 
     @asynccontextmanager
     async def _test_get_db() -> AsyncIterator[asyncpg.Connection]:
