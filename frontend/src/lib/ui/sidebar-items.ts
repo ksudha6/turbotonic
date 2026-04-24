@@ -6,6 +6,11 @@ export type SidebarItem = {
 	match: (pathname: string) => boolean;
 };
 
+export type SidebarSection = {
+	label: string;
+	items: SidebarItem[];
+};
+
 const DASHBOARD: SidebarItem = {
 	href: '/dashboard',
 	label: 'Dashboard',
@@ -51,6 +56,6 @@ const ROLE_ITEMS: Record<UserRole, SidebarItem[]> = {
 	PROCUREMENT_MANAGER: [DASHBOARD]
 };
 
-export function sidebarItemsFor(role: UserRole): SidebarItem[] {
-	return ROLE_ITEMS[role];
+export function sidebarItemsFor(role: UserRole): SidebarSection[] {
+	return [{ label: 'Workspace', items: ROLE_ITEMS[role] }];
 }

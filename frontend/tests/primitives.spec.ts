@@ -273,3 +273,30 @@ test.describe('Sidebar primitive', () => {
 		}
 	});
 });
+
+test.describe('Sidebar primitive (sections + footer + roleLabel)', () => {
+	test('renders section header "WORKSPACE"', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const sidebar = page.getByTestId('ui-sidebar');
+		// Section label is rendered uppercase via CSS; DOM text is "Workspace".
+		await expect(sidebar.getByText('Workspace', { exact: true })).toBeVisible();
+	});
+
+	test('renders footer snippet when provided', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByTestId('ui-sidebar-footer')).toBeVisible();
+	});
+
+	test('shows humanized roleLabel when provided', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const sidebar = page.getByTestId('ui-sidebar');
+		// Demo passes roleLabel="Supply Manager"; bare role code "ADMIN" should NOT appear.
+		await expect(sidebar.getByText('Supply Manager')).toBeVisible();
+	});
+});

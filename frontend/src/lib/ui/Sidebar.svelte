@@ -6,11 +6,20 @@
 	let {
 		role,
 		brand = 'Turbo Tonic',
+		roleLabel,
+		footer,
 		'data-testid': testid
-	}: { role: UserRole; brand?: string; 'data-testid'?: string } = $props();
+	}: {
+		role: UserRole;
+		brand?: string;
+		roleLabel?: string;
+		footer?: import('svelte').Snippet;
+		'data-testid'?: string;
+	} = $props();
 
-	const items = $derived(sidebarItemsFor(role));
+	const sections = $derived(sidebarItemsFor(role));
 	const pathname = $derived(page.url.pathname);
+	const displayRole = $derived(roleLabel ?? role);
 </script>
 
 <aside class="ui-sidebar" data-testid={testid} aria-label="Primary navigation">
@@ -18,25 +27,33 @@
 		<span class="brand-mark" aria-hidden="true"></span>
 		<span class="brand-text">
 			<span class="brand-name">{brand}</span>
-			<span class="brand-role">{role}</span>
+			<span class="brand-role">{displayRole}</span>
 		</span>
 	</div>
 	<nav>
-		<ul>
-			{#each items as item (item.href)}
-				{@const isActive = item.match(pathname)}
-				<li>
-					<a
-						href={item.href}
-						aria-current={isActive ? 'page' : undefined}
-						class:active={isActive}
-					>
-						{item.label}
-					</a>
-				</li>
-			{/each}
-		</ul>
+		{#each sections as section (section.label)}
+			<div class="section">
+				<span class="section-label">{section.label}</span>
+				<ul>
+					{#each section.items as item (item.href)}
+						{@const isActive = item.match(pathname)}
+						<li>
+							<a
+								href={item.href}
+								aria-current={isActive ? 'page' : undefined}
+								class:active={isActive}
+							>
+								{item.label}
+							</a>
+						</li>
+					{/each}
+				</ul>
+			</div>
+		{/each}
 	</nav>
+	{#if footer}
+		<div class="footer" data-testid="{testid}-footer">{@render footer()}</div>
+	{/if}
 </aside>
 
 <style>
@@ -73,6 +90,23 @@
 		font-size: var(--font-size-xs);
 		color: var(--text-sidebar-muted);
 	}
+	nav {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-5);
+	}
+	.section {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+	}
+	.section-label {
+		font-size: var(--font-size-xs);
+		font-weight: 600;
+		letter-spacing: var(--letter-spacing-wide);
+		text-transform: uppercase;
+		color: var(--text-sidebar-muted);
+	}
 	nav ul {
 		list-style: none;
 		padding: 0;
@@ -92,4 +126,11 @@
 	a:hover { color: var(--text-sidebar); background-color: rgba(255, 255, 255, 0.05); }
 	a.active { color: var(--text-sidebar); background-color: rgba(255, 255, 255, 0.08); }
 	a:focus-visible { outline: 2px solid var(--brand-accent); outline-offset: 2px; }
+	.footer {
+		margin-top: auto;
+		padding-top: var(--space-4);
+		border-top: 1px solid rgba(255, 255, 255, 0.08);
+		font-size: var(--font-size-xs);
+		color: var(--text-sidebar-muted);
+	}
 </style>

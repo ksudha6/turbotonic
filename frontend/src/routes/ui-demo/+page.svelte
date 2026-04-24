@@ -190,5 +190,12 @@
 
 <section>
 	<h2>Sidebar</h2>
-	<Sidebar role="ADMIN" data-testid="ui-sidebar" />
+	<Sidebar role="ADMIN" roleLabel="Supply Manager" data-testid="ui-sidebar">
+		{#snippet footer()}
+			<div>
+				<strong>Demo workspace</strong>
+				<div>All data is simulated</div>
+			</div>
+		{/snippet}
+	</Sidebar>
 </section>
