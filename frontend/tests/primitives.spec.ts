@@ -40,11 +40,15 @@ test.describe('Button primitive', () => {
 		await mockApiCatchAll(page);
 		await mockUser(page);
 		await page.goto('/ui-demo');
-		await expect(page.getByTestId('ui-btn-secondary')).toBeVisible();
-		await expect(page.getByTestId('ui-btn-ghost')).toBeVisible();
+		const secondary = page.getByTestId('ui-btn-secondary');
+		const ghost = page.getByTestId('ui-btn-ghost');
+		await expect(secondary).toBeVisible();
+		await expect(ghost).toBeVisible();
+		await expect(secondary).toHaveClass(/secondary/);
+		await expect(ghost).toHaveClass(/ghost/);
 	});
 
-	test('disabled button does not fire onclick on Enter', async ({ page }) => {
+	test('disabled button is marked disabled', async ({ page }) => {
 		await mockApiCatchAll(page);
 		await mockUser(page);
 		await page.goto('/ui-demo');

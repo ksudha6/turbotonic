@@ -18,12 +18,12 @@
 	} = $props();
 </script>
 
-<button {type} {disabled} {onclick} data-testid={testid} class="btn {variant}">
+<button {type} {disabled} {onclick} data-testid={testid} class="ui-btn {variant}">
 	{@render children()}
 </button>
 
 <style>
-	.btn {
+	.ui-btn {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
@@ -37,11 +37,11 @@
 		font-family: var(--font-family);
 		transition: opacity 0.15s, background-color 0.15s, border-color 0.15s;
 	}
-	.btn:focus-visible {
+	.ui-btn:focus-visible {
 		outline: 2px solid var(--brand-accent);
 		outline-offset: 2px;
 	}
-	.btn:disabled {
+	.ui-btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
