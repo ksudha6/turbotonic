@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentUpdate, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -470,4 +470,60 @@ export async function deletePackagingSpec(id: string): Promise<void> {
 		const body = await res.json().catch(() => ({}));
 		throw new Error(body.detail ?? `DELETE /api/v1/packaging-specs/${id} failed: ${res.status}`);
 	}
+}
+
+// Iter 044: Shipment API
+export function listShipments(params?: { po_id?: string }): Promise<Shipment[]> {
+	const query = new URLSearchParams();
+	if (params?.po_id) query.set('po_id', params.po_id);
+	const qs = query.toString();
+	return apiGet<Shipment[]>(qs ? `/api/v1/shipments/?${qs}` : '/api/v1/shipments/');
+}
+
+export function getShipment(id: string): Promise<Shipment> {
+	return apiGet<Shipment>(`/api/v1/shipments/${id}`);
+}
+
+export async function updateShipmentLineItems(id: string, data: ShipmentUpdate): Promise<Shipment> {
+	const res = await fetch(`/api/v1/shipments/${id}`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(data),
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail ?? `PATCH /api/v1/shipments/${id} failed: ${res.status}`);
+	}
+	return res.json() as Promise<Shipment>;
+}
+
+export async function downloadPackingListPdf(id: string, shipmentNumber: string): Promise<void> {
+	const res = await fetch(`/api/v1/shipments/${id}/packing-list`, {
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		throw new Error(`GET packing-list failed: ${res.status}`);
+	}
+	const blob = await res.blob();
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = `packing-list-${shipmentNumber}.pdf`;
+	a.click();
+	URL.revokeObjectURL(url);
 }

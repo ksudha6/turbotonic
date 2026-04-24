@@ -60,7 +60,7 @@ from src.routers.packaging import get_file_storage_for_packaging as packaging_ge
 from src.routers.packaging import get_activity_repo_for_packaging as packaging_get_activity_repo
 from src.routers.product import get_packaging_repo_for_product as product_get_packaging_repo
 from src.routers.qualification_type import get_qt_repo as qt_get_qt_repo
-from src.routers.shipment import get_shipment_repo, get_po_repo_for_shipment as shipment_get_po_repo
+from src.routers.shipment import get_shipment_repo, get_po_repo_for_shipment as shipment_get_po_repo, get_vendor_repo_for_shipment as shipment_get_vendor_repo
 from src.routers.vendor import get_vendor_repo as vendor_get_vendor_repo
 from src.schema import init_db
 from src.packaging_repository import PackagingSpecRepository
@@ -232,6 +232,7 @@ async def _setup_overrides(
     app.dependency_overrides[document_get_file_storage] = override_get_file_storage
     app.dependency_overrides[get_shipment_repo] = override_get_shipment_repo
     app.dependency_overrides[shipment_get_po_repo] = override_get_repo
+    app.dependency_overrides[shipment_get_vendor_repo] = override_get_vendor_repo
 
     # Iter 060: route EmailService and NotificationDispatcher DI to the fake so
     # no test hits the network. Dispatcher is built here because it binds the

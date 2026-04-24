@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import secrets
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from decimal import Decimal
 from enum import Enum
 from uuid import uuid4
 
@@ -20,6 +21,11 @@ class ShipmentLineItem:
     description: str
     quantity: int
     uom: str
+    net_weight: Decimal | None = field(default=None)
+    gross_weight: Decimal | None = field(default=None)
+    package_count: int | None = field(default=None)
+    dimensions: str | None = field(default=None)
+    country_of_origin: str | None = field(default=None)
 
     def __post_init__(self) -> None:
         if not self.part_number or not self.part_number.strip():
@@ -104,6 +110,25 @@ class Shipment:
                 f"mark_ready requires DOCUMENTS_PENDING status; current status is {self.status.value}"
             )
         self.status = ShipmentStatus.READY_TO_SHIP
+        self.updated_at = datetime.now(UTC)
+
+    def update_line_items(self, updates: list[dict[str, object]]) -> None:
+        # Only DRAFT and DOCUMENTS_PENDING shipments accept line item edits
+        if self.status is ShipmentStatus.READY_TO_SHIP:
+            raise ValueError(
+                f"update_line_items is not allowed in {self.status.value} status"
+            )
+        index: dict[str, ShipmentLineItem] = {li.part_number: li for li in self.line_items}
+        for upd in updates:
+            pn = str(upd["part_number"])
+            if pn not in index:
+                raise ValueError(f"part_number '{pn}' not found in shipment")
+            item = index[pn]
+            item.net_weight = upd.get("net_weight")  # type: ignore[assignment]
+            item.gross_weight = upd.get("gross_weight")  # type: ignore[assignment]
+            item.package_count = upd.get("package_count")  # type: ignore[assignment]
+            item.dimensions = upd.get("dimensions")  # type: ignore[assignment]
+            item.country_of_origin = upd.get("country_of_origin")  # type: ignore[assignment]
         self.updated_at = datetime.now(UTC)
 
 
