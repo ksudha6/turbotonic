@@ -1,7 +1,7 @@
 # Iterations Summary
 
 > Single-file context for future conversations. Replaces reading 29 individual iteration docs.
-> Last updated: iters 039, 043, 044, 045, 046 (backend) closed on 2026-04-24.
+> Last updated: iter 061 closed on 2026-04-24 (first iteration of Phase 4.0 UI revamp).
 
 ---
 
@@ -133,6 +133,7 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 | 044 | 2026-04-24 | Shipment line item weights/dims + packing list PDF: net_weight/gross_weight/package_count/dimensions/country_of_origin (all nullable) + Shipment.update_line_items() guarded by status. PATCH /shipments/{id} (SM + FREIGHT_MANAGER), GET /shipments/{id}/packing-list returning ReportLab PDF (SM + VENDOR + FREIGHT_MANAGER). Frontend shipment detail page with inline weight/dim editing and download button. ~10 new tests. |
 | 045 | 2026-04-24 | Export commercial invoice PDF on Shipment: GET /shipments/{id}/commercial-invoice. Deterministic CI number CI-{shipment_number}, not persisted. HS code + unit price from PO line items (matched by part_number); quantity + weights + country of origin from shipment line items. Same ReportLab pattern as packing list. Frontend Download Commercial Invoice button alongside Packing List. 7 new tests. |
 | 046 | 2026-04-24 | Shipment document requirements + readiness gate (backend): shipment_document_requirements table, ShipmentDocumentRequirement entity (PENDING > COLLECTED), ReadinessResult composite (documents + certificates + packaging). Default PACKING_LIST and COMMERCIAL_INVOICE auto-generated rows seeded on submit-for-documents; both always pass docs check. New endpoints: POST /requirements (custom), POST /documents/{rid}/upload, GET /requirements, GET /readiness. Existing mark-ready endpoint enhanced with readiness gate (409 + ReadinessResult on failure). DOCUMENT_UPLOADED ActivityEvent + EntityType.SHIPMENT added. 12 new tests. Frontend (Documents section, readiness panel, Mark Ready, dashboard counts) deferred to Phase 4. |
+| 061 | 2026-04-24 | Phase 4.0 foundations -- ADMIN inheritance + seed variety: removed `isExact` helper from `frontend/src/lib/permissions.ts` so ADMIN inherits VENDOR-side actions (`canAcceptRejectPO`, `canCreateInvoice`, `canSubmitInvoice`, `canPostMilestone`). First commit of `backend/src/seed.py` into git (previously untracked); expanded `_make_activity_log` from 8 to 19 rows covering all 8 named event types and derived `(category, target_role)` from `EVENT_METADATA` to prevent drift. New `backend/tests/test_seed.py` with 6 tests asserting 10 variety thresholds (vendors/types/countries, POs/statuses, invoices/statuses, milestones/stages, activity/events, users/roles). Pre-existing seed issues (non-deterministic UUIDs, `_PAYMENT_TERMS_CYCLE` dead branches, module-level `random.seed`/`_NOW`) logged to backlog for future cleanup. 591 backend tests + 100 Playwright specs green. |
 
 ---
 

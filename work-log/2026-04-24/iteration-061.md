@@ -55,4 +55,20 @@ None. Both tasks are logic/data fixes with no UI; scratch screenshot capture is 
 
 ## Notes
 
-_Filled when iteration closes._
+Iter 061 closed on 2026-04-24. Three commits landed on `phase-4-0-foundation`: `3e74811` (permissions.ts fix), `f34fa15` (seed.py initial expansion), `b268f51` (seed.py EVENT_METADATA derivation fix from code-quality review). 591 backend tests + 100 Playwright specs green at close.
+
+No new domain terms introduced, so `docs/ddd-vocab.md` is unchanged.
+
+Decisions:
+- Task 1's failing-first test had a weak assertion (only guarded against redirect off `/po`) and passed pre-fix. The plan prescribed that exact assertion verbatim; we followed the plan rather than unilaterally strengthening it. Full-suite green carries the regression guard.
+- `backend/src/seed.py` was pre-existing on disk but untracked in git. This iteration is the first commit that adds it to the repo; most of the 715-line file is pre-existing bulk. Only the activity-log expansion and the `EVENT_METADATA` derivation are this iteration's direct contribution.
+- Code-quality review flagged pre-existing issues that are out of scope for this iteration: non-deterministic UUIDs (`uuid4()` unaffected by `random.seed`), `_PAYMENT_TERMS_CYCLE` dead branches (CIA, 100_PCT_ADVANCE unreachable), module-level `random.seed(1729)` and `_NOW = datetime.now(UTC)` side effects at import time, missing docstrings, per-test fixture overhead, `actor_id: None` on activity rows. These are logged in the backlog for a future seed-hardening iteration; they do not block Phase 4.0 downstream work.
+
+Backlog additions for later:
+- Deterministic seeded UUIDs (use `uuid.uuid5` with stable natural-key namespace)
+- Prune `_PAYMENT_TERMS_CYCLE` dead branches or extend the cycle to cover them
+- Move `random.seed` and `_NOW` capture inside `seed()` to remove import-time side effects
+- Add module/function docstrings to `seed.py` and `test_seed.py`
+- Consider session-scoped `seeded_conn` fixture if seed grows
+
+Carried forward: none. Both tasks completed.
