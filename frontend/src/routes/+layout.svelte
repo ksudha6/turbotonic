@@ -11,6 +11,12 @@
 
 	const user = $derived(page.data.user);
 
+	// Phase 4.0 revamp routes own their own chrome (AppShell, Sidebar, TopBar).
+	// Pre-revamp root nav + container wrapper would double up and clip the new shell.
+	const isRevampRoute = $derived(
+		page.url.pathname.startsWith('/ui-demo') || page.url.pathname.startsWith('/_smoke')
+	);
+
 	async function handleLogout() {
 		try {
 			await logout();
@@ -25,7 +31,7 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-{#if user}
+{#if user && !isRevampRoute}
 	<nav>
 		<div class="nav-inner">
 			<a href="/" class="nav-brand">Vendor Portal</a>
@@ -53,9 +59,13 @@
 	</nav>
 {/if}
 
-<div class="container">
+{#if isRevampRoute}
 	{@render children()}
-</div>
+{:else}
+	<div class="container">
+		{@render children()}
+	</div>
+{/if}
 
 <style>
 	nav {

@@ -1,0 +1,61 @@
+import type { UserRole } from '$lib/types';
+
+export type SidebarItem = {
+	href: string;
+	label: string;
+	match: (pathname: string) => boolean;
+};
+
+export type SidebarSection = {
+	label: string;
+	items: SidebarItem[];
+};
+
+const DASHBOARD: SidebarItem = {
+	href: '/dashboard',
+	label: 'Dashboard',
+	match: (p) => p === '/' || p.startsWith('/dashboard')
+};
+
+const PURCHASE_ORDERS: SidebarItem = {
+	href: '/po',
+	label: 'Purchase Orders',
+	match: (p) => p.startsWith('/po') || p.startsWith('/production')
+};
+
+const INVOICES: SidebarItem = {
+	href: '/invoices',
+	label: 'Invoices',
+	match: (p) => p.startsWith('/invoice') || p.startsWith('/invoices')
+};
+
+const VENDORS: SidebarItem = {
+	href: '/vendors',
+	label: 'Vendors',
+	match: (p) => p.startsWith('/vendors')
+};
+
+const PRODUCTS: SidebarItem = {
+	href: '/products',
+	label: 'Products',
+	match: (p) => p.startsWith('/products')
+};
+
+const USERS: SidebarItem = {
+	href: '/users',
+	label: 'Users',
+	match: (p) => p.startsWith('/users')
+};
+
+const ROLE_ITEMS: Record<UserRole, SidebarItem[]> = {
+	ADMIN: [DASHBOARD, PURCHASE_ORDERS, INVOICES, VENDORS, PRODUCTS, USERS],
+	SM: [DASHBOARD, PURCHASE_ORDERS, INVOICES, VENDORS, PRODUCTS],
+	VENDOR: [DASHBOARD, PURCHASE_ORDERS, INVOICES],
+	FREIGHT_MANAGER: [DASHBOARD, PURCHASE_ORDERS, INVOICES],
+	QUALITY_LAB: [DASHBOARD, PRODUCTS],
+	PROCUREMENT_MANAGER: [DASHBOARD]
+};
+
+export function sidebarItemsFor(role: UserRole): SidebarSection[] {
+	return [{ label: 'Workspace', items: ROLE_ITEMS[role] }];
+}

@@ -63,6 +63,40 @@
 	/* Shadows */
 	--shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 	--shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+
+	/* Shell surfaces (Phase 4.0) */
+	--surface-page: #fafafa;
+	--surface-card: #ffffff;
+	--surface-sidebar: #0f1419;
+	--text-sidebar: #ffffff;
+	--text-sidebar-muted: #9ca3af;
+
+	/* Brand and accents (Phase 4.0) */
+	--brand-accent: #3b5cf0;
+	--button-solid-bg: #0f1419;
+	--button-solid-fg: #ffffff;
+
+	/* Status dots (leading circle inside pills) */
+	--dot-green: #16a34a;
+	--dot-blue: #2563eb;
+	--dot-orange: #d97706;
+	--dot-red: #dc2626;
+	--dot-gray: #6b7280;
+
+	/* Typography extensions */
+	--font-size-xs: 0.75rem;
+	--font-size-3xl: 1.875rem;
+	--letter-spacing-wide: 0.06em;
+
+	/* Spacing extensions */
+	--space-7: 1.75rem;
+	--space-20: 5rem;
+
+	/* Breakpoints as custom properties for JS reference (not used by @media) */
+	--breakpoint-sm: 390px;
+	--breakpoint-md: 768px;
+	--breakpoint-lg: 1024px;
+	--breakpoint-xl: 1440px;
 }
 
 /* Reset */
