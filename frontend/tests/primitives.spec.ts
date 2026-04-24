@@ -309,3 +309,26 @@ test.describe('Sidebar primitive (sections + footer + roleLabel)', () => {
 		await expect(sidebar.getByText('Supply Manager')).toBeVisible();
 	});
 });
+
+test.describe('TopBar primitive', () => {
+	test('at desktop viewport shows breadcrumb and notification bell', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/ui-demo');
+		const bar = page.getByTestId('ui-topbar');
+		await expect(bar).toContainText('Workspace / Operations');
+		await expect(bar.getByTestId('notification-bell-button')).toBeVisible();
+	});
+
+	test('at mobile viewport hides the breadcrumb and keeps the bell', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.setViewportSize({ width: 390, height: 800 });
+		await page.goto('/ui-demo');
+		const bar = page.getByTestId('ui-topbar');
+		const breadcrumb = bar.getByText('Workspace / Operations');
+		await expect(breadcrumb).toBeHidden();
+		await expect(bar.getByTestId('notification-bell-button')).toBeVisible();
+	});
+});

@@ -69,7 +69,7 @@
 </script>
 
 <div class="bell-wrapper">
-	<button class="bell-btn" onclick={toggleDropdown}>
+	<button class="bell-btn" onclick={toggleDropdown} data-testid="notification-bell-button">
 		<svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
 			<path d="M10 2a6 6 0 00-6 6v3l-1.5 2H17.5L16 11V8a6 6 0 00-6-6z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" fill="none"/>
 			<path d="M8.5 16a1.5 1.5 0 003 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>

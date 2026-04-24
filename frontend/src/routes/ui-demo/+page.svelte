@@ -20,6 +20,7 @@
 	import PageHeader from '$lib/ui/PageHeader.svelte';
 	import DetailHeader from '$lib/ui/DetailHeader.svelte';
 	import Sidebar from '$lib/ui/Sidebar.svelte';
+	import TopBar from '$lib/ui/TopBar.svelte';
 
 	let lastClicked = $state('');
 	let page = $state(1);
@@ -202,4 +203,9 @@
 			</div>
 		{/snippet}
 	</Sidebar>
+</section>
+
+<section>
+	<h2>TopBar</h2>
+	<TopBar breadcrumb="Workspace / Operations" onToggleSidebar={() => {}} data-testid="ui-topbar" />
 </section>
