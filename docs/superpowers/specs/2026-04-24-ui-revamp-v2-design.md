@@ -142,6 +142,14 @@ These are brainstorm stops inside 4.0, not implementer judgment calls:
 - Mobile drawer trigger and animation — mock is desktop-only
 - `UserMenu` layout in production (user info + Log out); dev variant includes role switcher
 
+### Phase 4.0 decisions log (closed 2026-04-25)
+
+- **Per-role sidebar items** (iter 067 Task 18, user-confirmed): explicit `Record<UserRole, SidebarItem[]>` map decoupled from `canView*` helpers. ADMIN gets Dashboard + Purchase Orders + Invoices + Vendors + Products + Users. SM gets ADMIN set minus Users. VENDOR gets Dashboard + Purchase Orders + Invoices. FREIGHT_MANAGER gets Dashboard + Purchase Orders + Invoices (OpEx-only page scoping deferred to aggregate phase). QUALITY_LAB gets Dashboard + Products. PROCUREMENT_MANAGER gets Dashboard only. Shipments nav item deferred. Users route will 404 until the users management page ships.
+- **Mobile drawer** (iter 068 Task 20, resolved from mock evidence): off-canvas drawer slides in from the left, `translateX(-100%)` by default, width `min(280px, 70vw)`, overlay `rgba(0, 0, 0, 0.35)` covers remaining viewport, tap-to-dismiss. `visibility: hidden` paired with the transform so Playwright `toBeHidden()` asserts cleanly. Breakpoint `≤768px` via media query on `.ui-appshell`.
+- **TopBar search** (iter 068, audit-surfaced): search input visible at `≥768px` in the mock, absent on mobile. Phase 4.0 ships TopBar WITHOUT rendering a search element at all; live-search backend is backlog. Breadcrumb hidden on mobile via `@media (max-width: 767px) { .breadcrumb { display: none; } }` inside `TopBar.svelte`.
+- **UserMenu split** (iter 069 Task 22, resolved from mock evidence): pill renders `[avatar][name + role stacked][chevron]` on desktop, collapses to `[avatar][chevron]` at `<768px` via `@media { .meta { display: none; } }`. Dropdown contains `Log out` always. When `import.meta.env.DEV` is true, a disabled "Switch role (dev)" placeholder item appears above Log out — structural affordance only; dev-store wiring is backlog. Logout swallows API errors and always redirects to `/login`.
+- **Chrome alignment scope (Option B, iter 068 preflight)**: visual chrome follows the Lovable mock (section headers, humanized role label, footer slot, icon slot on KpiCard, responsive collapses) while nav items and data model follow our actual routes/schema. No adoption of mock's RFQs/Production/Shipments/Settings/Help nav items.
+
 ---
 
 ## Phase 4.1 — Dashboard
