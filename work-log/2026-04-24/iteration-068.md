@@ -137,7 +137,70 @@ None.
 
 ## Notes
 
-Pending — filled at iter close.
+Iter 068 closed on 2026-04-24. Five commits landed on `ux-changes`:
+- Open doc (committed earlier).
+- `5cab303` Prep A: Sidebar retrofit with sections + footer + roleLabel; sidebar-items returns `SidebarSection[]`.
+- `cb7e137` Prep B: KpiCard icon slot.
+- `081f620` Task 19: TopBar primitive (responsive hide of breadcrumb on mobile; search deferred).
+- `d25190b` Task 21: AppShell with off-canvas mobile drawer + separate `/ui-demo/shell` route.
+
+130 Playwright passes at open → 134 after prep A → 135 after prep B → 137 after Task 19 → 140 at close. Backend stays 591.
+
+### Decisions resolved from Lovable mock evidence
+
+All three Phase 4.0 brainstorms resolved by capturing `https://turbotonic.lovable.app` at 1440 / 390 / 390-drawer-open viewports via Playwright MCP:
+
+- **Mobile drawer (Brainstorm 1 / plan Task 20)**: off-canvas from left, width `min(280px, 70vw)`, `translateX(-100%)` + `visibility: hidden` by default, transitions to `translateX(0)` when open. Overlay is a 35% opacity fixed-position button covering the viewport; tap to dismiss.
+- **UserMenu layout (Brainstorm 2 / plan Task 22)**: confirmed `[avatar][humanized role][▾]` on desktop, collapses to `[avatar][▾]` on mobile. Implementation in iter 069.
+- **TopBar search (Brainstorm 3)**: hidden on mobile, omitted from TopBar entirely in Phase 4.0 (no live-search backend). When added in backlog phase, TopBar will gain a `search?: Snippet` slot.
+
+### Chrome alignment scope — Option B
+
+User confirmed "production grade" + provided the Lovable mock URL. Locked on Option B: mock visual chrome + our real data-model routes.
+
+Retrofits shipped to existing primitives:
+- `sidebar-items.ts`: returns `SidebarSection[]` instead of `SidebarItem[]`. Single `Workspace` section for now; future Settings/Help would land in a second `Account` section.
+- `Sidebar.svelte`: renders section headers (uppercase, `letter-spacing-wide`, `text-sidebar-muted`), accepts `roleLabel?: string` prop for humanized role display, accepts `footer?: Snippet` slot.
+- `KpiCard.svelte`: gains `icon?: Snippet` slot rendered top-right via a `.header` flex row.
+
+None of these retrofits break existing primitive tests — all consumers that don't pass the new props keep working.
+
+### AppShell design
+
+- Desktop (≥769px): CSS grid `240px 1fr`, sidebar is permanent.
+- Mobile (≤768px): grid collapses to `1fr`, sidebar-wrap becomes fixed-position off-canvas with transition + visibility toggle.
+- State: `sidebarOpen = $state(false)` local to AppShell.
+- ErrorBoundary wraps `<main>` so iter-071+ aggregate pages get automatic error handling.
+- `/ui-demo/shell` is a separate dev-only route for testing AppShell in isolation; the original `/ui-demo` stays unwrapped so primitive tests don't run through a shell.
+
+### DDD vocab assessment
+
+No new domain terms. `docs/ddd-vocab.md` unchanged.
+
+### Backlog captured
+
+- **Live TopBar search**: hook up to a future search-API backend. Mock shows it working at ≥768px. When implemented, TopBar gains a `search?: Snippet` slot with responsive hiding on mobile.
+- **UserMenu**: iter 069 Task 23 implements. Desktop `[avatar][Supply Manager][▾]`, mobile `[avatar][▾]`.
+- **Focus trap in mobile drawer**: currently the drawer opens but Tab doesn't trap focus inside it. Add in a hardening iteration (out of Phase 4.0 scope; listed in ship gates as a11y rider).
+- **Escape key closes drawer**: not yet wired. Add in the same hardening pass.
+- **`Account` section in sidebar**: Settings/Help routes don't exist. When they do, add a second section to `sidebar-items.ts`.
+- **Users page `/users`**: link exists in sidebar for ADMIN; 404s until the page is built (iter 070+ or feature-backlog phase).
+- **Prefers-reduced-motion on drawer transition**: drawer transitions via `transform` at 0.2s. Users with reduced-motion preference should get instant open/close.
+
+### What exists after iter 068
+
+Twenty-five primitives under `frontend/src/lib/ui/`:
+- Leaves (iter 063, 7): Button, StatusPill, ProgressBar, Input, Select, DateInput, Toggle.
+- Composites (iter 064, 5): FormField, PanelCard, AttributeList, FormCard, KpiCard (with icon slot from iter 068).
+- Display + state (iter 065, 6): Timeline, ActivityFeed, LoadingState, EmptyState, ErrorState, ErrorBoundary.
+- Table + headers (iter 066, 3): DataTable, PageHeader, DetailHeader.
+- Shell (iter 067-068, 4): Sidebar (with sections + footer + roleLabel), TopBar, AppShell + `sidebar-items.ts`.
+
+Plus one new route: `/ui-demo/shell` showing AppShell in isolation with a Shell demo content block.
+
+`primitives.spec.ts`: 31 tests. `sidebar-items.spec.ts`: 7 tests (6 role matrix + 1 shape). `/ui-demo`: 14 sections + TopBar section = 15.
+
+Carried forward: none. Task 20 pre-resolved from mock. Task 22 resolved ahead of iter 069.
 
 ### PM-delegate decisions (all resolved from mock evidence)
 
