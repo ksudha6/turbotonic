@@ -41,53 +41,53 @@ Ship gates for 068:
 
 ### Task 19-prep-A -- `sidebar-items.ts` returns sections
 
-- [ ] Append failing-first test to `sidebar-items.spec.ts` asserting the new shape: `sidebarItemsFor('ADMIN')[0]` has `label: 'Workspace'` and `items: SidebarItem[]`. Run — expect FAIL.
-- [ ] Rewrite `sidebar-items.ts`:
+- [x] Append failing-first test to `sidebar-items.spec.ts` asserting the new shape: `sidebarItemsFor('ADMIN')[0]` has `label: 'Workspace'` and `items: SidebarItem[]`. Run — expect FAIL.
+- [x] Rewrite `sidebar-items.ts`:
   - New types: `SidebarSection = { label: string; items: SidebarItem[] }`.
   - `sidebarItemsFor(role: UserRole): SidebarSection[]` returns a single-section array `[{ label: 'Workspace', items: [...] }]` for every role.
   - The inner item list is unchanged per role.
-- [ ] Update existing tests to assert the flattened item labels via `.flatMap((s) => s.items)`.
-- [ ] Run `sidebar-items.spec.ts` — all pass.
-- [ ] Commit: `Group sidebar-items into sections (iter 068 prep A)`.
+- [x] Update existing tests to assert the flattened item labels via `.flatMap((s) => s.items)`.
+- [x] Run `sidebar-items.spec.ts` — all pass.
+- [x] Commit: `Group sidebar-items into sections (iter 068 prep A)`.
 
 ### Task 19-prep-B -- `Sidebar.svelte` renders sections + footer slot + roleLabel
 
-- [ ] Update `primitives.spec.ts` Sidebar tests to remain passing (no test change needed; the new shape of the consumer's `items` is internal).
-- [ ] Add a new test: `Sidebar renders section header "WORKSPACE"`. Run — expect FAIL before rewrite.
-- [ ] Add a new test: `Sidebar renders footer snippet when provided`.
-- [ ] Add a new test: `Sidebar shows humanized role label when provided`.
-- [ ] Rewrite `Sidebar.svelte`:
+- [x] Update `primitives.spec.ts` Sidebar tests to remain passing (no test change needed; the new shape of the consumer's `items` is internal).
+- [x] Add a new test: `Sidebar renders section header "WORKSPACE"`. Run — expect FAIL before rewrite.
+- [x] Add a new test: `Sidebar renders footer snippet when provided`.
+- [x] Add a new test: `Sidebar shows humanized role label when provided`.
+- [x] Rewrite `Sidebar.svelte`:
   - Accept `roleLabel?: string` prop (default: role code in brand block, as before).
   - Iterate `sections` from `sidebarItemsFor(role)` and render each section's header (small uppercase gray) + items under it.
   - Accept `footer?: Snippet` prop and render at bottom of aside.
-- [ ] Update `/ui-demo` Sidebar section to pass `roleLabel="Supply Manager"` and a small footer snippet (e.g. "Demo workspace").
-- [ ] Run `make test-browser` — expect **133 passed** (130 + 3 new Sidebar tests).
-- [ ] Commit: `Retrofit Sidebar with sections + footer + roleLabel (iter 068 prep B)`.
+- [x] Update `/ui-demo` Sidebar section to pass `roleLabel="Supply Manager"` and a small footer snippet (e.g. "Demo workspace").
+- [x] Run `make test-browser` — expect **133 passed** (130 + 3 new Sidebar tests).
+- [x] Commit: `Retrofit Sidebar with sections + footer + roleLabel (iter 068 prep B)`.
 
 ### Task 19-prep-C -- `KpiCard.svelte` icon slot
 
-- [ ] Add a new test: `KpiCard renders icon slot when provided` — assert testid `ui-kpi-icon` visible. Run — expect FAIL.
-- [ ] Update `KpiCard.svelte` to accept optional `icon?: Snippet` and render inside a `.icon` slot top-right using grid layout.
-- [ ] Update `/ui-demo` KpiCard demo to pass an icon snippet (e.g. inline SVG or emoji).
-- [ ] Run `make test-browser` — expect **134 passed**.
-- [ ] Commit: `Add icon slot to KpiCard (iter 068 prep C)`.
+- [x] Add a new test: `KpiCard renders icon slot when provided` — assert testid `ui-kpi-icon` visible. Run — expect FAIL.
+- [x] Update `KpiCard.svelte` to accept optional `icon?: Snippet` and render inside a `.icon` slot top-right using grid layout.
+- [x] Update `/ui-demo` KpiCard demo to pass an icon snippet (e.g. inline SVG or emoji).
+- [x] Run `make test-browser` — expect **134 passed**.
+- [x] Commit: `Add icon slot to KpiCard (iter 068 prep C)`.
 
 ### Task 19 -- `TopBar` primitive
 
-- [ ] Verify `frontend/src/lib/components/NotificationBell.svelte` renders `data-testid="notification-bell-button"` on the button element. If missing, add it (one-line additive change).
-- [ ] Append `TopBar primitive` test to `primitives.spec.ts`:
+- [x] Verify `frontend/src/lib/components/NotificationBell.svelte` renders `data-testid="notification-bell-button"` on the button element. If missing, add it (one-line additive change).
+- [x] Append `TopBar primitive` test to `primitives.spec.ts`:
   - At ≥768px viewport: breadcrumb visible, search visible, bell visible, user pill slot visible.
   - At 390px viewport: breadcrumb hidden, search hidden, bell visible, user pill slot visible.
   Run — expect FAIL.
-- [ ] Create `frontend/src/lib/ui/TopBar.svelte` (class `ui-topbar`):
+- [x] Create `frontend/src/lib/ui/TopBar.svelte` (class `ui-topbar`):
   - Props: `breadcrumb?: string`, `userMenu?: Snippet`, `onToggleSidebar?: () => void`, `data-testid`.
   - Renders hamburger button only when `onToggleSidebar` is set.
   - Embeds the pre-revamp `NotificationBell` (import path `$lib/components/NotificationBell.svelte`).
   - Scoped CSS: `.breadcrumb`, `.search` both have `display: none` at `max-width: 767px`; visible at `min-width: 768px`.
   - Search input: NOT rendered at all in Phase 4.0 (not even disabled). The media-query hide pattern is scaffold-only. Use a TODO comment.
-- [ ] Extend `/ui-demo` with a TopBar section at ≥768px showing the full bar.
-- [ ] Run — expect PASS. Run `make test-browser` — expect **135 passed** (134 + 1 new responsive test counts as 1; may add a second for the mobile-viewport assertion).
-- [ ] Commit: `Add TopBar primitive embedding NotificationBell (iter 068 task 19)`.
+- [x] Extend `/ui-demo` with a TopBar section at ≥768px showing the full bar.
+- [x] Run — expect PASS. Run `make test-browser` — expect **135 passed** (134 + 1 new responsive test counts as 1; may add a second for the mobile-viewport assertion).
+- [x] Commit: `Add TopBar primitive embedding NotificationBell (iter 068 task 19)`.
 
 Actually: because Playwright viewport is per-test, the two responsive assertions become two tests (desktop + mobile). Adjust count to **136 passed** (134 + 2).
 
@@ -97,20 +97,20 @@ Actually: because Playwright viewport is per-test, the two responsive assertions
 
 ### Task 21 -- `AppShell` composition
 
-- [ ] Create `frontend/src/routes/ui-demo/shell/+page.svelte` as a separate test route (AppShell wraps children; we don't wrap `/ui-demo` itself because it would affect existing primitive tests).
-- [ ] Append AppShell tests to `primitives.spec.ts`:
+- [x] Create `frontend/src/routes/ui-demo/shell/+page.svelte` as a separate test route (AppShell wraps children; we don't wrap `/ui-demo` itself because it would affect existing primitive tests).
+- [x] Append AppShell tests to `primitives.spec.ts`:
   - Desktop: sidebar + topbar + main all visible.
   - Mobile 390px: sidebar hidden by default; tap toggle reveals it; tap overlay dismisses.
   Run — expect FAIL.
-- [ ] Create `frontend/src/lib/ui/AppShell.svelte`:
+- [x] Create `frontend/src/lib/ui/AppShell.svelte`:
   - Class `ui-appshell`.
   - Composes Sidebar, TopBar, ErrorBoundary around main content.
   - State: `sidebarOpen = $state(false)`.
   - Props: `role`, `roleLabel`, `breadcrumb`, `userMenu`, `sidebarFooter`, `children`, `data-testid`.
   - Desktop (≥769px): two-column grid, sidebar visible; `sidebarOpen` ignored.
   - Mobile (≤768px): sidebar absolutely positioned, `translateX(-100%)` by default, `translateX(0)` when `sidebarOpen`. Overlay element rendered when `sidebarOpen`, full-viewport dim, clicking it toggles off.
-- [ ] Run — expect PASS. Run `make test-browser` — expect **138 passed** (136 + 2 AppShell tests).
-- [ ] Commit: `Add AppShell with off-canvas mobile drawer (iter 068 task 21)`.
+- [x] Run — expect PASS. Run `make test-browser` — expect **138 passed** (136 + 2 AppShell tests).
+- [x] Commit: `Add AppShell with off-canvas mobile drawer (iter 068 task 21)`.
 
 ## Existing test impact
 

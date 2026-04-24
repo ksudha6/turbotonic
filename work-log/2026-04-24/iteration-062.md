@@ -25,20 +25,20 @@ Ship gates for 062:
 ## Tasks
 
 ### Task 3 -- Scaffold `(nexus)` layout group
-- [ ] Create `frontend/src/routes/(nexus)/+layout.ts` with `prerender = false`, `ssr = false`, and a `load` that redirects to `/login?redirect=<path>` when the user is unauthenticated (same pattern as pre-revamp `+layout.ts`).
-- [ ] Create `frontend/src/routes/(nexus)/+layout.svelte` as a minimal passthrough: imports `$lib/styles/global.css`, renders `{@render children()}`. `AppShell` wiring is deferred to iter 068 once the shell primitives exist.
-- [ ] Run `cd frontend && npm run check`. Expected: no TypeScript errors.
-- [ ] Run `make test-browser`. Expected: 100 passed. No new route in `(nexus)` yet so nothing new to test, just regression.
+- [x] Create `frontend/src/routes/(nexus)/+layout.ts` with `prerender = false`, `ssr = false`, and a `load` that redirects to `/login?redirect=<path>` when the user is unauthenticated (same pattern as pre-revamp `+layout.ts`).
+- [x] Create `frontend/src/routes/(nexus)/+layout.svelte` as a minimal passthrough: imports `$lib/styles/global.css`, renders `{@render children()}`. `AppShell` wiring is deferred to iter 068 once the shell primitives exist.
+- [x] Run `cd frontend && npm run check`. Expected: no TypeScript errors.
+- [x] Run `make test-browser`. Expected: 100 passed. No new route in `(nexus)` yet so nothing new to test, just regression.
 
 ### Task 4 -- Append design tokens to `global.css`
-- [ ] Append new tokens inside the existing `:root` block. Categories: shell surfaces (page, card, sidebar), text (primary, secondary, sidebar, muted), brand/accents, button solids, status dots (five tones), typography extensions (xs, 3xl, wide letter-spacing), spacing extensions (7, 20), breakpoint custom properties (390, 768, 1024, 1440).
-- [ ] Do NOT delete or modify any existing token or component rule (`.btn`, `.table`, `.badge`, `.card`, `.input`, `.form-group`).
-- [ ] Run `cd frontend && npm run build`. Expected: build succeeds.
-- [ ] Run `make test-browser`. Expected: 100 passed. Pre-revamp pages must render identically -- tokens are additive.
+- [x] Append new tokens inside the existing `:root` block. Categories: shell surfaces (page, card, sidebar), text (primary, secondary, sidebar, muted), brand/accents, button solids, status dots (five tones), typography extensions (xs, 3xl, wide letter-spacing), spacing extensions (7, 20), breakpoint custom properties (390, 768, 1024, 1440).
+- [x] Do NOT delete or modify any existing token or component rule (`.btn`, `.table`, `.badge`, `.card`, `.input`, `.form-group`).
+- [x] Run `cd frontend && npm run build`. Expected: build succeeds.
+- [x] Run `make test-browser`. Expected: 100 passed. Pre-revamp pages must render identically -- tokens are additive.
 
 ### Task 5 bootstrap -- Create `/ui-demo` route skeleton
-- [ ] Create `frontend/src/routes/ui-demo/+page.svelte` with an `<h1>Phase 4.0 UI Demo</h1>` heading and no primitive sections yet (iter 063 starts populating). Keep the file intentionally minimal.
-- [ ] Verify navigation: visit `/ui-demo` in `npm run dev` manually (or via a smoke test in `frontend/tests/primitives.spec.ts` added in iter 063). Must render under the pre-revamp layout since we do not place it under `(nexus)` -- `/ui-demo` is a dev gallery, not a redesigned page.
+- [x] Create `frontend/src/routes/ui-demo/+page.svelte` with an `<h1>Phase 4.0 UI Demo</h1>` heading and no primitive sections yet (iter 063 starts populating). Keep the file intentionally minimal.
+- [x] Verify navigation: visit `/ui-demo` in `npm run dev` manually (or via a smoke test in `frontend/tests/primitives.spec.ts` added in iter 063). Must render under the pre-revamp layout since we do not place it under `(nexus)` -- `/ui-demo` is a dev gallery, not a redesigned page.
 
 Note: Task 5 from the plan includes `Button` + test bootstrap; that content lands in iter 063. This iteration only scaffolds the `/ui-demo` file so iter 063 can extend it without creating it.
 

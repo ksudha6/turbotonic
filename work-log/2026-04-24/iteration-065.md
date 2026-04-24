@@ -28,29 +28,29 @@ Ship gates for 065:
 
 ### Task 12 -- `Timeline` and `ActivityFeed`
 
-- [ ] Append `Timeline` and `ActivityFeed` tests to `primitives.spec.ts` (2 tests: Timeline has 3 `<li>` steps, ActivityFeed contains `'PO accepted'` and `'2m ago'`). Run — expect FAIL.
-- [ ] Create `frontend/src/lib/ui/Timeline.svelte` per plan Task 12 Step 2 with class rename `.timeline` → `ui-timeline`. Inner `.marker` / `.content` / `.label` / `.detail` scoped as-is.
-- [ ] Create `frontend/src/lib/ui/ActivityFeed.svelte` per plan Task 12 Step 3 with class rename `.feed` → `ui-feed`. Inner `.dot` scoped as-is (no cross-primitive collision despite StatusPill also using `.dot`; Svelte hashes them separately).
-- [ ] Extend `/ui-demo` with Timeline and ActivityFeed sections.
-- [ ] Run — expect PASS. Run `make test-browser` — expect **116 passed** (114 + 2).
-- [ ] Commit: `Add Timeline + ActivityFeed primitives (iter 065 task 12)`.
+- [x] Append `Timeline` and `ActivityFeed` tests to `primitives.spec.ts` (2 tests: Timeline has 3 `<li>` steps, ActivityFeed contains `'PO accepted'` and `'2m ago'`). Run — expect FAIL.
+- [x] Create `frontend/src/lib/ui/Timeline.svelte` per plan Task 12 Step 2 with class rename `.timeline` → `ui-timeline`. Inner `.marker` / `.content` / `.label` / `.detail` scoped as-is.
+- [x] Create `frontend/src/lib/ui/ActivityFeed.svelte` per plan Task 12 Step 3 with class rename `.feed` → `ui-feed`. Inner `.dot` scoped as-is (no cross-primitive collision despite StatusPill also using `.dot`; Svelte hashes them separately).
+- [x] Extend `/ui-demo` with Timeline and ActivityFeed sections.
+- [x] Run — expect PASS. Run `make test-browser` — expect **116 passed** (114 + 2).
+- [x] Commit: `Add Timeline + ActivityFeed primitives (iter 065 task 12)`.
 
 ### Task 13 -- `LoadingState`, `EmptyState`, `ErrorState`, `ErrorBoundary`
 
 Four state primitives. Three tested, one (ErrorBoundary) installed without a unit test.
 
-- [ ] Append three state tests to `primitives.spec.ts`:
+- [x] Append three state tests to `primitives.spec.ts`:
   - `LoadingState renders a spinner labelled for assistive tech` (asserts role=status).
   - `EmptyState renders title + description` (contains "No results" + "Try adjusting").
   - `ErrorState shows message and a Retry button` (contains "Something broke" + retry button visible).
   Run — expect 3 FAIL.
-- [ ] Create `frontend/src/lib/ui/LoadingState.svelte` per plan Task 13 Step 2 with class rename `.wrap` → `ui-loading`. Adds a `@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }` clause so users with reduced-motion preference see a static ring.
-- [ ] Create `frontend/src/lib/ui/EmptyState.svelte` per plan Task 13 Step 3 with class rename `.empty` → `ui-empty`.
-- [ ] Create `frontend/src/lib/ui/ErrorState.svelte` per plan Task 13 Step 4 with class rename `.error` → `ui-error`. Wraps the iter-063 Button primitive as the Retry button; retry testid is `{testid}-retry`.
-- [ ] Create `frontend/src/lib/ui/ErrorBoundary.svelte` per plan Task 13 Step 5 (no outermost class; `<svelte:boundary>` wraps children and falls back to ErrorState with `message='Something went wrong. Please refresh or try again.'`). Not used on `/ui-demo` (no throwable children in the gallery); will be installed into `(nexus)/+layout.svelte` in iter 068.
-- [ ] Extend `/ui-demo` with a `State primitives` section showing LoadingState, EmptyState, and ErrorState (ErrorBoundary is not rendered on the gallery).
-- [ ] Run — expect PASS. Run `make test-browser` — expect **119 passed** (116 + 3).
-- [ ] Commit: `Add LoadingState, EmptyState, ErrorState, ErrorBoundary (iter 065 task 13)`.
+- [x] Create `frontend/src/lib/ui/LoadingState.svelte` per plan Task 13 Step 2 with class rename `.wrap` → `ui-loading`. Adds a `@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }` clause so users with reduced-motion preference see a static ring.
+- [x] Create `frontend/src/lib/ui/EmptyState.svelte` per plan Task 13 Step 3 with class rename `.empty` → `ui-empty`.
+- [x] Create `frontend/src/lib/ui/ErrorState.svelte` per plan Task 13 Step 4 with class rename `.error` → `ui-error`. Wraps the iter-063 Button primitive as the Retry button; retry testid is `{testid}-retry`.
+- [x] Create `frontend/src/lib/ui/ErrorBoundary.svelte` per plan Task 13 Step 5 (no outermost class; `<svelte:boundary>` wraps children and falls back to ErrorState with `message='Something went wrong. Please refresh or try again.'`). Not used on `/ui-demo` (no throwable children in the gallery); will be installed into `(nexus)/+layout.svelte` in iter 068.
+- [x] Extend `/ui-demo` with a `State primitives` section showing LoadingState, EmptyState, and ErrorState (ErrorBoundary is not rendered on the gallery).
+- [x] Run — expect PASS. Run `make test-browser` — expect **119 passed** (116 + 3).
+- [x] Commit: `Add LoadingState, EmptyState, ErrorState, ErrorBoundary (iter 065 task 13)`.
 
 ## Existing test impact
 

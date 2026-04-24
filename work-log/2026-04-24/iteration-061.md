@@ -23,11 +23,11 @@ Phase 4.0 ship gates apply: mock-clarity (no UI touched, so not applicable here)
 - [x] Append ADMIN regression spec to `frontend/tests/role-rendering.spec.ts` (100 tests still pass).
 
 ### Task 2 -- Overhaul `backend/src/seed.py` for varied dev data (pending)
-- [ ] Read `backend/src/seed.py` (715 lines) to map current fixture shape. Identify which aggregates produce a single row.
-- [ ] Create `backend/tests/test_seed.py` asserting minimum variety: >=5 vendors, >=3 vendor types, >=10 POs, >=4 PO statuses, >=6 invoices, >=3 invoice statuses, >=6 milestone updates, >=3 milestone stages, >=15 activity entries, >=3 user roles.
-- [ ] Expand `seed.py` to satisfy assertions. Preserve existing deterministic fixture IDs/usernames; add new rows rather than mutating existing ones.
-- [ ] Run `make test` -- new seed test passes, existing backend tests still pass.
-- [ ] Commit.
+- [x] Read `backend/src/seed.py` (715 lines) to map current fixture shape. Identify which aggregates produce a single row.
+- [x] Create `backend/tests/test_seed.py` asserting minimum variety: >=5 vendors, >=3 vendor types, >=10 POs, >=4 PO statuses, >=6 invoices, >=3 invoice statuses, >=6 milestone updates, >=3 milestone stages, >=15 activity entries, >=3 user roles.
+- [x] Expand `seed.py` to satisfy assertions. Preserve existing deterministic fixture IDs/usernames; add new rows rather than mutating existing ones.
+- [x] Run `make test` -- new seed test passes, existing backend tests still pass.
+- [x] Commit.
 
 ## Existing test impact
 

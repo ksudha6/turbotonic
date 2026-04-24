@@ -36,38 +36,38 @@ Ship gates for 070:
 
 ### Task 26.1 -- Run full test suite
 
-- [ ] `make test-browser` — expect 148 passed.
-- [ ] `make test` (alias for `test-backend test-browser`) — expect 591 backend + 148 browser green.
-- [ ] Record counts in Notes.
+- [x] `make test-browser` — expect 148 passed.
+- [x] `make test` (alias for `test-backend test-browser`) — expect 591 backend + 148 browser green.
+- [x] Record counts in Notes.
 
 ### Task 26.2 -- axe AA scan
 
-- [ ] `cd frontend && npm install --save-dev @axe-core/playwright` (if not already installed).
-- [ ] Append two tests to `primitives.spec.ts`:
+- [x] `cd frontend && npm install --save-dev @axe-core/playwright` (if not already installed).
+- [x] Append two tests to `primitives.spec.ts`:
   - `axe: /ui-demo has zero AA violations`
   - `axe: /_smoke has zero AA violations`
   Each uses `AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze()`.
-- [ ] Run the new tests. If violations appear, fix them inline (usually missing labels or color contrast). Do not add axe excludes or `disableRules` workarounds.
-- [ ] Expected final count: **150 passed** (148 + 2 axe tests).
-- [ ] Commit: `Add axe AA scan on /ui-demo and /_smoke (iter 070 task 26.2)`.
+- [x] Run the new tests. If violations appear, fix them inline (usually missing labels or color contrast). Do not add axe excludes or `disableRules` workarounds.
+- [x] Expected final count: **150 passed** (148 + 2 axe tests).
+- [x] Commit: `Add axe AA scan on /ui-demo and /_smoke (iter 070 task 26.2)`.
 
 ### Task 26.3 -- Screenshots at 390 and 1024
 
-- [ ] Capture 390px + 1024px JPEG viewports of `/ui-demo` and `/_smoke` via a one-off Playwright script at `frontend/tests/scratch/iteration-070/capture.ts`.
-- [ ] Save under `frontend/tests/scratch/iteration-070/screenshots/` — gitignored (scratch tests are disposable per CLAUDE.md). Do NOT commit the screenshots.
-- [ ] Document the capture procedure in the iteration-070 Notes so a reviewer can reproduce.
+- [x] Capture 390px + 1024px JPEG viewports of `/ui-demo` and `/_smoke` via a one-off Playwright script at `frontend/tests/scratch/iteration-070/capture.ts`.
+- [x] Save under `frontend/tests/scratch/iteration-070/screenshots/` — gitignored (scratch tests are disposable per CLAUDE.md). Do NOT commit the screenshots.
+- [x] Document the capture procedure in the iteration-070 Notes so a reviewer can reproduce.
 
 ### Task 26.4 -- Phase close write-up
 
-- [ ] Update `work-log/iterations-summary.md` header to "Last updated: iter 070 closed on 2026-04-24 — **Phase 4.0 complete**".
-- [ ] Append iter 070 row to the iteration log table.
-- [ ] Append a "Phase 4.0 completion" block to the "What exists and works" section summarizing the 26 primitives.
+- [x] Update `work-log/iterations-summary.md` header to "Last updated: iter 070 closed on 2026-04-24 — **Phase 4.0 complete**".
+- [x] Append iter 070 row to the iteration log table.
+- [x] Append a "Phase 4.0 completion" block to the "What exists and works" section summarizing the 26 primitives.
 
 ### Task 26.5 -- Commit phase-close artifacts
 
-- [ ] Commit the axe tests + iteration doc + iterations-summary update.
-- [ ] Do NOT commit scratch screenshots.
-- [ ] Push to `origin/ux-changes` — branch is ready for PR → main.
+- [x] Commit the axe tests + iteration doc + iterations-summary update.
+- [x] Do NOT commit scratch screenshots.
+- [x] Push to `origin/ux-changes` — branch is ready for PR → main.
 
 ## Existing test impact
 

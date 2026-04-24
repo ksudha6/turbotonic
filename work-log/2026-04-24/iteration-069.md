@@ -42,11 +42,11 @@ Ship gates for 069:
 
 ### Task 23 -- `UserMenu` primitive
 
-- [ ] Append `UserMenu primitive` describe block to `primitives.spec.ts`:
+- [x] Append `UserMenu primitive` describe block to `primitives.spec.ts`:
   - At ≥768px: pill visible, click opens menu, Log out button visible.
   - At <768px: meta hidden (avatar + chevron only), click opens menu, Log out button visible.
   Run — expect FAIL.
-- [ ] Create `frontend/src/lib/ui/UserMenu.svelte` (class `ui-user-menu`):
+- [x] Create `frontend/src/lib/ui/UserMenu.svelte` (class `ui-user-menu`):
   - Props: `name: string`, `role: UserRole`, `'data-testid'?: string`.
   - State: `open = $state(false)`.
   - Toggle on button click; renders `<div role="menu">` with Log out button (`data-testid={testid}-logout`).
@@ -54,7 +54,7 @@ Ship gates for 069:
   - Renders `aria-haspopup="menu"` and `aria-expanded={open}` on the pill button.
   - Scoped CSS: `.meta` hidden on mobile via media query; `.menu` positioned absolute top-right; avatar uses `--brand-accent` bg with initials.
   - Dev variant: when `import.meta.env.DEV`, insert a "Switch role" disabled placeholder item in the menu with a TODO comment (full dev store wiring backlog'd, ships as a visible affordance for future implementation).
-- [ ] Update `/ui-demo/shell/+page.svelte` to pass a `UserMenu` snippet into `AppShell`:
+- [x] Update `/ui-demo/shell/+page.svelte` to pass a `UserMenu` snippet into `AppShell`:
 
 ```svelte
 <script lang="ts">
@@ -76,30 +76,30 @@ Ship gates for 069:
 </AppShell>
 ```
 
-- [ ] Run — expect PASS. Run `make test-browser` — expect **142 passed** (140 + 2 UserMenu tests).
-- [ ] Commit: `Add UserMenu primitive with Log out (iter 069 task 23)`.
+- [x] Run — expect PASS. Run `make test-browser` — expect **142 passed** (140 + 2 UserMenu tests).
+- [x] Commit: `Add UserMenu primitive with Log out (iter 069 task 23)`.
 
 ### Task 24 -- Redirect infrastructure
 
-- [ ] Create `frontend/tests/redirects.spec.ts`:
+- [x] Create `frontend/tests/redirects.spec.ts`:
   - Test: unmapped path returns `null`.
   - Test: mapped path with a `:param` returns the substituted new path.
   Run — expect FAIL.
-- [ ] Create `frontend/src/lib/ui/redirects.ts`:
+- [x] Create `frontend/src/lib/ui/redirects.ts`:
   - `REDIRECTS: Record<string, string>` — empty in 4.0.
   - `resolveRedirect(pathname, registry = REDIRECTS): string | null` — matches `:param` placeholders with named-capture regex, substitutes into the target template.
-- [ ] Run the spec — expect PASS. Run `make test-browser` — expect **144 passed** (142 + 2).
-- [ ] Commit: `Add redirect infrastructure for aggregate-phase retirements (iter 069 task 24)`.
+- [x] Run the spec — expect PASS. Run `make test-browser` — expect **144 passed** (142 + 2).
+- [x] Commit: `Add redirect infrastructure for aggregate-phase retirements (iter 069 task 24)`.
 
 ### Task 25 -- `nexus-shell.spec.ts` + sentinel route
 
-- [ ] Create `frontend/src/routes/(nexus)/_smoke/+page.svelte` — uses `AppShell` + `UserMenu`, reads `user` from `$app/state`'s `page.data.user`, passes `role` + `display_name` + `roleLabel` derived from a simple role→label map, renders `<h1>Nexus smoke</h1>` as content.
-- [ ] Create `frontend/tests/nexus-shell.spec.ts` with three tests:
+- [x] Create `frontend/src/routes/(nexus)/_smoke/+page.svelte` — uses `AppShell` + `UserMenu`, reads `user` from `$app/state`'s `page.data.user`, passes `role` + `display_name` + `roleLabel` derived from a simple role→label map, renders `<h1>Nexus smoke</h1>` as content.
+- [x] Create `frontend/tests/nexus-shell.spec.ts` with three tests:
   - ADMIN at `/_smoke` sees all 6 sidebar links (Dashboard, Purchase Orders, Invoices, Vendors, Products, Users).
   - VENDOR at `/_smoke` has NO Vendors link (`toHaveCount(0)`).
   - Unauth at `/_smoke` (auth/me returns 401) redirects to `/login`.
-- [ ] Run the spec — expect PASS. Run `make test-browser` — expect **147 passed** (144 + 3).
-- [ ] Commit: `Add nexus-shell smoke test + sentinel route (iter 069 task 25)`.
+- [x] Run the spec — expect PASS. Run `make test-browser` — expect **147 passed** (144 + 3).
+- [x] Commit: `Add nexus-shell smoke test + sentinel route (iter 069 task 25)`.
 
 ## Existing test impact
 

@@ -27,20 +27,20 @@ Ship gates for 066:
 
 ### Task 14 -- `DataTable` with server-driven pagination
 
-- [ ] Append `DataTable primitive` test to `primitives.spec.ts` (header visible, tbody 2 rows, click row updates click target, pagination text shows "Page 1 of 5"). Run — expect FAIL.
-- [ ] Create `frontend/src/lib/ui/DataTable.svelte` per plan Task 14 Step 2 with class rename `.wrap` → `ui-table`. Keep scoped `.pagination` inner class. `<table>` element has no class (no collision with pre-revamp global `.table` class, which applies only to elements with `class="table"`).
-- [ ] Extend `/ui-demo` with a DataTable section showing 2 rows + pagination (total=10, pageSize=2, page=1), plus a `<p data-testid="ui-table-click">` that binds to the last-clicked row id.
-- [ ] Run — expect PASS. Run `make test-browser` — expect **120 passed** (119 + 1).
-- [ ] Commit: `Add DataTable with server-driven pagination (iter 066 task 14)`.
+- [x] Append `DataTable primitive` test to `primitives.spec.ts` (header visible, tbody 2 rows, click row updates click target, pagination text shows "Page 1 of 5"). Run — expect FAIL.
+- [x] Create `frontend/src/lib/ui/DataTable.svelte` per plan Task 14 Step 2 with class rename `.wrap` → `ui-table`. Keep scoped `.pagination` inner class. `<table>` element has no class (no collision with pre-revamp global `.table` class, which applies only to elements with `class="table"`).
+- [x] Extend `/ui-demo` with a DataTable section showing 2 rows + pagination (total=10, pageSize=2, page=1), plus a `<p data-testid="ui-table-click">` that binds to the last-clicked row id.
+- [x] Run — expect PASS. Run `make test-browser` — expect **120 passed** (119 + 1).
+- [x] Commit: `Add DataTable with server-driven pagination (iter 066 task 14)`.
 
 ### Task 15 -- `PageHeader` and `DetailHeader`
 
-- [ ] Append `Page + Detail headers` tests to `primitives.spec.ts` (2 tests: PageHeader has H1 "Invoices" + subtitle + action visible; DetailHeader has back link "All invoices" + title "INV-001" + status "Submitted"). Run — expect 2 FAIL.
-- [ ] Create `frontend/src/lib/ui/PageHeader.svelte` per plan Task 15 Step 2 with class rename `.page-header` → `ui-pageheader`.
-- [ ] Create `frontend/src/lib/ui/DetailHeader.svelte` per plan Task 15 Step 3 with class rename `.detail-header` → `ui-detailheader`.
-- [ ] Extend `/ui-demo` with a Headers section showing both.
-- [ ] Run — expect PASS. Run `make test-browser` — expect **122 passed** (120 + 2).
-- [ ] Commit: `Add PageHeader + DetailHeader primitives (iter 066 task 15)`.
+- [x] Append `Page + Detail headers` tests to `primitives.spec.ts` (2 tests: PageHeader has H1 "Invoices" + subtitle + action visible; DetailHeader has back link "All invoices" + title "INV-001" + status "Submitted"). Run — expect 2 FAIL.
+- [x] Create `frontend/src/lib/ui/PageHeader.svelte` per plan Task 15 Step 2 with class rename `.page-header` → `ui-pageheader`.
+- [x] Create `frontend/src/lib/ui/DetailHeader.svelte` per plan Task 15 Step 3 with class rename `.detail-header` → `ui-detailheader`.
+- [x] Extend `/ui-demo` with a Headers section showing both.
+- [x] Run — expect PASS. Run `make test-browser` — expect **122 passed** (120 + 2).
+- [x] Commit: `Add PageHeader + DetailHeader primitives (iter 066 task 15)`.
 
 ## Existing test impact
 

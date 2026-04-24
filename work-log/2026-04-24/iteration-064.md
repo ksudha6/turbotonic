@@ -33,30 +33,30 @@ Ship gates for 064:
 
 Includes a small Input extension to surface `aria-invalid`.
 
-- [ ] Extend `frontend/src/lib/ui/Input.svelte` to render `aria-invalid={invalid || undefined}` on the `<input>` element. The existing `class:invalid` toggle stays. The Input's `invalid` prop default (`false`) is unchanged.
-- [ ] Append `FormField primitive` describe block to `primitives.spec.ts` (1 test: shows inline error + sets aria-invalid on child input). Run — expect FAIL.
-- [ ] Create `frontend/src/lib/ui/FormField.svelte` per plan Task 9 Step 2 with one deviation: outermost class `ui-field` (not plan's `.field`).
-- [ ] Extend `/ui-demo` with a FormField in error state showing an Input child via snippet.
-- [ ] Run — expect PASS (10 total passed). Run `make test-browser` — expect 110.
-- [ ] Commit: `Add FormField with server-error contract + Input aria-invalid (iter 064 task 9)`.
+- [x] Extend `frontend/src/lib/ui/Input.svelte` to render `aria-invalid={invalid || undefined}` on the `<input>` element. The existing `class:invalid` toggle stays. The Input's `invalid` prop default (`false`) is unchanged.
+- [x] Append `FormField primitive` describe block to `primitives.spec.ts` (1 test: shows inline error + sets aria-invalid on child input). Run — expect FAIL.
+- [x] Create `frontend/src/lib/ui/FormField.svelte` per plan Task 9 Step 2 with one deviation: outermost class `ui-field` (not plan's `.field`).
+- [x] Extend `/ui-demo` with a FormField in error state showing an Input child via snippet.
+- [x] Run — expect PASS (10 total passed). Run `make test-browser` — expect 110.
+- [x] Commit: `Add FormField with server-error contract + Input aria-invalid (iter 064 task 9)`.
 
 ### Task 10 -- `PanelCard`, `AttributeList`, `FormCard`
 
-- [ ] Append `Panel primitives` describe block to `primitives.spec.ts` (3 tests: PanelCard title visible, AttributeList renders label+value, FormCard has Cancel+Submit). Run — expect FAIL.
-- [ ] Create `frontend/src/lib/ui/PanelCard.svelte` per plan Task 10 Step 2 with class rename `.panel` → `.ui-panel`.
-- [ ] Create `frontend/src/lib/ui/AttributeList.svelte` per plan Task 10 Step 3 with class rename `.list` → `.ui-attr-list`.
-- [ ] Create `frontend/src/lib/ui/FormCard.svelte` per plan Task 10 Step 4 with class rename `.card` → `.ui-form-card`. **Critical:** pre-revamp `global.css` defines a global `.card` rule (border, shadow, padding). Without the rename, FormCard inherits double-styling from that rule.
-- [ ] Extend `/ui-demo` with PanelCard + AttributeList section and a FormCard section.
-- [ ] Run — expect PASS (13 total). Run `make test-browser` — expect 113.
-- [ ] Commit: `Add PanelCard + AttributeList + FormCard (iter 064 task 10)`.
+- [x] Append `Panel primitives` describe block to `primitives.spec.ts` (3 tests: PanelCard title visible, AttributeList renders label+value, FormCard has Cancel+Submit). Run — expect FAIL.
+- [x] Create `frontend/src/lib/ui/PanelCard.svelte` per plan Task 10 Step 2 with class rename `.panel` → `.ui-panel`.
+- [x] Create `frontend/src/lib/ui/AttributeList.svelte` per plan Task 10 Step 3 with class rename `.list` → `.ui-attr-list`.
+- [x] Create `frontend/src/lib/ui/FormCard.svelte` per plan Task 10 Step 4 with class rename `.card` → `.ui-form-card`. **Critical:** pre-revamp `global.css` defines a global `.card` rule (border, shadow, padding). Without the rename, FormCard inherits double-styling from that rule.
+- [x] Extend `/ui-demo` with PanelCard + AttributeList section and a FormCard section.
+- [x] Run — expect PASS (13 total). Run `make test-browser` — expect 113.
+- [x] Commit: `Add PanelCard + AttributeList + FormCard (iter 064 task 10)`.
 
 ### Task 11 -- `KpiCard`
 
-- [ ] Append `KpiCard` test (1 test: label + value + delta visible). Run — expect FAIL.
-- [ ] Create `frontend/src/lib/ui/KpiCard.svelte` per plan Task 11 Step 2 with class rename `.kpi` → `.ui-kpi`.
-- [ ] Extend `/ui-demo` with a KpiCard section.
-- [ ] Run — expect PASS (14 total). Run `make test-browser` — expect 114.
-- [ ] Commit: `Add KpiCard primitive (iter 064 task 11)`.
+- [x] Append `KpiCard` test (1 test: label + value + delta visible). Run — expect FAIL.
+- [x] Create `frontend/src/lib/ui/KpiCard.svelte` per plan Task 11 Step 2 with class rename `.kpi` → `.ui-kpi`.
+- [x] Extend `/ui-demo` with a KpiCard section.
+- [x] Run — expect PASS (14 total). Run `make test-browser` — expect 114.
+- [x] Commit: `Add KpiCard primitive (iter 064 task 11)`.
 
 ## Existing test impact
 

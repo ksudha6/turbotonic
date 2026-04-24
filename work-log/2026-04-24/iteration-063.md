@@ -28,36 +28,36 @@ Ship gates for 063:
 ## Tasks
 
 ### Task 5 -- `Button` primitive
-- [ ] Create `frontend/tests/primitives.spec.ts` with `Button primitive` describe block: primary focusable, secondary and ghost render, disabled is disabled. Run `cd frontend && npx playwright test primitives.spec.ts --reporter=list` — expect FAIL (route does not exist yet).
-- [ ] Create `frontend/src/lib/ui/Button.svelte` per plan Task 5 Step 2 (variant: primary | secondary | ghost, disabled, onclick, children, data-testid; scoped styles using --button-solid-bg / --button-solid-fg / --surface-card / --gray-* / --brand-accent tokens).
-- [ ] Replace `frontend/src/routes/ui-demo/+page.svelte` with the Button section (four buttons: primary, secondary, ghost, disabled).
-- [ ] Re-run `cd frontend && npx playwright test primitives.spec.ts --reporter=list` — expect PASS.
-- [ ] Run `make test-browser` — expect 100 → 103 passed (three new Button tests added to permanent suite).
-- [ ] Commit: `Add Button primitive + ui-demo Button section (iter 063 task 5)`.
+- [x] Create `frontend/tests/primitives.spec.ts` with `Button primitive` describe block: primary focusable, secondary and ghost render, disabled is disabled. Run `cd frontend && npx playwright test primitives.spec.ts --reporter=list` — expect FAIL (route does not exist yet).
+- [x] Create `frontend/src/lib/ui/Button.svelte` per plan Task 5 Step 2 (variant: primary | secondary | ghost, disabled, onclick, children, data-testid; scoped styles using --button-solid-bg / --button-solid-fg / --surface-card / --gray-* / --brand-accent tokens).
+- [x] Replace `frontend/src/routes/ui-demo/+page.svelte` with the Button section (four buttons: primary, secondary, ghost, disabled).
+- [x] Re-run `cd frontend && npx playwright test primitives.spec.ts --reporter=list` — expect PASS.
+- [x] Run `make test-browser` — expect 100 → 103 passed (three new Button tests added to permanent suite).
+- [x] Commit: `Add Button primitive + ui-demo Button section (iter 063 task 5)`.
 
 ### Task 6 -- `StatusPill` primitive
-- [ ] Append `StatusPill primitive` describe block to `primitives.spec.ts` (renders five tone variants with leading dot). Run — expect FAIL.
-- [ ] Create `frontend/src/lib/ui/StatusPill.svelte` per plan Task 6 Step 2 (tone: green | blue | orange | red | gray, dot + label, scoped styles using --dot-* tokens and inline tone backgrounds).
-- [ ] Extend `/ui-demo` with a `StatusPill` section showing all five tones.
-- [ ] Run the new describe — expect PASS. Run `make test-browser` — expect 104 passed.
-- [ ] Commit: `Add StatusPill primitive (iter 063 task 6)`.
+- [x] Append `StatusPill primitive` describe block to `primitives.spec.ts` (renders five tone variants with leading dot). Run — expect FAIL.
+- [x] Create `frontend/src/lib/ui/StatusPill.svelte` per plan Task 6 Step 2 (tone: green | blue | orange | red | gray, dot + label, scoped styles using --dot-* tokens and inline tone backgrounds).
+- [x] Extend `/ui-demo` with a `StatusPill` section showing all five tones.
+- [x] Run the new describe — expect PASS. Run `make test-browser` — expect 104 passed.
+- [x] Commit: `Add StatusPill primitive (iter 063 task 6)`.
 
 ### Task 7 -- `ProgressBar` primitive
-- [ ] Append `ProgressBar primitive` describe block to `primitives.spec.ts` (renders progressbar role with `aria-valuenow=60`). Run — expect FAIL.
-- [ ] Create `frontend/src/lib/ui/ProgressBar.svelte` per plan Task 7 Step 2 (value 0-100, clamped with `$derived`, optional label, role=progressbar + aria-valuenow/min/max, scoped styles).
-- [ ] Extend `/ui-demo` with a `ProgressBar` section at value 60.
-- [ ] Run — expect PASS. Run `make test-browser` — expect 105 passed.
-- [ ] Commit: `Add ProgressBar primitive (iter 063 task 7)`.
+- [x] Append `ProgressBar primitive` describe block to `primitives.spec.ts` (renders progressbar role with `aria-valuenow=60`). Run — expect FAIL.
+- [x] Create `frontend/src/lib/ui/ProgressBar.svelte` per plan Task 7 Step 2 (value 0-100, clamped with `$derived`, optional label, role=progressbar + aria-valuenow/min/max, scoped styles).
+- [x] Extend `/ui-demo` with a `ProgressBar` section at value 60.
+- [x] Run — expect PASS. Run `make test-browser` — expect 105 passed.
+- [x] Commit: `Add ProgressBar primitive (iter 063 task 7)`.
 
 ### Task 8 -- `Input`, `Select`, `DateInput`, `Toggle` primitives (bundled)
-- [ ] Append `Form control primitives` describe block with four tests (Input fills, Select selects, DateInput renders, Toggle toggles aria-pressed). Run — expect FAIL.
-- [ ] Create `frontend/src/lib/ui/Input.svelte` per plan Task 8 Step 2 (value bindable, type, placeholder, disabled, invalid, data-testid).
-- [ ] Create `frontend/src/lib/ui/Select.svelte` per plan Task 8 Step 3 (options array of {value,label}, bindable value, disabled, invalid).
-- [ ] Create `frontend/src/lib/ui/DateInput.svelte` per plan Task 8 Step 4 (native `<input type="date">`, bindable value).
-- [ ] Create `frontend/src/lib/ui/Toggle.svelte` per plan Task 8 Step 5 (aria role=switch, bindable pressed, knob slide).
-- [ ] Extend `/ui-demo` with a `Form controls` section showing all four.
-- [ ] Run — expect PASS. Run `make test-browser` — expect 109 passed.
-- [ ] Commit: `Add Input/Select/DateInput/Toggle primitives (iter 063 task 8)`.
+- [x] Append `Form control primitives` describe block with four tests (Input fills, Select selects, DateInput renders, Toggle toggles aria-pressed). Run — expect FAIL.
+- [x] Create `frontend/src/lib/ui/Input.svelte` per plan Task 8 Step 2 (value bindable, type, placeholder, disabled, invalid, data-testid).
+- [x] Create `frontend/src/lib/ui/Select.svelte` per plan Task 8 Step 3 (options array of {value,label}, bindable value, disabled, invalid).
+- [x] Create `frontend/src/lib/ui/DateInput.svelte` per plan Task 8 Step 4 (native `<input type="date">`, bindable value).
+- [x] Create `frontend/src/lib/ui/Toggle.svelte` per plan Task 8 Step 5 (aria role=switch, bindable pressed, knob slide).
+- [x] Extend `/ui-demo` with a `Form controls` section showing all four.
+- [x] Run — expect PASS. Run `make test-browser` — expect 109 passed.
+- [x] Commit: `Add Input/Select/DateInput/Toggle primitives (iter 063 task 8)`.
 
 ## Existing test impact
 

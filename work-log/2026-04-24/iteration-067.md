@@ -32,22 +32,22 @@ Ship gates for 067:
 
 ### Task 16 -- `sidebar-items.ts` (conservative mirror)
 
-- [ ] Create `frontend/tests/sidebar-items.spec.ts` with four role-matrix tests (ADMIN, VENDOR, QUALITY_LAB, FREIGHT_MANAGER). Run — expect FAIL (module does not exist).
-- [ ] Create `frontend/src/lib/ui/sidebar-items.ts` with `SidebarItem` type (`href`, `label`, `match: (pathname) => boolean`) and `sidebarItemsFor(role: UserRole): SidebarItem[]`. Derive the per-role list from `$lib/permissions` helpers plus a universal Dashboard row. `match` for POs matches `/po*` or `/production*`; Invoices matches `/invoice*` / `/invoices*`; Vendors `/vendors*`; Products `/products*`.
-- [ ] Run the spec — expect PASS.
-- [ ] Commit: `Add sidebar-items.ts derived from permissions.ts (iter 067 task 16)`.
+- [x] Create `frontend/tests/sidebar-items.spec.ts` with four role-matrix tests (ADMIN, VENDOR, QUALITY_LAB, FREIGHT_MANAGER). Run — expect FAIL (module does not exist).
+- [x] Create `frontend/src/lib/ui/sidebar-items.ts` with `SidebarItem` type (`href`, `label`, `match: (pathname) => boolean`) and `sidebarItemsFor(role: UserRole): SidebarItem[]`. Derive the per-role list from `$lib/permissions` helpers plus a universal Dashboard row. `match` for POs matches `/po*` or `/production*`; Invoices matches `/invoice*` / `/invoices*`; Vendors `/vendors*`; Products `/products*`.
+- [x] Run the spec — expect PASS.
+- [x] Commit: `Add sidebar-items.ts derived from permissions.ts (iter 067 task 16)`.
 
 ### Task 17 -- `Sidebar` primitive
 
-- [ ] Append `Sidebar primitive` tests to `primitives.spec.ts` (2 tests: renders Dashboard + POs links for ADMIN; each link has a valid href). Use the plan's deviation where the aria-current test is replaced with an `href` regex check, because `/ui-demo` is not `/dashboard`.
-- [ ] Create `frontend/src/lib/ui/Sidebar.svelte` per plan Task 17 Step 2 with class rename `.sidebar` → `ui-sidebar` (outermost). Uses `$app/state` `page.url.pathname` for active matching.
-- [ ] Extend `/ui-demo` with a Sidebar preview section using `role="ADMIN"`.
-- [ ] Run — expect PASS. Run `make test-browser` — expect **124 passed** (122 + 2).
-- [ ] Commit: `Add Sidebar primitive wired to permissions (iter 067 task 17)`.
+- [x] Append `Sidebar primitive` tests to `primitives.spec.ts` (2 tests: renders Dashboard + POs links for ADMIN; each link has a valid href). Use the plan's deviation where the aria-current test is replaced with an `href` regex check, because `/ui-demo` is not `/dashboard`.
+- [x] Create `frontend/src/lib/ui/Sidebar.svelte` per plan Task 17 Step 2 with class rename `.sidebar` → `ui-sidebar` (outermost). Uses `$app/state` `page.url.pathname` for active matching.
+- [x] Extend `/ui-demo` with a Sidebar preview section using `role="ADMIN"`.
+- [x] Run — expect PASS. Run `make test-browser` — expect **124 passed** (122 + 2).
+- [x] Commit: `Add Sidebar primitive wired to permissions (iter 067 task 17)`.
 
 ### Task 18 -- BRAINSTORM STOP
 
-- [ ] **Pause execution.** Surface the per-role sidebar brainstorm to the user. Question (plan-prescribed):
+- [x] **Pause execution.** Surface the per-role sidebar brainstorm to the user. Question (plan-prescribed):
   > Phase 4.0 needs a decision on per-role sidebar items. Task 16 implemented a mirror of today's layout. Confirm or extend:
   > - ADMIN: Dashboard, POs, Invoices, Vendors, Products
   > - SM: same as ADMIN
@@ -57,7 +57,7 @@ Ship gates for 067:
   > - PROCUREMENT_MANAGER: Dashboard only (no permissions wired)
   >
   > OK to proceed with this mapping, or change any row?
-- [ ] On user response:
+- [x] On user response:
   - If confirm: no code change; close iter 067 with a note that the mapping is locked.
   - If edits: update `sidebar-items.ts` and `sidebar-items.spec.ts`, re-run, commit `Lock per-role sidebar items after brainstorm (iter 067 task 18)`.
 
