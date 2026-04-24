@@ -82,10 +82,38 @@ None. Visual verification via `/ui-demo` on the dev server suffices. Scratch scr
 
 ## Notes
 
-Pending — filled at iteration close.
+Iter 065 closed on 2026-04-24. Two commits landed on `ux-changes`:
+- `8211ddf` Task 12 Timeline + ActivityFeed.
+- `8988e62` Task 13 LoadingState + EmptyState + ErrorState + ErrorBoundary.
 
-### PM-delegate decisions (autonomous mode)
+114 Playwright passes at open → 116 after Task 12 → 119 at close. Backend stays 591 (no backend change).
 
-- **Reduced-motion fallback on LoadingState spinner.** Plan's spinner rotates via `@keyframes spin`; users with OS-level reduced-motion preference would still see rotation. Adding `@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }` is a ~3-line change that prevents motion sickness. Not a brainstorm-worthy decision — motion accessibility is a baseline, not a visual choice.
-- **No brainstorm stop on state primitives.** Visual defaults for Loading / Empty / Error are industry-standard (centered spinner, centered copy, alert banner). Mock silent; plan's defaults ship.
-- **ErrorBoundary not unit-tested.** Testing `<svelte:boundary>` requires a throwable child. Installation into AppShell in iter 068 will exercise it end-to-end. No primitive-level test.
+### Decisions
+
+- **Reduced-motion fallback on LoadingState spinner.** Motion-sensitive users see a static ring via `@media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }`. Three-line addition beyond the plan text.
+- **ErrorBoundary does NOT expose the error to the user.** The `failed` snippet takes `(_error, reset)` — error is intentionally unused. Showing raw error messages or stack traces to end users leaks implementation details and is not helpful. Consumers who need to log errors can use Svelte's `onerror` lifecycle (future enhancement).
+- **ErrorBoundary not rendered on `/ui-demo`.** Testing requires a throwable child; adding one to the gallery adds noise. Primitive correctness will be verified end-to-end when iter 068 wires it into `(nexus)/+layout.svelte`.
+- **Dot class reuse between StatusPill and ActivityFeed is safe.** Both use `.dot` as an inner class inside their scoped style. Svelte hashes each separately so there's no cross-component leak.
+- **No brainstorm stop on state primitives.** Visual defaults follow industry conventions (centered spinner, centered empty copy, alert banner with retry). Mock is silent on these treatments. Brainstorm marker discharged without user pause.
+
+### DDD vocab assessment
+
+No new domain terms. Primitive vocabulary (Timeline, ActivityFeed, LoadingState, EmptyState, ErrorState, ErrorBoundary) is UI design system. `docs/ddd-vocab.md` unchanged.
+
+### Backlog captured
+
+- **ErrorBoundary logging hook.** Currently the `failed` snippet discards the error. When Sentry or similar ships in production-setup phase, wire `onerror` to forward the error. Out of scope for Phase 4.0.
+- **ErrorBoundary unit test.** Create a small throwable test component (maybe `frontend/tests/fixtures/ThrowOnMount.svelte`) and a dedicated spec. Defer to iter 068 when AppShell install surfaces the need.
+- **Timeline `box-shadow: 0 0 0 3px #dbeafe` inlines a hex that matches `--blue-100` token.** Mechanical refactor deferred with the StatusPill and KpiCard hex cleanup.
+- **ErrorState `background-color: #fef2f2`** is close to but not exactly `--red-100` (#fee2e2). If we want to unify, introduce a new `--red-50` token or change the ErrorState to `--red-100`. Deferred.
+
+### What exists after iter 065
+
+Eighteen primitives under `frontend/src/lib/ui/`:
+- Leaves (iter 063, 7): Button, StatusPill, ProgressBar, Input, Select, DateInput, Toggle.
+- Composites (iter 064, 5): FormField, PanelCard, AttributeList, FormCard, KpiCard.
+- Display + state (iter 065, 6): Timeline, ActivityFeed, LoadingState, EmptyState, ErrorState, ErrorBoundary.
+
+Nineteen tests in `primitives.spec.ts`. Eleven sections on `/ui-demo` (ErrorBoundary not rendered there). Input primitive surfaces `aria-invalid`. ErrorBoundary ready for iter 068 installation.
+
+Carried forward: none. Both plan tasks (12, 13) completed.
