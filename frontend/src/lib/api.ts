@@ -527,3 +527,26 @@ export async function downloadPackingListPdf(id: string, shipmentNumber: string)
 	a.click();
 	URL.revokeObjectURL(url);
 }
+
+export async function downloadCommercialInvoicePdf(id: string, shipmentNumber: string): Promise<void> {
+	const res = await fetch(`/api/v1/shipments/${id}/commercial-invoice`, {
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		throw new Error(`GET commercial-invoice failed: ${res.status}`);
+	}
+	const blob = await res.blob();
+	const url = URL.createObjectURL(blob);
+	const a = document.createElement('a');
+	a.href = url;
+	a.download = `commercial-invoice-${shipmentNumber}.pdf`;
+	a.click();
+	URL.revokeObjectURL(url);
+}

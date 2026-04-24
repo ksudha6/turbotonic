@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import { getShipment, updateShipmentLineItems, downloadPackingListPdf } from '$lib/api';
+	import { getShipment, updateShipmentLineItems, downloadPackingListPdf, downloadCommercialInvoicePdf } from '$lib/api';
 	import type { Shipment, ShipmentLineItemUpdate } from '$lib/types';
 
 	const shipmentId: string = page.params.id ?? '';
@@ -13,6 +13,7 @@
 	let saveError: string = $state('');
 	let saveSuccess: boolean = $state(false);
 	let downloading: boolean = $state(false);
+	let downloadingCi: boolean = $state(false);
 
 	// Editable drafts indexed by part_number
 	let drafts: Record<string, ShipmentLineItemUpdate> = $state({});
@@ -89,6 +90,18 @@
 		}
 	}
 
+	async function handleDownloadCi() {
+		if (!shipment) return;
+		downloadingCi = true;
+		try {
+			await downloadCommercialInvoicePdf(shipment.id, shipment.shipment_number);
+		} catch (e) {
+			saveError = e instanceof Error ? e.message : 'Download failed';
+		} finally {
+			downloadingCi = false;
+		}
+	}
+
 	function formatDate(iso: string): string {
 		return new Date(iso).toLocaleDateString();
 	}
@@ -104,13 +117,22 @@
 			<h1>{shipment.shipment_number}</h1>
 			<span class="status-badge status-{shipment.status.toLowerCase()}">{shipment.status.replace(/_/g, ' ')}</span>
 		</div>
-		<button
-			class="btn btn-secondary"
-			disabled={downloading}
-			onclick={handleDownload}
-		>
-			{downloading ? 'Downloading...' : 'Download Packing List'}
-		</button>
+		<div class="header-actions">
+			<button
+				class="btn btn-secondary"
+				disabled={downloading}
+				onclick={handleDownload}
+			>
+				{downloading ? 'Downloading...' : 'Download Packing List'}
+			</button>
+			<button
+				class="btn btn-secondary"
+				disabled={downloadingCi}
+				onclick={handleDownloadCi}
+			>
+				{downloadingCi ? 'Downloading...' : 'Download Commercial Invoice'}
+			</button>
+		</div>
 	</div>
 
 	<div class="card meta-card">
@@ -191,6 +213,11 @@
 
 	.page-header h1 {
 		margin: 0 0 var(--space-2) 0;
+	}
+
+	.header-actions {
+		display: flex;
+		gap: var(--space-2);
 	}
 
 	.status-badge {

@@ -287,3 +287,45 @@ async def get_packing_list(
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
     )
+
+
+@router.get("/{shipment_id}/commercial-invoice")
+async def get_commercial_invoice(
+    shipment_id: str,
+    repo: ShipmentRepoDep,
+    po_repo: PORepoDep,
+    vendor_repo: VendorRepoDep,
+    _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
+) -> Response:
+    from src.services.commercial_invoice_pdf import generate_commercial_invoice_pdf
+
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+
+    po = await po_repo.get(shipment.po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+
+    vendor = await vendor_repo.get_by_id(po.vendor_id)
+    vendor_name = vendor.name if vendor is not None else ""
+    vendor_address = vendor.address if vendor is not None else ""
+
+    buyer_name = po.buyer_name
+    buyer_address = po.ship_to_address
+
+    pdf_bytes = generate_commercial_invoice_pdf(
+        shipment=shipment,
+        po=po,
+        vendor_name=vendor_name,
+        vendor_address=vendor_address,
+        buyer_name=buyer_name,
+        buyer_address=buyer_address,
+    )
+
+    filename = f"commercial-invoice-{shipment.shipment_number}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+    )

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import re
+from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
@@ -653,3 +654,132 @@ async def test_packing_list_summary_totals_computed_correctly(authenticated_clie
     r3 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/packing-list")
     assert r3.status_code == 200
     assert len(r3.content) > 0
+
+
+# --- Iter 045: Commercial invoice PDF ---
+
+
+async def test_commercial_invoice_returns_200_pdf(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/commercial-invoice")
+    assert r2.status_code == 200
+    assert r2.headers["content-type"] == "application/pdf"
+    assert len(r2.content) > 0
+
+
+async def test_commercial_invoice_nonexistent_shipment_returns_404(authenticated_client: AsyncClient) -> None:
+    r = await authenticated_client.get("/api/v1/shipments/nonexistent-id/commercial-invoice")
+    assert r.status_code == 404
+
+
+async def test_commercial_invoice_ci_number_format(authenticated_client: AsyncClient) -> None:
+    from src.services.commercial_invoice_pdf import generate_ci_number
+
+    shipment_number = "SHP-20260424-A3F2"
+    expected_ci_number = f"CI-{shipment_number}"
+    assert generate_ci_number(shipment_number) == expected_ci_number
+
+
+async def test_commercial_invoice_contains_identifiers(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+    po_number: str = po["po_number"]
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_number: str = r1.json()["shipment_number"]
+    shipment_id: str = r1.json()["id"]
+    expected_ci_number = f"CI-{shipment_number}"
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/commercial-invoice")
+    assert r2.status_code == 200
+    pdf_text = _extract_pdf_text(r2.content)
+    assert shipment_number in pdf_text
+    assert po_number in pdf_text
+    assert expected_ci_number in pdf_text
+
+
+async def test_commercial_invoice_line_value_uses_po_unit_price(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    shipment_quantity = 7
+    expected_line_value = shipment_quantity * Decimal(_LINE_ITEM_A["unit_price"])  # 7 * 10.00 = 70.00
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": shipment_quantity, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/commercial-invoice")
+    assert r2.status_code == 200
+    pdf_text = _extract_pdf_text(r2.content)
+    assert f"{expected_line_value:.2f}" in pdf_text
+
+
+async def test_commercial_invoice_hs_code_from_po(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+    expected_hs_code: str = _LINE_ITEM_A["hs_code"]
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/commercial-invoice")
+    assert r2.status_code == 200
+    pdf_text = _extract_pdf_text(r2.content)
+    assert expected_hs_code in pdf_text
+
+
+async def test_commercial_invoice_summary_totals(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(
+        authenticated_client,
+        vendor_id,
+        line_items=[_LINE_ITEM_A, _LINE_ITEM_B],
+    )
+
+    qty_a = 10
+    qty_b = 5
+    expected_total_qty = qty_a + qty_b
+    expected_total_value = (
+        qty_a * Decimal(_LINE_ITEM_A["unit_price"])
+        + qty_b * Decimal(_LINE_ITEM_B["unit_price"])
+    )
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={
+            "po_id": po["id"],
+            "line_items": [
+                {"part_number": "PART-A", "quantity": qty_a, "uom": "PCS"},
+                {"part_number": "PART-B", "quantity": qty_b, "uom": "PCS"},
+            ],
+        },
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/commercial-invoice")
+    assert r2.status_code == 200
+    pdf_text = _extract_pdf_text(r2.content)
+    assert str(expected_total_qty) in pdf_text
+    assert f"{expected_total_value:.2f}" in pdf_text
