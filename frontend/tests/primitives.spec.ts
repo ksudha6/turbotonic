@@ -172,6 +172,15 @@ test.describe('KpiCard primitive', () => {
 	});
 });
 
+test.describe('KpiCard icon slot', () => {
+	test('renders icon snippet when provided', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByTestId('ui-kpi-icon')).toBeVisible();
+	});
+});
+
 test.describe('Timeline + ActivityFeed primitives', () => {
 	test('Timeline renders ordered steps with state classes', async ({ page }) => {
 		await mockApiCatchAll(page);

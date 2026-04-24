@@ -116,7 +116,11 @@
 		value="$24,300"
 		delta={{ value: '+12%', tone: 'positive' }}
 		data-testid="ui-kpi"
-	/>
+	>
+		{#snippet icon()}
+			<span data-testid="ui-kpi-icon">📄</span>
+		{/snippet}
+	</KpiCard>
 </section>
 
 <section>
