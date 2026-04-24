@@ -222,7 +222,7 @@ The full design system + page redesign covering every existing page (~22 routes)
 - Session cookie path/domain audit: verify the session cookie is set with `path=/` and appropriate domain/SameSite attributes for production deployment behind a reverse proxy. Currently works in dev via Vite proxy.
 
 ### From the backlog (infrastructure)
-- File endpoint role guards: restrict upload/download/delete by role and entity ownership. Currently any authenticated user can access any file. Define guard rules once consuming features (certificates, shipment docs) are built.
+- File endpoint role guards: restrict upload/download/delete by role and entity ownership. Currently any authenticated user can access any file. Consumers now exist (certificates iter 038, packaging iter 042, shipment requirements iter 046), so the guard rules can be defined per entity_type and wired in.
 - File upload entity existence validation: upload endpoint accepts any entity_type/entity_id without checking the entity exists. Decide per-feature whether to validate at upload time or at the consuming feature level.
 - Vendor catalog / vendor-SKU mapping: products are vendor-agnostic, but a vendor's catalog defines which SKUs they offer. Line item product_id should reference a SKU in the vendor's catalog. New entity needed.
 - HTTPS for non-localhost deployment (WebAuthn requires HTTPS or localhost; needed before first external demo)
