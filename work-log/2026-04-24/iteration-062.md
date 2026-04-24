@@ -68,4 +68,15 @@ None. No visual surface to verify yet (the token additions are not rendered; the
 
 ## Notes
 
-_Filled when iteration closes._
+Iter 062 closed on 2026-04-24. Three atomic commits landed on `phase-4-0-foundation`: `6ef63e6` ((nexus) scaffold), `f37ed25` (design tokens), `a5c1c05` (/ui-demo skeleton). Full suite green at both iteration open (591 + 100) and close (591 + 100).
+
+No new domain terms introduced, so `docs/ddd-vocab.md` is unchanged.
+
+Decisions:
+- `(nexus)/+layout.svelte` ships as a minimal passthrough; AppShell wiring is deferred to iter 068 once the shell primitives exist. This keeps `(nexus)` empty but functional (auth redirect still enforced).
+- `/ui-demo` placed at `frontend/src/routes/ui-demo/+page.svelte` (NOT under `(nexus)`) so it renders under the pre-revamp root layout. Dev-only gallery; iter 063+ populates it.
+- Tokens are additive only. Pre-revamp component rules (`.btn`, `.table`, `.badge`, `.card`, `.input`) stay untouched; deletion deferred to end of revamp after every aggregate phase retires its old routes.
+
+Incidental finding from the review: adding `--font-size-xs` retroactively fixed two pre-existing consumers that had been falling through to browser defaults (`frontend/src/routes/dashboard/+page.svelte:342,348`) or relying on an inline fallback (`frontend/src/routes/shipments/[id]/+page.svelte:249`). Both predate the revamp. No regression; these pages now render the intended size.
+
+Carried forward: none. Three sub-tasks completed. Plan's Task 5 (full `Button` primitive + `primitives.spec.ts`) starts iter 063 with the skeleton ready.

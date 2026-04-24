@@ -1,7 +1,7 @@
 # Iterations Summary
 
 > Single-file context for future conversations. Replaces reading 29 individual iteration docs.
-> Last updated: iter 061 closed on 2026-04-24 (first iteration of Phase 4.0 UI revamp).
+> Last updated: iter 062 closed on 2026-04-24 (Phase 4.0 UI revamp foundation in progress).
 
 ---
 
@@ -134,6 +134,7 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 | 045 | 2026-04-24 | Export commercial invoice PDF on Shipment: GET /shipments/{id}/commercial-invoice. Deterministic CI number CI-{shipment_number}, not persisted. HS code + unit price from PO line items (matched by part_number); quantity + weights + country of origin from shipment line items. Same ReportLab pattern as packing list. Frontend Download Commercial Invoice button alongside Packing List. 7 new tests. |
 | 046 | 2026-04-24 | Shipment document requirements + readiness gate (backend): shipment_document_requirements table, ShipmentDocumentRequirement entity (PENDING > COLLECTED), ReadinessResult composite (documents + certificates + packaging). Default PACKING_LIST and COMMERCIAL_INVOICE auto-generated rows seeded on submit-for-documents; both always pass docs check. New endpoints: POST /requirements (custom), POST /documents/{rid}/upload, GET /requirements, GET /readiness. Existing mark-ready endpoint enhanced with readiness gate (409 + ReadinessResult on failure). DOCUMENT_UPLOADED ActivityEvent + EntityType.SHIPMENT added. 12 new tests. Frontend (Documents section, readiness panel, Mark Ready, dashboard counts) deferred to Phase 4. |
 | 061 | 2026-04-24 | Phase 4.0 foundations -- ADMIN inheritance + seed variety: removed `isExact` helper from `frontend/src/lib/permissions.ts` so ADMIN inherits VENDOR-side actions (`canAcceptRejectPO`, `canCreateInvoice`, `canSubmitInvoice`, `canPostMilestone`). First commit of `backend/src/seed.py` into git (previously untracked); expanded `_make_activity_log` from 8 to 19 rows covering all 8 named event types and derived `(category, target_role)` from `EVENT_METADATA` to prevent drift. New `backend/tests/test_seed.py` with 6 tests asserting 10 variety thresholds (vendors/types/countries, POs/statuses, invoices/statuses, milestones/stages, activity/events, users/roles). Pre-existing seed issues (non-deterministic UUIDs, `_PAYMENT_TERMS_CYCLE` dead branches, module-level `random.seed`/`_NOW`) logged to backlog for future cleanup. 591 backend tests + 100 Playwright specs green. |
+| 062 | 2026-04-24 | Phase 4.0 design-system scaffold: new `(nexus)` SvelteKit layout group (empty passthrough; AppShell deferred to iter 068), 22 new design tokens appended to `global.css` (`--surface-*`, `--text-sidebar*`, `--brand-accent`, `--button-solid-*`, `--dot-*` status dots, `--font-size-xs`/`--font-size-3xl`, `--letter-spacing-wide`, `--space-7`/`--space-20`, `--breakpoint-*`), `/ui-demo` route skeleton (populated by later iters). Additive only -- zero existing tokens or component rules modified. Incidentally resolves two pre-existing `--font-size-xs` consumers (dashboard, shipments) that had been falling through to browser defaults. 591 backend tests + 100 Playwright specs green. |
 
 ---
 
