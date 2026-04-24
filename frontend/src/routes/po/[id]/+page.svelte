@@ -79,8 +79,15 @@
 		try {
 			[po, invoices, refData] = await Promise.all([getPO(id), listInvoicesByPO(id), fetchReferenceData()]);
 			resolver = buildLabelResolver(refData);
-			const products = await listProducts({ vendor_id: po.vendor_id });
-			certRequired = new Set(products.filter((p) => p.requires_certification).map((p) => p.part_number));
+			// Products endpoint is SM/QUALITY_LAB/ADMIN only; vendors rely on server-side cert gate on submit.
+			if (role !== 'VENDOR') {
+				const products = await listProducts({ vendor_id: po.vendor_id });
+				certRequired = new Set(
+					products
+						.filter((p) => p.qualifications.some((q) => q.name === 'QUALITY_CERTIFICATE'))
+						.map((p) => p.part_number)
+				);
+			}
 			if (po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT') {
 				const resp = await getRemainingQuantities(id);
 				remainingMap = new Map(resp.lines.map((l) => [l.part_number, l]));

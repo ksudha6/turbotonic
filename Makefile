@@ -1,4 +1,4 @@
-.PHONY: up down test test-backend test-browser db-up db-down db-reset
+.PHONY: up down test test-backend test-browser db-up db-down db-reset seed
 
 db-up:
 	docker compose up -d
@@ -16,7 +16,11 @@ db-reset:
 	@until docker compose exec postgres pg_isready -U turbo_tonic -d turbo_tonic > /dev/null 2>&1; do sleep 1; done
 	@echo "Postgres is ready."
 
-up: db-up
+seed:
+	mkdir -p logs
+	uv run python -m backend.src.seed 2>&1 | tee logs/seed.log
+
+up: db-up seed
 	mkdir -p logs
 	@trap 'kill 0' EXIT; \
 	uv run uvicorn backend.src.main:app --host 0.0.0.0 --port 8001 --reload 2>&1 | tee logs/uvicorn.log & \
