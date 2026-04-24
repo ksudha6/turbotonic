@@ -131,11 +131,55 @@ None.
 
 ## Notes
 
-Pending — filled at iter close.
+Iter 069 closed on 2026-04-24. Four commits landed on `ux-changes`:
+- Open doc (committed earlier).
+- `15785bc` Task 23 UserMenu primitive with Log out + dev-only Switch role placeholder.
+- `080a649` Task 24 redirect infrastructure (empty registry, `resolveRedirect` with `:param` substitution).
+- `063e690` Task 25 nexus-shell smoke test + `(nexus)/_smoke/+page.svelte` sentinel route.
 
-### PM-delegate decisions
+140 Playwright at open → 142 after Task 23 → 145 after Task 24 → 148 at close. Backend stays 591.
 
-- **UserMenu mobile meta collapse**: mock shows pill without text on mobile; adding `@media (max-width: 767px) { .meta { display: none; } }`. Tested explicitly.
-- **Dev role switcher** (Task 22): plan prescribes `import.meta.env.DEV` split. The actual role-store wiring (how a switched role propagates to `$app/state`'s `page.data.user`) is backlog'd for a dedicated dev-tools iteration. Phase 4.0 ships a visible placeholder menu item so the dropdown structure is in place; clicking does nothing yet.
-- **Logout failure swallowed**: plan's pattern is `try { await logout(); } catch {} goto('/login');`. If the logout API call fails, the user is still redirected. Accept the plan.
-- **`_smoke` route name**: underscore prefix marks it as an internal/test route. SvelteKit does not special-case leading underscores (unlike `_layout.svelte` in some frameworks); this is a convention only. The `(nexus)` layout group still wraps it.
+### Decisions
+
+- **UserMenu mobile meta collapse**: `@media (max-width: 767px) { .meta { display: none; } }` per mock. Tested explicitly at 390px and 1440px viewports.
+- **Dev role switcher**: ships as a disabled menu item gated behind `import.meta.env.DEV`. Full dev-store wiring (how a role switch propagates to `$app/state`'s `page.data.user`) is backlog'd for a dedicated dev-tools iteration. Phase 4.0 ships structural affordance only.
+- **Logout failure handling**: `try { await logout(); } catch {} goto('/login')` — errors swallowed so user always exits. Plan pattern accepted.
+- **Sidebar assertion scoping in nexus smoke test**: implementer correctly discovered that the pre-revamp `+layout.svelte` renders its own nav with colliding link names. Scoped all sidebar assertions to `page.getByTestId('ui-appshell-sidebar').getByRole(...)` inside `nexus-shell.spec.ts`. This is the right move — asserts against the NEW shell, not whatever pre-revamp chrome happens to also render.
+
+### Plan deviations (documented)
+
+- Plan Task 25's smoke spec used unscoped `page.getByRole('link', { name: 'Dashboard' })`. That collides with the pre-revamp top nav which still renders when the route path is a non-`(nexus)` one (but actually `/_smoke` IS under `(nexus)`, so only the new shell should render...). The subagent scoped to the shell testid regardless — defensive and correct.
+
+### DDD vocab assessment
+
+No new domain terms. `docs/ddd-vocab.md` unchanged.
+
+### Backlog captured
+
+- **Dev role-switcher wiring**: wire the UserMenu's Switch role item to mutate a local dev store that `$app/state`'s `page.data.user` subscribes to. Requires a `$lib/dev/role-store.ts` + a hook in `+layout.ts`. Not Phase 4.0 scope.
+- **Keyboard escape closes UserMenu dropdown**: currently only clicking the pill again closes it. Add `onkeydown` for Escape. Low priority.
+- **Outside-click dismisses UserMenu**: currently the dropdown stays open if the user clicks outside. Add a click-outside listener. Minor UX polish.
+- **Redirect hook wiring**: `resolveRedirect()` exists but no `hooks.server.ts` or `+layout.ts` consumes it yet. Future aggregate phases install it when retiring a route.
+- **Smoke test covers every role**: currently only ADMIN and VENDOR are covered. Add SM, FREIGHT_MANAGER, QUALITY_LAB, PROCUREMENT_MANAGER if appetite for more assertions grows. Low priority — `sidebar-items.spec.ts` already covers the role-matrix logic at the data layer.
+
+### What exists after iter 069
+
+Twenty-six primitives under `frontend/src/lib/ui/`:
+- Leaves (iter 063, 7): Button, StatusPill, ProgressBar, Input, Select, DateInput, Toggle.
+- Composites (iter 064, 5): FormField, PanelCard, AttributeList, FormCard, KpiCard (with icon slot).
+- Display + state (iter 065, 6): Timeline, ActivityFeed, LoadingState, EmptyState, ErrorState, ErrorBoundary.
+- Table + headers (iter 066, 3): DataTable, PageHeader, DetailHeader.
+- Shell (iter 067-069, 5): Sidebar (sections + footer + roleLabel), TopBar, AppShell, UserMenu, + `sidebar-items.ts`, `redirects.ts`.
+
+New routes:
+- `/ui-demo/shell` — AppShell preview with UserMenu + sidebarFooter.
+- `/(nexus)/_smoke` — permanent sentinel route exercising the (nexus) layout end-to-end.
+
+Tests:
+- `primitives.spec.ts`: 33 tests.
+- `sidebar-items.spec.ts`: 7 tests.
+- `redirects.spec.ts`: 3 tests.
+- `nexus-shell.spec.ts`: 3 tests.
+- Plus all pre-revamp specs — total **148 Playwright passes**.
+
+Carried forward: none.
