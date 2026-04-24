@@ -216,3 +216,17 @@ test.describe('State primitives', () => {
 		await expect(page.getByTestId('ui-error-retry')).toBeVisible();
 	});
 });
+
+test.describe('DataTable primitive', () => {
+	test('renders header + rows + pagination and handles row click', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const table = page.getByTestId('ui-table');
+		await expect(table.getByRole('columnheader', { name: 'Name' })).toBeVisible();
+		await expect(table.locator('tbody tr')).toHaveCount(2);
+		await table.locator('tbody tr').first().click();
+		await expect(page.getByTestId('ui-table-click')).toHaveText('row-1');
+		await expect(page.getByTestId('ui-table-pagination')).toContainText('Page 1 of 5');
+	});
+});

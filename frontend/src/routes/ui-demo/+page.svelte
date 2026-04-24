@@ -16,6 +16,17 @@
 	import LoadingState from '$lib/ui/LoadingState.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import ErrorState from '$lib/ui/ErrorState.svelte';
+	import DataTable from '$lib/ui/DataTable.svelte';
+
+	let lastClicked = $state('');
+	let page = $state(1);
+	const tableRows = [
+		{ id: 'row-1', name: 'Row 1' },
+		{ id: 'row-2', name: 'Row 2' }
+	];
+	const tableColumns = [
+		{ key: 'name', label: 'Name', render: (r: { name: string }) => r.name }
+	];
 </script>
 
 <h1>Phase 4.0 UI Demo</h1>
@@ -135,4 +146,21 @@
 		<EmptyState title="No results" description="Try adjusting filters." data-testid="ui-empty" />
 		<ErrorState message="Something broke" onRetry={() => console.log('retry')} data-testid="ui-error" />
 	</div>
+</section>
+
+<section>
+	<h2>DataTable</h2>
+	<DataTable
+		columns={tableColumns}
+		rows={tableRows}
+		pagination={{
+			page,
+			pageSize: 2,
+			total: 10,
+			onPageChange: (p) => (page = p)
+		}}
+		onRowClick={(row) => (lastClicked = row.id)}
+		data-testid="ui-table"
+	/>
+	<p data-testid="ui-table-click">{lastClicked}</p>
 </section>
