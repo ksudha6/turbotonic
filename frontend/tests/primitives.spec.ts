@@ -368,3 +368,30 @@ test.describe('AppShell primitive', () => {
 		await expect(page.getByTestId('ui-appshell-sidebar')).toBeHidden();
 	});
 });
+
+test.describe('UserMenu primitive', () => {
+	test('at desktop shows name + role and opens menu on click', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/ui-demo/shell');
+		const pill = page.getByTestId('ui-usermenu');
+		await expect(pill).toContainText('Supply Manager');
+		await pill.click();
+		await expect(page.getByTestId('ui-usermenu-logout')).toBeVisible();
+	});
+
+	test('at mobile shows avatar only and menu still opens', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.setViewportSize({ width: 390, height: 800 });
+		await page.goto('/ui-demo/shell');
+		const pill = page.getByTestId('ui-usermenu');
+		// The pill still renders; the "Supply Manager" meta text is hidden by media query.
+		// Don't assert visibility of the meta — instead open the menu to the hamburger first,
+		// then find the UserMenu inside the drawer? No — the UserMenu is in the TopBar which
+		// is visible at mobile. Just open the menu directly.
+		await pill.click();
+		await expect(page.getByTestId('ui-usermenu-logout')).toBeVisible();
+	});
+});

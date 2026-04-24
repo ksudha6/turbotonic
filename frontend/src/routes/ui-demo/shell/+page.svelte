@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AppShell from '$lib/ui/AppShell.svelte';
+	import UserMenu from '$lib/ui/UserMenu.svelte';
 </script>
 
 <AppShell
@@ -13,6 +14,9 @@
 			<strong>Demo workspace</strong>
 			<div>Shell preview</div>
 		</div>
+	{/snippet}
+	{#snippet userMenu()}
+		<UserMenu name="Supply Manager" role="ADMIN" data-testid="ui-usermenu" />
 	{/snippet}
 	<p>Shell demo content.</p>
 </AppShell>
