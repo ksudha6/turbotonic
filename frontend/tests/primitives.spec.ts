@@ -332,3 +332,39 @@ test.describe('TopBar primitive', () => {
 		await expect(bar.getByTestId('notification-bell-button')).toBeVisible();
 	});
 });
+
+test.describe('AppShell primitive', () => {
+	test('renders sidebar + topbar + main at desktop', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/ui-demo/shell');
+		const shell = page.getByTestId('ui-appshell');
+		await expect(shell.getByTestId('ui-appshell-sidebar')).toBeVisible();
+		await expect(shell.getByTestId('ui-appshell-topbar')).toBeVisible();
+		await expect(shell.getByTestId('ui-appshell-main')).toBeVisible();
+	});
+
+	test('at 390px hides sidebar by default and reveals it via hamburger', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.setViewportSize({ width: 390, height: 800 });
+		await page.goto('/ui-demo/shell');
+		const sidebar = page.getByTestId('ui-appshell-sidebar');
+		await expect(sidebar).toBeHidden();
+		await page.getByTestId('topbar-toggle').click();
+		await expect(sidebar).toBeVisible();
+	});
+
+	test('at 390px tapping the overlay dismisses the drawer', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.setViewportSize({ width: 390, height: 800 });
+		await page.goto('/ui-demo/shell');
+		await page.getByTestId('topbar-toggle').click();
+		const overlay = page.getByTestId('ui-appshell-overlay');
+		await expect(overlay).toBeVisible();
+		await overlay.click();
+		await expect(page.getByTestId('ui-appshell-sidebar')).toBeHidden();
+	});
+});
