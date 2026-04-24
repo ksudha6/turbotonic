@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, field_validator
 
@@ -41,6 +42,33 @@ class ShipmentCreate(BaseModel):
         return v
 
 
+class ShipmentLineItemUpdate(BaseModel):
+    part_number: str
+    net_weight: Decimal | None = None
+    gross_weight: Decimal | None = None
+    package_count: int | None = None
+    dimensions: str | None = None
+    country_of_origin: str | None = None
+
+    @field_validator("part_number")
+    @classmethod
+    def part_number_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("part_number must not be empty or whitespace-only")
+        return v
+
+    @field_validator("dimensions", "country_of_origin", mode="before")
+    @classmethod
+    def reject_whitespace_only(cls, v: str | None) -> str | None:
+        if isinstance(v, str) and not v.strip():
+            raise ValueError("field must not be whitespace-only")
+        return v
+
+
+class ShipmentUpdate(BaseModel):
+    line_items: list[ShipmentLineItemUpdate]
+
+
 class ShipmentLineItemResponse(BaseModel):
     id: str
     shipment_id: str
@@ -50,6 +78,11 @@ class ShipmentLineItemResponse(BaseModel):
     quantity: int
     uom: str
     sort_order: int
+    net_weight: Decimal | None = None
+    gross_weight: Decimal | None = None
+    package_count: int | None = None
+    dimensions: str | None = None
+    country_of_origin: str | None = None
 
 
 class ShipmentResponse(BaseModel):
@@ -75,6 +108,12 @@ class RemainingShipmentQuantityResponse(BaseModel):
     items: list[RemainingShipmentQuantity]
 
 
+def _decimal_or_none(value: object) -> Decimal | None:
+    if value is None:
+        return None
+    return Decimal(str(value))
+
+
 def shipment_to_response(
     shipment: Shipment,
     line_item_rows: list[dict[str, object]],
@@ -89,6 +128,11 @@ def shipment_to_response(
             quantity=int(row["quantity"]),  # type: ignore[arg-type]
             uom=str(row["uom"]),
             sort_order=int(row["sort_order"]),  # type: ignore[arg-type]
+            net_weight=_decimal_or_none(row.get("net_weight")),
+            gross_weight=_decimal_or_none(row.get("gross_weight")),
+            package_count=int(row["package_count"]) if row.get("package_count") is not None else None,  # type: ignore[arg-type]
+            dimensions=str(row["dimensions"]) if row.get("dimensions") is not None else None,
+            country_of_origin=str(row["country_of_origin"]) if row.get("country_of_origin") is not None else None,
         )
         for row in line_item_rows
     ]

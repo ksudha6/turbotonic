@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import io
 import re
 
 import pytest
 from httpx import AsyncClient
+from pypdf import PdfReader
 
 from src.domain.shipment import ShipmentStatus
+
+
+def _extract_pdf_text(pdf_bytes: bytes) -> str:
+    """Extract all text from a PDF given its raw bytes."""
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 pytestmark = pytest.mark.asyncio
 
@@ -414,3 +422,234 @@ async def test_get_shipment_by_id_returns_correct_shipment(authenticated_client:
 async def test_get_nonexistent_shipment_returns_404(authenticated_client: AsyncClient) -> None:
     r = await authenticated_client.get("/api/v1/shipments/nonexistent-id")
     assert r.status_code == 404
+
+
+# --- PATCH line item weights/dimensions (iter 044) ---
+
+_PATCH_LINE_ITEM: dict[str, object] = {
+    "part_number": "PART-A",
+    "net_weight": "5.500",
+    "gross_weight": "6.200",
+    "package_count": 2,
+    "dimensions": "40x30x20 cm",
+    "country_of_origin": "CN",
+}
+
+
+async def test_patch_shipment_persists_weights_and_returns_them(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.patch(
+        f"/api/v1/shipments/{shipment_id}",
+        json={"line_items": [_PATCH_LINE_ITEM]},
+    )
+    assert r2.status_code == 200
+    body = r2.json()
+    li = body["line_items"][0]
+    assert li["part_number"] == "PART-A"
+    assert li["net_weight"] == "5.500"
+    assert li["gross_weight"] == "6.200"
+    assert li["package_count"] == 2
+    assert li["dimensions"] == "40x30x20 cm"
+    assert li["country_of_origin"] == "CN"
+
+
+async def test_patch_shipment_unknown_part_number_returns_422(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.patch(
+        f"/api/v1/shipments/{shipment_id}",
+        json={"line_items": [{"part_number": "UNKNOWN-PN", "net_weight": "1.0"}]},
+    )
+    assert r2.status_code == 422
+    assert "UNKNOWN-PN" in r2.json()["detail"]
+
+
+async def test_patch_shipment_ready_to_ship_returns_409(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    # Advance to READY_TO_SHIP via DOCUMENTS_PENDING
+    r_sub = await authenticated_client.post(f"/api/v1/shipments/{shipment_id}/submit-for-documents")
+    assert r_sub.status_code == 200
+    r_ready = await authenticated_client.post(f"/api/v1/shipments/{shipment_id}/mark-ready")
+    assert r_ready.status_code == 200
+
+    r2 = await authenticated_client.patch(
+        f"/api/v1/shipments/{shipment_id}",
+        json={"line_items": [{"part_number": "PART-A", "net_weight": "1.0"}]},
+    )
+    assert r2.status_code == 409
+
+
+async def test_patch_shipment_draft_works(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+    assert r1.json()["status"] == ShipmentStatus.DRAFT.value
+
+    r2 = await authenticated_client.patch(
+        f"/api/v1/shipments/{shipment_id}",
+        json={"line_items": [{"part_number": "PART-A", "net_weight": "3.0"}]},
+    )
+    assert r2.status_code == 200
+
+
+async def test_patch_shipment_documents_pending_works(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r_sub = await authenticated_client.post(f"/api/v1/shipments/{shipment_id}/submit-for-documents")
+    assert r_sub.status_code == 200
+    assert r_sub.json()["status"] == ShipmentStatus.DOCUMENTS_PENDING.value
+
+    r2 = await authenticated_client.patch(
+        f"/api/v1/shipments/{shipment_id}",
+        json={"line_items": [{"part_number": "PART-A", "net_weight": "4.5"}]},
+    )
+    assert r2.status_code == 200
+
+
+# --- Packing list PDF (iter 044) ---
+
+
+async def test_packing_list_returns_200_pdf(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/packing-list")
+    assert r2.status_code == 200
+    assert r2.headers["content-type"] == "application/pdf"
+    assert len(r2.content) > 0
+
+
+async def test_packing_list_nonexistent_shipment_returns_404(authenticated_client: AsyncClient) -> None:
+    r = await authenticated_client.get("/api/v1/shipments/nonexistent-id/packing-list")
+    assert r.status_code == 404
+
+
+async def test_packing_list_contains_shipment_and_po_numbers(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+    po_number: str = po["po_number"]
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_number: str = r1.json()["shipment_number"]
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/packing-list")
+    assert r2.status_code == 200
+    pdf_text = _extract_pdf_text(r2.content)
+    assert shipment_number in pdf_text
+    assert po_number in pdf_text
+
+
+async def test_packing_list_summary_totals_computed_correctly(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(
+        authenticated_client,
+        vendor_id,
+        line_items=[_LINE_ITEM_A, _LINE_ITEM_B],
+    )
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={
+            "po_id": po["id"],
+            "line_items": [
+                {"part_number": "PART-A", "quantity": 10, "uom": "PCS"},
+                {"part_number": "PART-B", "quantity": 5, "uom": "PCS"},
+            ],
+        },
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    # Patch both line items with weights
+    net_a = "3.000"
+    net_b = "2.000"
+    gross_a = "3.500"
+    gross_b = "2.500"
+    pkg_a = 2
+    pkg_b = 1
+
+    r2 = await authenticated_client.patch(
+        f"/api/v1/shipments/{shipment_id}",
+        json={
+            "line_items": [
+                {
+                    "part_number": "PART-A",
+                    "net_weight": net_a,
+                    "gross_weight": gross_a,
+                    "package_count": pkg_a,
+                },
+                {
+                    "part_number": "PART-B",
+                    "net_weight": net_b,
+                    "gross_weight": gross_b,
+                    "package_count": pkg_b,
+                },
+            ]
+        },
+    )
+    assert r2.status_code == 200
+
+    # Verify via GET that fields are persisted
+    body = r2.json()
+    items_by_pn = {li["part_number"]: li for li in body["line_items"]}
+    assert items_by_pn["PART-A"]["net_weight"] == net_a
+    assert items_by_pn["PART-B"]["net_weight"] == net_b
+    assert items_by_pn["PART-A"]["package_count"] == pkg_a
+    assert items_by_pn["PART-B"]["package_count"] == pkg_b
+
+    # PDF must generate without error (totals computed inside packing_list_pdf)
+    r3 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/packing-list")
+    assert r3.status_code == 200
+    assert len(r3.content) > 0

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
+from decimal import Decimal
 from typing import Annotated, AsyncIterator
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 
 from src.auth.dependencies import require_role
 from src.db import get_db
@@ -15,9 +16,11 @@ from src.shipment_dto import (
     RemainingShipmentQuantityResponse,
     ShipmentCreate,
     ShipmentResponse,
+    ShipmentUpdate,
     shipment_to_response,
 )
 from src.shipment_repository import ShipmentRepository
+from src.vendor_repository import VendorRepository
 
 router = APIRouter(prefix="/api/v1/shipments", tags=["shipments"])
 
@@ -34,8 +37,14 @@ async def get_po_repo_for_shipment() -> AsyncIterator[PurchaseOrderRepository]:
         yield PurchaseOrderRepository(conn)
 
 
+async def get_vendor_repo_for_shipment() -> AsyncIterator[VendorRepository]:
+    async with get_db() as conn:
+        yield VendorRepository(conn)
+
+
 ShipmentRepoDep = Annotated[ShipmentRepository, Depends(get_shipment_repo)]
 PORepoDep = Annotated[PurchaseOrderRepository, Depends(get_po_repo_for_shipment)]
+VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo_for_shipment)]
 
 
 @router.post("/", response_model=ShipmentResponse, status_code=201)
@@ -178,3 +187,103 @@ async def submit_for_documents(
     await repo.save(shipment)
     rows = await repo.get_line_item_rows(shipment_id)
     return shipment_to_response(shipment, rows)
+
+
+@router.post("/{shipment_id}/mark-ready", response_model=ShipmentResponse)
+async def mark_ready(
+    shipment_id: str,
+    repo: ShipmentRepoDep,
+    _user: User = require_role(UserRole.SM, UserRole.FREIGHT_MANAGER),
+) -> ShipmentResponse:
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+    try:
+        shipment.mark_ready()
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await repo.save(shipment)
+    rows = await repo.get_line_item_rows(shipment_id)
+    return shipment_to_response(shipment, rows)
+
+
+@router.patch("/{shipment_id}", response_model=ShipmentResponse)
+async def update_shipment(
+    shipment_id: str,
+    body: ShipmentUpdate,
+    repo: ShipmentRepoDep,
+    _user: User = require_role(UserRole.SM, UserRole.FREIGHT_MANAGER),
+) -> ShipmentResponse:
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+
+    # Convert DTO list to plain dicts for the domain method
+    updates: list[dict[str, object]] = [
+        {
+            "part_number": li.part_number,
+            "net_weight": li.net_weight,
+            "gross_weight": li.gross_weight,
+            "package_count": li.package_count,
+            "dimensions": li.dimensions,
+            "country_of_origin": li.country_of_origin,
+        }
+        for li in body.line_items
+    ]
+
+    try:
+        shipment.update_line_items(updates)
+    except ValueError as exc:
+        # READY_TO_SHIP status raises ValueError → 409 conflict
+        # Unknown part_number raises ValueError → 422 unprocessable
+        msg = str(exc)
+        if "not allowed" in msg:
+            raise HTTPException(status_code=409, detail=msg) from exc
+        raise HTTPException(status_code=422, detail=msg) from exc
+
+    await repo.save(shipment)
+    rows = await repo.get_line_item_rows(shipment_id)
+    return shipment_to_response(shipment, rows)
+
+
+@router.get("/{shipment_id}/packing-list")
+async def get_packing_list(
+    shipment_id: str,
+    repo: ShipmentRepoDep,
+    po_repo: PORepoDep,
+    vendor_repo: VendorRepoDep,
+    _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
+) -> Response:
+    from src.services.packing_list_pdf import generate_packing_list_pdf
+
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+
+    po = await po_repo.get(shipment.po_id)
+    if po is None:
+        raise HTTPException(status_code=404, detail="Purchase order not found")
+
+    vendor = await vendor_repo.get_by_id(po.vendor_id)
+    vendor_name = vendor.name if vendor is not None else ""
+    vendor_address = vendor.address if vendor is not None else ""
+
+    # Buyer info is owned by the PO; no standalone Buyer entity exists yet
+    buyer_name = po.buyer_name
+    buyer_address = po.ship_to_address
+
+    pdf_bytes = generate_packing_list_pdf(
+        shipment=shipment,
+        po=po,
+        vendor_name=vendor_name,
+        vendor_address=vendor_address,
+        buyer_name=buyer_name,
+        buyer_address=buyer_address,
+    )
+
+    filename = f"packing-list-{shipment.shipment_number}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=\"{filename}\""},
+    )

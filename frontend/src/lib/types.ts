@@ -1,6 +1,49 @@
 // Iter 056/058: MODIFIED is the in-flight negotiation status. Legacy statuses kept as-is.
 export type POStatus = 'DRAFT' | 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'REVISED' | 'MODIFIED';
 
+// Iter 044: Shipment types
+export type ShipmentStatus = 'DRAFT' | 'DOCUMENTS_PENDING' | 'READY_TO_SHIP';
+
+export interface ShipmentLineItem {
+	id: string;
+	shipment_id: string;
+	part_number: string;
+	product_id: string | null;
+	description: string;
+	quantity: number;
+	uom: string;
+	sort_order: number;
+	net_weight: string | null;
+	gross_weight: string | null;
+	package_count: number | null;
+	dimensions: string | null;
+	country_of_origin: string | null;
+}
+
+export interface Shipment {
+	id: string;
+	po_id: string;
+	shipment_number: string;
+	marketplace: string;
+	status: ShipmentStatus;
+	line_items: ShipmentLineItem[];
+	created_at: string;
+	updated_at: string;
+}
+
+export interface ShipmentLineItemUpdate {
+	part_number: string;
+	net_weight?: string | null;
+	gross_weight?: string | null;
+	package_count?: number | null;
+	dimensions?: string | null;
+	country_of_origin?: string | null;
+}
+
+export interface ShipmentUpdate {
+	line_items: ShipmentLineItemUpdate[];
+}
+
 export type VendorStatus = 'ACTIVE' | 'INACTIVE';
 
 export type VendorType = 'PROCUREMENT' | 'OPEX' | 'FREIGHT' | 'MISCELLANEOUS';

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import uuid4
 
 import asyncpg
@@ -74,7 +75,26 @@ class ShipmentRepository:
                     _iso(shipment.updated_at),
                     shipment.id,
                 )
-                # Line items are immutable after creation; no update needed
+                # Iter 044: update weight/dimension fields on existing line items
+                for item in shipment.line_items:
+                    await self._conn.execute(
+                        """
+                        UPDATE shipment_line_items SET
+                            net_weight = $1,
+                            gross_weight = $2,
+                            package_count = $3,
+                            dimensions = $4,
+                            country_of_origin = $5
+                        WHERE shipment_id = $6 AND part_number = $7
+                        """,
+                        str(item.net_weight) if item.net_weight is not None else None,
+                        str(item.gross_weight) if item.gross_weight is not None else None,
+                        item.package_count,
+                        item.dimensions,
+                        item.country_of_origin,
+                        shipment.id,
+                        item.part_number,
+                    )
 
     async def get(self, shipment_id: str) -> Shipment | None:
         row = await self._conn.fetchrow(
@@ -137,6 +157,12 @@ class ShipmentRepository:
         return {row["part_number"]: int(row["total"]) for row in rows}
 
 
+def _decimal_or_none(value: object) -> Decimal | None:
+    if value is None:
+        return None
+    return Decimal(str(value))
+
+
 def _reconstruct(
     row: asyncpg.Record,
     item_rows: list[asyncpg.Record],
@@ -148,6 +174,11 @@ def _reconstruct(
             description=r["description"] or "",
             quantity=r["quantity"],
             uom=r["uom"],
+            net_weight=_decimal_or_none(r["net_weight"]) if "net_weight" in r.keys() else None,
+            gross_weight=_decimal_or_none(r["gross_weight"]) if "gross_weight" in r.keys() else None,
+            package_count=r["package_count"] if "package_count" in r.keys() else None,
+            dimensions=r["dimensions"] if "dimensions" in r.keys() else None,
+            country_of_origin=r["country_of_origin"] if "country_of_origin" in r.keys() else None,
         )
         for r in item_rows
     ]

@@ -420,3 +420,21 @@ async def init_db(conn: asyncpg.Connection) -> None:
         ON shipment_line_items (shipment_id)
         """
     )
+
+    # Iter 044: weight, dimension, and origin fields for packing list generation.
+    # All nullable; populated via PATCH /api/v1/shipments/{id}.
+    await conn.execute(
+        "ALTER TABLE shipment_line_items ADD COLUMN IF NOT EXISTS net_weight TEXT"
+    )
+    await conn.execute(
+        "ALTER TABLE shipment_line_items ADD COLUMN IF NOT EXISTS gross_weight TEXT"
+    )
+    await conn.execute(
+        "ALTER TABLE shipment_line_items ADD COLUMN IF NOT EXISTS package_count INTEGER"
+    )
+    await conn.execute(
+        "ALTER TABLE shipment_line_items ADD COLUMN IF NOT EXISTS dimensions TEXT"
+    )
+    await conn.execute(
+        "ALTER TABLE shipment_line_items ADD COLUMN IF NOT EXISTS country_of_origin TEXT"
+    )
