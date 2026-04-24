@@ -90,10 +90,47 @@ Plan Task 5 Step 6 requests 390px + 1024px JPEGs of `/ui-demo` at `frontend/test
 
 ## Notes
 
-Pending — filled at iteration close.
+Iter 063 closed on 2026-04-24. Seven commits landed on `ux-changes`:
+- `40aa0fb` Task 5 Button primitive + `/ui-demo` Button section + new `primitives.spec.ts` (3 tests).
+- `56ed31f` Task 5 review fix: rename DOM class `btn` → `ui-btn` (pre-revamp `global.css` `.btn:hover { opacity: 0.85 }` was leaking onto secondary/ghost variants), fix misleading test title, strengthen the secondary/ghost visibility test with `toHaveClass` assertions.
+- `14ed9c9` Task 6 StatusPill primitive (five tone variants with leading dot).
+- `66241b2` Task 6 review fix: strengthen StatusPill test with `toHaveClass(<tone>)` + `.dot` attached.
+- `488c1a3` Task 7 ProgressBar primitive (role=progressbar, aria-valuenow clamped via `$derived`).
+- `4e9f045` Task 8 form controls bundle: Input, Select, DateInput (native), Toggle (button+aria-pressed pattern).
 
-### PM-delegate decisions (autonomous mode)
+Full suite green at iter open (591 backend + 100 browser) and iter close (591 backend + 109 browser — 9 new primitive tests).
 
-- **Button ghost variant.** Plan Task 5 ships `primary | secondary | ghost` as a typed union with scoped CSS for each. Ghost is not visible in the Lovable mock's button examples, but it's in the plan and in the design spec. Shipping per plan; reversible by future iteration if ghost is never consumed by an aggregate page.
-- **DateInput chrome.** Native `<input type="date">` wrapped in the token-driven border/padding. No custom calendar, no library. User confirmed.
-- **Capture script port.** Plan says 5173; project Makefile uses 5174. Iteration uses 5174. Flagging as plan bug for later cleanup — not critical.
+### Decisions
+
+- **`ui-<name>` class convention established.** Every `$lib/ui/` primitive's outermost DOM class is `ui-btn` / `ui-pill` / `ui-progress` / `ui-input` / `ui-select` / `ui-date` / `ui-toggle`. This prevents collision with pre-revamp global rules (`.btn`, `.badge`, `.input`, `.select`, `.card`, `.table`, `.form-group`, `.container`). The Button task exposed the risk when the pre-revamp `.btn:hover` leaked onto scoped-but-unrenamed Button variants; the convention was enforced retroactively for Task 5 and proactively for Tasks 6-8. This deviates from the plan's literal class names in every primitive but preserves the plan's intent (scoped styling, token-driven).
+- **Playwright mock order.** The plan's failing-first helpers called `mockUser` before `mockApiCatchAll`, but Playwright route handlers dispatch LIFO. The catch-all matched `/api/v1/auth/me` and the root layout redirected to `/login`, breaking every primitive test. Corrected order (`mockApiCatchAll` first, then `mockUser`) applied consistently across all 9 tests.
+- **Toggle ARIA.** The plan applied `role="switch"` AND `aria-pressed={pressed}` on the same element. These conflict per ARIA (switch uses `aria-checked`). Shipped `<button type="button" aria-pressed>` without `role="switch"` — a valid toggle-button pattern that matches the test assertion.
+- **Button ghost variant kept.** Earlier PM-delegate consideration was to defer ghost until a real consumer needed it. After reading Plan Task 5, ghost is explicitly in the plan with its own scoped styling; shipped as-is.
+- **DateInput native.** `<input type="date">` wrapped in the token-driven border/padding. No custom calendar, no library.
+
+### DDD vocab assessment
+
+No new domain terms emerged. The primitives are UI design-system vocabulary (Button, StatusPill, ProgressBar, Input, Select, DateInput, Toggle), not business domain terms. `docs/ddd-vocab.md` unchanged.
+
+### Backlog captured from code reviews
+
+- **StatusPill hex-to-token refactor.** Five tone rules use raw hex values that exactly match existing `--<color>-100` / `--<color>-800` tokens in `global.css`. Mechanical refactor deferred to a later iter to avoid mid-iteration drift. The pre-revamp `$lib/components/StatusPill.svelte` already uses tokens; this refactor brings the new primitive to the same hygiene level.
+- **Tone vocabulary reconciliation.** `--amber-*` tokens vs `.orange` tone class on StatusPill. One or the other should be renamed so consumers read a consistent color family. Deferred.
+- **ProgressBar clamp edge cases.** Primitive clamps `value` via `$derived(Math.max(0, Math.min(100, value)))` but the test only exercises `value=60`. Add tests for `value=-10` (expect `aria-valuenow='0'`) and `value=150` (expect `aria-valuenow='100'`) when a consumer surfaces the need. Deferred.
+- **Scratch screenshots (Plan Task 5 Step 6).** 390px + 1024px JPEGs of `/ui-demo`. Optional visual-verification artifact; did not run this iteration. Can be captured on demand before Phase 4.0 close (iter 070).
+- **Plan capture-script port.** Plan says `localhost:5173`; Makefile runs vite on `5174`. If anyone resurrects the capture script, update the port. Low-priority plan-cleanup.
+
+### What exists after iter 063
+
+Seven primitives under `frontend/src/lib/ui/`:
+- `Button.svelte` (primary | secondary | ghost, disabled)
+- `StatusPill.svelte` (green | blue | orange | red | gray tones with leading dot)
+- `ProgressBar.svelte` (0-100 clamped, optional label, ARIA progressbar)
+- `Input.svelte` (bindable value, invalid state)
+- `Select.svelte` (bindable value, options, invalid state)
+- `DateInput.svelte` (native `<input type="date">`, bindable value)
+- `Toggle.svelte` (button + aria-pressed, bindable pressed)
+
+All exercised by `frontend/tests/primitives.spec.ts` (9 tests) via the `/ui-demo` gallery route. Pre-revamp `$lib/components/StatusPill.svelte` and the rest of `$lib/components/` continue to serve pre-revamp pages unchanged.
+
+Carried forward: none. All four plan tasks (5, 6, 7, 8) completed.
