@@ -19,6 +19,7 @@
 	import DataTable from '$lib/ui/DataTable.svelte';
 	import PageHeader from '$lib/ui/PageHeader.svelte';
 	import DetailHeader from '$lib/ui/DetailHeader.svelte';
+	import Sidebar from '$lib/ui/Sidebar.svelte';
 
 	let lastClicked = $state('');
 	let page = $state(1);
@@ -185,4 +186,9 @@
 			<StatusPill tone="blue" label="Submitted" />
 		{/snippet}
 	</DetailHeader>
+</section>
+
+<section>
+	<h2>Sidebar</h2>
+	<Sidebar role="ADMIN" data-testid="ui-sidebar" />
 </section>

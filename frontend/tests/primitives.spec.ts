@@ -252,3 +252,24 @@ test.describe('Page + Detail headers', () => {
 		await expect(header).toContainText('Submitted');
 	});
 });
+
+test.describe('Sidebar primitive', () => {
+	test('renders items for the given role', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const sidebar = page.getByTestId('ui-sidebar');
+		await expect(sidebar.getByRole('link', { name: 'Dashboard' })).toBeVisible();
+		await expect(sidebar.getByRole('link', { name: 'Purchase Orders' })).toBeVisible();
+	});
+
+	test('each sidebar link has a valid href', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const links = await page.getByTestId('ui-sidebar').getByRole('link').all();
+		for (const link of links) {
+			await expect(link).toHaveAttribute('href', /^\//);
+		}
+	});
+});
