@@ -59,12 +59,14 @@
 <style>
 	.ui-sidebar {
 		width: 240px;
+		height: 100%;
 		background-color: var(--surface-sidebar);
 		color: var(--text-sidebar);
 		padding: var(--space-6);
 		display: flex;
 		flex-direction: column;
 		gap: var(--space-6);
+		box-sizing: border-box;
 	}
 	.brand {
 		display: flex;
