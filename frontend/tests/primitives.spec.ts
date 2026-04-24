@@ -190,3 +190,29 @@ test.describe('Timeline + ActivityFeed primitives', () => {
 		await expect(feed).toContainText('2m ago');
 	});
 });
+
+test.describe('State primitives', () => {
+	test('LoadingState renders a spinner labelled for assistive tech', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByTestId('ui-loading')).toHaveAttribute('role', 'status');
+	});
+
+	test('EmptyState renders title + description', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const empty = page.getByTestId('ui-empty');
+		await expect(empty).toContainText('No results');
+		await expect(empty).toContainText('Try adjusting');
+	});
+
+	test('ErrorState shows message and a Retry button', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByTestId('ui-error')).toContainText('Something broke');
+		await expect(page.getByTestId('ui-error-retry')).toBeVisible();
+	});
+});

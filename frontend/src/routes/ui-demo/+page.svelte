@@ -13,6 +13,9 @@
 	import KpiCard from '$lib/ui/KpiCard.svelte';
 	import Timeline from '$lib/ui/Timeline.svelte';
 	import ActivityFeed from '$lib/ui/ActivityFeed.svelte';
+	import LoadingState from '$lib/ui/LoadingState.svelte';
+	import EmptyState from '$lib/ui/EmptyState.svelte';
+	import ErrorState from '$lib/ui/ErrorState.svelte';
 </script>
 
 <h1>Phase 4.0 UI Demo</h1>
@@ -123,4 +126,13 @@
 		]}
 		data-testid="ui-feed"
 	/>
+</section>
+
+<section>
+	<h2>State primitives</h2>
+	<div style="display:flex;flex-direction:column;gap:1.5rem;">
+		<LoadingState data-testid="ui-loading" />
+		<EmptyState title="No results" description="Try adjusting filters." data-testid="ui-empty" />
+		<ErrorState message="Something broke" onRetry={() => console.log('retry')} data-testid="ui-error" />
+	</div>
 </section>
