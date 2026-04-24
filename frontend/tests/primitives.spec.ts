@@ -82,3 +82,42 @@ test.describe('ProgressBar primitive', () => {
 		await expect(bar).toHaveAttribute('aria-valuenow', '60');
 	});
 });
+
+test.describe('Form control primitives', () => {
+	test('Input primitive accepts typed text', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const input = page.getByTestId('ui-input-name');
+		await input.fill('hello');
+		await expect(input).toHaveValue('hello');
+	});
+
+	test('Select primitive changes value', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const select = page.getByTestId('ui-select-country');
+		await select.selectOption('US');
+		await expect(select).toHaveValue('US');
+	});
+
+	test('DateInput primitive renders', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const date = page.getByTestId('ui-date-due');
+		await expect(date).toBeVisible();
+		await expect(date).toHaveAttribute('type', 'date');
+	});
+
+	test('Toggle primitive flips aria-pressed on click', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const toggle = page.getByTestId('ui-toggle');
+		await expect(toggle).toHaveAttribute('aria-pressed', 'false');
+		await toggle.click();
+		await expect(toggle).toHaveAttribute('aria-pressed', 'true');
+	});
+});

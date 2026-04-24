@@ -2,6 +2,10 @@
 	import Button from '$lib/ui/Button.svelte';
 	import StatusPill from '$lib/ui/StatusPill.svelte';
 	import ProgressBar from '$lib/ui/ProgressBar.svelte';
+	import Input from '$lib/ui/Input.svelte';
+	import Select from '$lib/ui/Select.svelte';
+	import DateInput from '$lib/ui/DateInput.svelte';
+	import Toggle from '$lib/ui/Toggle.svelte';
 </script>
 
 <h1>Phase 4.0 UI Demo</h1>
@@ -30,4 +34,19 @@
 <section>
 	<h2>ProgressBar</h2>
 	<ProgressBar value={60} label="60%" data-testid="ui-progress-60" />
+</section>
+
+<section>
+	<h2>Form controls</h2>
+	<div style="display:flex;flex-direction:column;gap:0.75rem;max-width:24rem;">
+		<label>Name <Input data-testid="ui-input-name" /></label>
+		<label>Country
+			<Select
+				options={[{ value: '', label: 'Select...' }, { value: 'US', label: 'United States' }, { value: 'IN', label: 'India' }]}
+				data-testid="ui-select-country"
+			/>
+		</label>
+		<label>Due <DateInput data-testid="ui-date-due" /></label>
+		<Toggle label="Notifications" data-testid="ui-toggle" />
+	</div>
 </section>
