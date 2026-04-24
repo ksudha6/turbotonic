@@ -10,6 +10,7 @@ from src.auth.dependencies import check_vendor_access, require_auth, require_rol
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType
 from src.domain.invoice import Invoice, InvoiceLineItem
+from src.domain.purchase_order import LineItemStatus
 from src.domain.user import User, UserRole
 from src.dto import (
     BulkInvoicePdfRequest,
@@ -78,15 +79,15 @@ async def get_remaining_quantities(
 
     lines = []
     for item in po.line_items:
-        # REJECTED lines contribute zero remaining quantity
-        if item.status.value == "REJECTED":
+        # Only ACCEPTED lines are billable; everything else reports zero remaining.
+        if item.status is LineItemStatus.ACCEPTED:
             lines.append(
                 RemainingLineItem(
                     part_number=item.part_number,
                     description=item.description,
                     ordered=item.quantity,
                     invoiced=invoiced.get(item.part_number, 0),
-                    remaining=0,
+                    remaining=item.quantity - invoiced.get(item.part_number, 0),
                 )
             )
         else:
@@ -96,7 +97,7 @@ async def get_remaining_quantities(
                     description=item.description,
                     ordered=item.quantity,
                     invoiced=invoiced.get(item.part_number, 0),
-                    remaining=item.quantity - invoiced.get(item.part_number, 0),
+                    remaining=0,
                 )
             )
 
@@ -130,8 +131,8 @@ async def create_invoice(
         if any(qty > 0 for qty in invoiced.values()):
             raise HTTPException(status_code=409, detail="An invoice already exists for this OPEX PO")
 
-    # REJECTED line items are excluded from invoicing
-    accepted_po_lines = [item for item in po.line_items if item.status.value != "REJECTED"]
+    # Only ACCEPTED lines are billable; PENDING, MODIFIED_BY_*, and REMOVED are excluded.
+    accepted_po_lines = [item for item in po.line_items if item.status is LineItemStatus.ACCEPTED]
     po_lines_by_part = {item.part_number: item for item in accepted_po_lines}
 
     if body.line_items is not None:
