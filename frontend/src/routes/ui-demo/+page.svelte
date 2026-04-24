@@ -10,6 +10,7 @@
 	import PanelCard from '$lib/ui/PanelCard.svelte';
 	import AttributeList from '$lib/ui/AttributeList.svelte';
 	import FormCard from '$lib/ui/FormCard.svelte';
+	import KpiCard from '$lib/ui/KpiCard.svelte';
 </script>
 
 <h1>Phase 4.0 UI Demo</h1>
@@ -87,4 +88,14 @@
 	<FormCard title="New thing" onSubmit={() => console.log('submit')} onCancel={() => console.log('cancel')} data-testid="ui-formcard">
 		<Input data-testid="ui-formcard-input" />
 	</FormCard>
+</section>
+
+<section>
+	<h2>KpiCard</h2>
+	<KpiCard
+		label="OUTSTANDING"
+		value="$24,300"
+		delta={{ value: '+12%', tone: 'positive' }}
+		data-testid="ui-kpi"
+	/>
 </section>

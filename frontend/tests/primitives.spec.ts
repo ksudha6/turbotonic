@@ -159,3 +159,15 @@ test.describe('Panel primitives', () => {
 		await expect(page.getByTestId('ui-formcard-submit')).toBeVisible();
 	});
 });
+
+test.describe('KpiCard primitive', () => {
+	test('KpiCard shows label, value, and delta chip', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const kpi = page.getByTestId('ui-kpi');
+		await expect(kpi).toContainText('OUTSTANDING');
+		await expect(kpi).toContainText('$24,300');
+		await expect(kpi).toContainText('+12%');
+	});
+});
