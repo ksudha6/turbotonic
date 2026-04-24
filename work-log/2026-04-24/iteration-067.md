@@ -89,10 +89,52 @@ None.
 
 ## Notes
 
-Pending — filled at iteration close after the brainstorm resolves.
+Iter 067 closed on 2026-04-24. Four commits landed on `ux-changes`:
+- `4a3394f` Open iter doc.
+- `44e5085` Task 16 `sidebar-items.ts` (initial mirror derived from `permissions.ts`) + spec.
+- `98ad244` Task 17 `Sidebar` primitive consuming `sidebar-items`.
+- `1c47336` Task 18 post-brainstorm: `sidebar-items.ts` rewritten as explicit `Record<UserRole, SidebarItem[]>`, decoupled from `permissions.ts`; spec expanded.
 
-### PM-delegate decisions (autonomous mode)
+122 Playwright at open → 126 after Task 16 → 128 after Task 17 → 130 at close. Backend stays 591.
 
-- **Conservative mirror for Task 16.** Plan explicitly says: implement the conservative version that mirrors today's layout; Task 18 revisits. No judgment call — follow plan.
-- **Sidebar's aria-current test swap.** Plan swaps the aria-current test for an href-regex test because `/ui-demo` is not `/dashboard` so nothing matches. Accepting the plan's swap.
-- **Brainstorm question sent verbatim.** The plan wrote the exact question to ask. I send it without paraphrase so the user sees the same phrasing the plan expected.
+### Brainstorm resolution (Task 18)
+
+User confirmed and extended:
+- **FREIGHT_MANAGER gains Invoices** in the sidebar. OpEx-only scoping is a page-level concern — backlog'd for iter 071+ aggregate pages.
+- **ADMIN gains Users** in the sidebar, pointing to `/users`. Route doesn't exist yet (404); will be built in a future iteration. Memory backlog already tracks the Users management page.
+- **SM PO list filtered to procurement-only** — backlog'd (page-level filter, not sidebar).
+- **FREIGHT_MANAGER PO list filtered to OpEx-only** — backlog'd (page-level filter).
+- **Shipments** not added (no dedicated list/detail page in the revamp yet).
+
+### Design decision
+
+Sidebar visibility decoupled from `permissions.ts` capability helpers. The `canView*` helpers gate page-level access (backend + route guards). Sidebar is a separate nav-visibility concern — the new explicit `Record<UserRole, SidebarItem[]>` map makes every role's items auditable in one place. Adding FREIGHT_MANAGER to `canViewInvoices` would have leaked backend access before we're ready; explicit mapping avoids that.
+
+TypeScript `Record<UserRole, SidebarItem[]>` guarantees exhaustiveness: if a new role is added to `UserRole` and not to the map, the compiler errors.
+
+### DDD vocab assessment
+
+No new domain terms. `docs/ddd-vocab.md` unchanged.
+
+### Backlog captured
+
+- **FREIGHT_MANAGER OpEx-invoice access.** Backend invoice list endpoint currently does not filter by vendor type. Need a vendor-type-scoped filter for FREIGHT_MANAGER reads, plus update `canViewInvoices` in `permissions.ts` to include FREIGHT_MANAGER. Iter 071+ when redesigning `/invoices`.
+- **FREIGHT_MANAGER OpEx-PO filter on PO list.** Same pattern.
+- **SM PO list filtered to procurement-only.** Even though SM has `canViewPOs`, the list UI should default-filter to PROCUREMENT type.
+- **Users management page `/users`.** ADMIN-only CRUD for users. Nav link already shipped in iter 067; page 404s until built.
+- **Sidebar primitive test weak-guard.** Task 17 test `each sidebar link has a valid href` used `links.all()` which returns `[]` when the locator finds nothing, so the assertion trivially passed in the failing-first run. Strengthen with an `expect(locator).not.toHaveCount(0)` precondition, or rely on the first test (which did FAIL correctly) as the primary guard. Minor.
+
+### What exists after iter 067
+
+Twenty-two primitives under `frontend/src/lib/ui/`:
+- Leaves (iter 063, 7): Button, StatusPill, ProgressBar, Input, Select, DateInput, Toggle.
+- Composites (iter 064, 5): FormField, PanelCard, AttributeList, FormCard, KpiCard.
+- Display + state (iter 065, 6): Timeline, ActivityFeed, LoadingState, EmptyState, ErrorState, ErrorBoundary.
+- Table + headers (iter 066, 3): DataTable, PageHeader, DetailHeader.
+- Shell (iter 067, 1): Sidebar.
+
+Plus `sidebar-items.ts` module exporting explicit role → items map.
+
+`primitives.spec.ts`: 24 tests. `sidebar-items.spec.ts`: 6 tests. `/ui-demo`: 14 sections.
+
+Carried forward: none.
