@@ -55,7 +55,7 @@ async def test_full_po_lifecycle(authenticated_client: AsyncClient):
     # 3. Submit PO
     submit_resp = await client.post(f"/api/v1/po/{po_id}/submit")
     assert submit_resp.status_code == 200
-    assert submit_resp.json()["status"] == "PENDING"
+    assert submit_resp.json()["po"]["status"] == "PENDING"
 
     # 4. Accept PO
     accept_resp = await client.post(f"/api/v1/po/{po_id}/accept")

@@ -101,7 +101,7 @@ async def test_pdf_exports_for_every_status(authenticated_client: AsyncClient) -
     # PENDING: create + submit
     po_pending = await _create_po(client)
     submit_resp = await client.post(f"/api/v1/po/{po_pending['id']}/submit")
-    assert submit_resp.json()["status"] == POStatus.PENDING.value
+    assert submit_resp.json()["po"]["status"] == POStatus.PENDING.value
 
     # ACCEPTED: create + submit + accept
     po_accepted = await _create_po(client)

@@ -32,6 +32,7 @@ class ActivityEvent(Enum):
     MILESTONE_POSTED = "MILESTONE_POSTED"
     MILESTONE_OVERDUE = "MILESTONE_OVERDUE"
     CERT_UPLOADED = "CERT_UPLOADED"
+    CERT_REQUESTED = "CERT_REQUESTED"
     PACKAGING_COLLECTED = "PACKAGING_COLLECTED"
     PACKAGING_MISSING = "PACKAGING_MISSING"
     # Iter 060: emitted when the notification dispatcher catches a send failure.
@@ -55,6 +56,8 @@ class EntityType(Enum):
 class TargetRole(Enum):
     SM = "SM"
     VENDOR = "VENDOR"
+    QUALITY_LAB = "QUALITY_LAB"
+    FREIGHT_MANAGER = "FREIGHT_MANAGER"
 
 
 @dataclass(frozen=True)
@@ -106,6 +109,7 @@ EVENT_METADATA: dict[ActivityEvent, tuple[NotificationCategory, TargetRole | Non
     ActivityEvent.MILESTONE_POSTED: (NotificationCategory.LIVE, TargetRole.SM),
     ActivityEvent.MILESTONE_OVERDUE: (NotificationCategory.DELAYED, TargetRole.SM),
     ActivityEvent.CERT_UPLOADED: (NotificationCategory.LIVE, TargetRole.SM),
+    ActivityEvent.CERT_REQUESTED: (NotificationCategory.ACTION_REQUIRED, TargetRole.QUALITY_LAB),
     ActivityEvent.PACKAGING_COLLECTED: (NotificationCategory.LIVE, TargetRole.SM),
     ActivityEvent.PACKAGING_MISSING: (NotificationCategory.ACTION_REQUIRED, TargetRole.SM),
     # Iter 060: DELAYED because an operator must intervene; surfaced to every role.

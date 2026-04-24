@@ -32,7 +32,7 @@
 	import ActivityTimeline from '$lib/components/ActivityTimeline.svelte';
 	import LineNegotiationRow from '$lib/components/LineNegotiationRow.svelte';
 	import SubmitResponseBar from '$lib/components/SubmitResponseBar.svelte';
-	import type { PurchaseOrder, InvoiceListItem, ReferenceData, RemainingLine, InvoiceLineItemCreate, MilestoneUpdate, UserRole } from '$lib/types';
+	import type { PurchaseOrder, InvoiceListItem, ReferenceData, RemainingLine, InvoiceLineItemCreate, MilestoneUpdate, UserRole, CertWarning } from '$lib/types';
 	import { buildLabelResolver } from '$lib/labels';
 	import { canEditPO, canSubmitPO, canAcceptRejectPO, canCreateInvoice, canPostMilestone, canMarkAdvancePaid, canModifyPostAccept } from '$lib/permissions';
 
@@ -52,6 +52,9 @@
 	let submitResponseError: string = $state('');
 	// Iter 059: advance-payment gate and post-accept mutation UI state.
 	let advanceError: string = $state('');
+	// Iter 039: cert warnings from quality gate on submit/resubmit.
+	let certWarnings: CertWarning[] = $state([]);
+	let certWarningsDismissed: boolean = $state(false);
 	let showAddLineDialog: boolean = $state(false);
 	let addLineError: string = $state('');
 	let removeLineErrors: Map<string, string> = $state(new Map());
@@ -93,7 +96,9 @@
 	});
 
 	async function handleSubmit() {
-		await submitPO(id);
+		const result = await submitPO(id);
+		certWarnings = result.cert_warnings;
+		certWarningsDismissed = false;
 		await fetchPO();
 	}
 
@@ -103,7 +108,9 @@
 	}
 
 	async function handleResubmit() {
-		await resubmitPO(id);
+		const result = await resubmitPO(id);
+		certWarnings = result.cert_warnings;
+		certWarningsDismissed = false;
 		await fetchPO();
 	}
 
@@ -369,6 +376,21 @@
 			</div>
 		{/if}
 	</div>
+
+	{#if certWarnings.length > 0 && !certWarningsDismissed}
+		<div class="section card cert-warnings-banner" data-testid="cert-warnings-banner">
+			<div class="cert-warnings-header">
+				<strong>Certificate warnings for {po.marketplace}</strong>
+				<button class="btn-dismiss" onclick={() => { certWarningsDismissed = true; }} aria-label="Dismiss">✕</button>
+			</div>
+			<p>The following products are missing certificates for {po.marketplace}:</p>
+			<ul>
+				{#each certWarnings as w}
+					<li>{w.part_number} — {w.qualification_name} ({w.reason})</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
 
 	<div class="section card">
 		<h2>Buyer</h2>

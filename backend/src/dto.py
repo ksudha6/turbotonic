@@ -536,3 +536,19 @@ def invoice_to_list_item(inv: Invoice) -> InvoiceListItem:
 
 class BulkInvoicePdfRequest(BaseModel):
     invoice_ids: list[str]
+
+
+# Iter 039: quality gate on PO submit. Warnings are transient (computed at
+# submit time); they are not stored and are absent from all GET responses.
+class CertWarningResponse(BaseModel):
+    line_item_index: int
+    part_number: str
+    product_id: str
+    qualification_name: str
+    reason: str  # CertWarningReason.value — "MISSING" or "EXPIRED"
+
+
+class POSubmitResponse(BaseModel):
+    # Wraps the standard PO response plus advisory cert warnings from the quality gate.
+    po: PurchaseOrderResponse
+    cert_warnings: list[CertWarningResponse]
