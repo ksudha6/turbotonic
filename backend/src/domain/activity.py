@@ -38,6 +38,8 @@ class ActivityEvent(Enum):
     # Iter 060: emitted when the notification dispatcher catches a send failure.
     # Operator can replay from activity_log; no automatic retry.
     EMAIL_SEND_FAILED = "EMAIL_SEND_FAILED"
+    # Iter 046: document uploaded against a shipment document requirement.
+    DOCUMENT_UPLOADED = "DOCUMENT_UPLOADED"
 
 
 class NotificationCategory(Enum):
@@ -51,6 +53,7 @@ class EntityType(Enum):
     INVOICE = "INVOICE"
     CERTIFICATE = "CERTIFICATE"
     PACKAGING = "PACKAGING"
+    SHIPMENT = "SHIPMENT"
 
 
 class TargetRole(Enum):
@@ -114,4 +117,6 @@ EVENT_METADATA: dict[ActivityEvent, tuple[NotificationCategory, TargetRole | Non
     ActivityEvent.PACKAGING_MISSING: (NotificationCategory.ACTION_REQUIRED, TargetRole.SM),
     # Iter 060: DELAYED because an operator must intervene; surfaced to every role.
     ActivityEvent.EMAIL_SEND_FAILED: (NotificationCategory.DELAYED, None),
+    # Iter 046: document uploaded against shipment requirement; SM is notified.
+    ActivityEvent.DOCUMENT_UPLOADED: (NotificationCategory.LIVE, TargetRole.SM),
 }

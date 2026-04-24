@@ -438,3 +438,26 @@ async def init_db(conn: asyncpg.Connection) -> None:
     await conn.execute(
         "ALTER TABLE shipment_line_items ADD COLUMN IF NOT EXISTS country_of_origin TEXT"
     )
+
+    # Iter 046: document requirements checklist per shipment.
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS shipment_document_requirements (
+            id               TEXT PRIMARY KEY,
+            shipment_id      TEXT NOT NULL REFERENCES shipments(id),
+            document_type    TEXT NOT NULL,
+            is_auto_generated INTEGER NOT NULL DEFAULT 0,
+            status           TEXT NOT NULL DEFAULT 'PENDING',
+            document_id      TEXT REFERENCES files(id),
+            created_at       TEXT NOT NULL,
+            updated_at       TEXT NOT NULL
+        )
+        """
+    )
+
+    await conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_shipment_document_requirements_shipment
+        ON shipment_document_requirements (shipment_id)
+        """
+    )

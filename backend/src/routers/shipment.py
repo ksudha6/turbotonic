@@ -2,15 +2,31 @@ from __future__ import annotations
 
 import re
 from decimal import Decimal
+from pathlib import Path
 from typing import Annotated, AsyncIterator
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 
+from src.activity_repository import ActivityLogRepository
 from src.auth.dependencies import require_role
+from src.certificate_repository import CertificateRepository
 from src.db import get_db
+from src.document_repository import DocumentRepository
+from src.domain.activity import ActivityEvent, EntityType
+from src.domain.document import FileMetadata
 from src.domain.shipment import Shipment, ShipmentLineItem, ShipmentStatus, validate_shipment_quantities
+from src.domain.shipment_document_requirement import ShipmentDocumentRequirement
 from src.domain.user import User, UserRole
+from src.packaging_repository import PackagingSpecRepository
+from src.qualification_type_repository import QualificationTypeRepository
 from src.repository import PurchaseOrderRepository
+from src.shipment_document_requirement_dto import (
+    ReadinessResultResponse,
+    ShipmentDocumentRequirementCreate,
+    ShipmentDocumentRequirementResponse,
+    readiness_result_to_response,
+    requirement_to_response,
+)
 from src.shipment_dto import (
     RemainingShipmentQuantity,
     RemainingShipmentQuantityResponse,
@@ -20,11 +36,13 @@ from src.shipment_dto import (
     shipment_to_response,
 )
 from src.shipment_repository import ShipmentRepository
+from src.services.file_storage import FileStorageService
 from src.vendor_repository import VendorRepository
 
 router = APIRouter(prefix="/api/v1/shipments", tags=["shipments"])
 
 SHIPMENT_NUMBER_RE = re.compile(r"^SHP-\d{8}-[0-9A-F]{4}$")
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
 async def get_shipment_repo() -> AsyncIterator[ShipmentRepository]:
@@ -42,9 +60,44 @@ async def get_vendor_repo_for_shipment() -> AsyncIterator[VendorRepository]:
         yield VendorRepository(conn)
 
 
+async def get_activity_repo_for_shipment() -> AsyncIterator[ActivityLogRepository]:
+    async with get_db() as conn:
+        yield ActivityLogRepository(conn)
+
+
+async def get_cert_repo_for_shipment() -> AsyncIterator[CertificateRepository]:
+    async with get_db() as conn:
+        yield CertificateRepository(conn)
+
+
+async def get_packaging_repo_for_shipment() -> AsyncIterator[PackagingSpecRepository]:
+    async with get_db() as conn:
+        yield PackagingSpecRepository(conn)
+
+
+async def get_qt_repo_for_shipment() -> AsyncIterator[QualificationTypeRepository]:
+    async with get_db() as conn:
+        yield QualificationTypeRepository(conn)
+
+
+async def get_document_repo_for_shipment() -> AsyncIterator[DocumentRepository]:
+    async with get_db() as conn:
+        yield DocumentRepository(conn)
+
+
+def get_file_storage_for_shipment() -> FileStorageService:
+    return FileStorageService(Path(__file__).resolve().parent.parent.parent / "uploads")
+
+
 ShipmentRepoDep = Annotated[ShipmentRepository, Depends(get_shipment_repo)]
 PORepoDep = Annotated[PurchaseOrderRepository, Depends(get_po_repo_for_shipment)]
 VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo_for_shipment)]
+ActivityRepoDep = Annotated[ActivityLogRepository, Depends(get_activity_repo_for_shipment)]
+CertRepoDep = Annotated[CertificateRepository, Depends(get_cert_repo_for_shipment)]
+PackagingRepoDep = Annotated[PackagingSpecRepository, Depends(get_packaging_repo_for_shipment)]
+QtRepoDep = Annotated[QualificationTypeRepository, Depends(get_qt_repo_for_shipment)]
+DocumentRepoDep = Annotated[DocumentRepository, Depends(get_document_repo_for_shipment)]
+FileStorageDep = Annotated[FileStorageService, Depends(get_file_storage_for_shipment)]
 
 
 @router.post("/", response_model=ShipmentResponse, status_code=201)
@@ -177,6 +230,8 @@ async def submit_for_documents(
     repo: ShipmentRepoDep,
     _user: User = require_role(UserRole.SM, UserRole.FREIGHT_MANAGER),
 ) -> ShipmentResponse:
+    from src.services.shipment_service import create_default_requirements
+
     shipment = await repo.get(shipment_id)
     if shipment is None:
         raise HTTPException(status_code=404, detail="Shipment not found")
@@ -185,6 +240,9 @@ async def submit_for_documents(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await repo.save(shipment)
+    # Auto-create default requirements for PACKING_LIST and COMMERCIAL_INVOICE
+    default_reqs = create_default_requirements(shipment_id)
+    await repo.save_requirements_batch(default_reqs)
     rows = await repo.get_line_item_rows(shipment_id)
     return shipment_to_response(shipment, rows)
 
@@ -193,11 +251,31 @@ async def submit_for_documents(
 async def mark_ready(
     shipment_id: str,
     repo: ShipmentRepoDep,
+    cert_repo: CertRepoDep,
+    packaging_repo: PackagingRepoDep,
+    qt_repo: QtRepoDep,
     _user: User = require_role(UserRole.SM, UserRole.FREIGHT_MANAGER),
 ) -> ShipmentResponse:
+    from src.services.shipment_service import check_readiness
+
     shipment = await repo.get(shipment_id)
     if shipment is None:
         raise HTTPException(status_code=404, detail="Shipment not found")
+
+    requirements = await repo.list_requirements(shipment_id)
+    readiness = await check_readiness(
+        shipment=shipment,
+        requirements=requirements,
+        cert_repo=cert_repo,
+        packaging_repo=packaging_repo,
+        qt_repo=qt_repo,
+    )
+    if not readiness.is_ready:
+        raise HTTPException(
+            status_code=409,
+            detail=readiness_result_to_response(readiness).model_dump(),
+        )
+
     try:
         shipment.mark_ready()
     except ValueError as exc:
@@ -244,6 +322,142 @@ async def update_shipment(
     await repo.save(shipment)
     rows = await repo.get_line_item_rows(shipment_id)
     return shipment_to_response(shipment, rows)
+
+
+@router.post(
+    "/{shipment_id}/requirements",
+    response_model=ShipmentDocumentRequirementResponse,
+    status_code=201,
+)
+async def add_requirement(
+    shipment_id: str,
+    body: ShipmentDocumentRequirementCreate,
+    repo: ShipmentRepoDep,
+    _user: User = require_role(UserRole.SM, UserRole.FREIGHT_MANAGER),
+) -> ShipmentDocumentRequirementResponse:
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+    if shipment.status is ShipmentStatus.READY_TO_SHIP:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot add requirements to a READY_TO_SHIP shipment",
+        )
+    if not body.document_type or not body.document_type.strip():
+        raise HTTPException(status_code=422, detail="document_type must not be empty or whitespace-only")
+    try:
+        req = ShipmentDocumentRequirement.create(
+            shipment_id=shipment_id,
+            document_type=body.document_type.strip(),
+            is_auto_generated=False,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await repo.save_requirement(req)
+    return requirement_to_response(req)
+
+
+@router.get(
+    "/{shipment_id}/requirements",
+    response_model=list[ShipmentDocumentRequirementResponse],
+)
+async def list_requirements(
+    shipment_id: str,
+    repo: ShipmentRepoDep,
+    _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
+) -> list[ShipmentDocumentRequirementResponse]:
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+    reqs = await repo.list_requirements(shipment_id)
+    return [requirement_to_response(r) for r in reqs]
+
+
+@router.post(
+    "/{shipment_id}/documents/{requirement_id}/upload",
+    response_model=ShipmentDocumentRequirementResponse,
+)
+async def upload_document(
+    shipment_id: str,
+    requirement_id: str,
+    file: UploadFile,
+    repo: ShipmentRepoDep,
+    document_repo: DocumentRepoDep,
+    file_storage: FileStorageDep,
+    activity_repo: ActivityRepoDep,
+    _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
+) -> ShipmentDocumentRequirementResponse:
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+    if shipment.status is ShipmentStatus.READY_TO_SHIP:
+        raise HTTPException(
+            status_code=409,
+            detail="Cannot upload documents to a READY_TO_SHIP shipment",
+        )
+    req = await repo.get_requirement(requirement_id)
+    if req is None or req.shipment_id != shipment_id:
+        raise HTTPException(status_code=404, detail="Requirement not found")
+
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+    if len(content) == 0:
+        raise HTTPException(status_code=422, detail="Uploaded file is empty")
+
+    stored_path = await file_storage.save_file(
+        "shipment", shipment_id, file.filename or "document", content
+    )
+    file_meta = FileMetadata.create(
+        entity_type="shipment",
+        entity_id=shipment_id,
+        file_type=req.document_type,
+        original_name=file.filename or "document",
+        stored_path=stored_path,
+        content_type=file.content_type or "application/octet-stream",
+        size_bytes=len(content),
+    )
+    await document_repo.save(file_meta)
+
+    try:
+        req.collect(file_meta.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await repo.save_requirement(req)
+
+    await activity_repo.append(
+        EntityType.SHIPMENT,
+        shipment_id,
+        ActivityEvent.DOCUMENT_UPLOADED,
+        detail=f"Uploaded {req.document_type}: {file.filename}",
+    )
+
+    return requirement_to_response(req)
+
+
+@router.get("/{shipment_id}/readiness", response_model=ReadinessResultResponse)
+async def get_readiness(
+    shipment_id: str,
+    repo: ShipmentRepoDep,
+    cert_repo: CertRepoDep,
+    packaging_repo: PackagingRepoDep,
+    qt_repo: QtRepoDep,
+    _user: User = require_role(UserRole.SM, UserRole.FREIGHT_MANAGER),
+) -> ReadinessResultResponse:
+    from src.services.shipment_service import check_readiness
+
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+    requirements = await repo.list_requirements(shipment_id)
+    readiness = await check_readiness(
+        shipment=shipment,
+        requirements=requirements,
+        cert_repo=cert_repo,
+        packaging_repo=packaging_repo,
+        qt_repo=qt_repo,
+    )
+    return readiness_result_to_response(readiness)
 
 
 @router.get("/{shipment_id}/packing-list")

@@ -8,7 +8,9 @@ import pytest
 from httpx import AsyncClient
 from pypdf import PdfReader
 
+from src.domain.activity import ActivityEvent, EntityType
 from src.domain.shipment import ShipmentStatus
+from src.domain.shipment_document_requirement import DocumentRequirementStatus
 
 
 def _extract_pdf_text(pdf_bytes: bytes) -> str:
@@ -783,3 +785,285 @@ async def test_commercial_invoice_summary_totals(authenticated_client: AsyncClie
     pdf_text = _extract_pdf_text(r2.content)
     assert str(expected_total_qty) in pdf_text
     assert f"{expected_total_value:.2f}" in pdf_text
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Iter 046: Shipment document requirements + readiness gate
+# ─────────────────────────────────────────────────────────────────────────────
+
+_EXPECTED_REQUIREMENT_KEYS = {
+    "id", "shipment_id", "document_type", "is_auto_generated",
+    "status", "document_id", "created_at", "updated_at",
+}
+
+_EXPECTED_READINESS_KEYS = {
+    "documents_ready", "certificates_ready", "packaging_ready",
+    "is_ready", "missing_documents", "missing_certificates", "missing_packaging",
+}
+
+
+async def _make_documents_pending_shipment(
+    client: AsyncClient,
+) -> tuple[str, str]:
+    """Create vendor, accepted PO, shipment, then submit-for-documents.
+
+    Returns (shipment_id, shipment_number).
+    """
+    vendor_id = await _make_vendor(client)
+    po = await _make_accepted_po(client, vendor_id)
+    r = await client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r.status_code == 201
+    shipment_id: str = r.json()["id"]
+    shipment_number: str = r.json()["shipment_number"]
+    r2 = await client.post(f"/api/v1/shipments/{shipment_id}/submit-for-documents")
+    assert r2.status_code == 200
+    return shipment_id, shipment_number
+
+
+# --- Submit for documents auto-creates default requirements ---
+
+
+async def test_submit_for_documents_creates_packing_list_and_ci_requirements(
+    authenticated_client: AsyncClient,
+) -> None:
+    shipment_id, _ = await _make_documents_pending_shipment(authenticated_client)
+
+    r = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/requirements")
+    assert r.status_code == 200
+    reqs = r.json()
+    assert len(reqs) == 2
+
+    doc_types = {req["document_type"] for req in reqs}
+    assert doc_types == {"PACKING_LIST", "COMMERCIAL_INVOICE"}
+
+    for req in reqs:
+        assert set(req.keys()) == _EXPECTED_REQUIREMENT_KEYS
+        assert req["is_auto_generated"] is True
+        assert req["status"] == DocumentRequirementStatus.PENDING.value
+        assert req["document_id"] is None
+        assert req["shipment_id"] == shipment_id
+
+
+# --- Add custom requirement ---
+
+
+async def test_add_custom_requirement_returns_201(
+    authenticated_client: AsyncClient,
+) -> None:
+    document_type = "CERTIFICATE_OF_ORIGIN"
+    shipment_id, _ = await _make_documents_pending_shipment(authenticated_client)
+
+    r = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/requirements",
+        json={"document_type": document_type},
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert set(body.keys()) == _EXPECTED_REQUIREMENT_KEYS
+    assert body["document_type"] == document_type
+    assert body["is_auto_generated"] is False
+    assert body["status"] == DocumentRequirementStatus.PENDING.value
+    assert body["shipment_id"] == shipment_id
+
+
+async def test_add_requirement_on_ready_to_ship_returns_409(
+    authenticated_client: AsyncClient,
+) -> None:
+    shipment_id, _ = await _make_documents_pending_shipment(authenticated_client)
+
+    # Advance to READY_TO_SHIP (no products with qualifications so readiness passes)
+    r_mark = await authenticated_client.post(f"/api/v1/shipments/{shipment_id}/mark-ready")
+    assert r_mark.status_code == 200
+
+    r = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/requirements",
+        json={"document_type": "BILL_OF_LADING"},
+    )
+    assert r.status_code == 409
+
+
+# --- List requirements ---
+
+
+async def test_list_requirements_returns_all_for_shipment(
+    authenticated_client: AsyncClient,
+) -> None:
+    shipment_id, _ = await _make_documents_pending_shipment(authenticated_client)
+
+    # Add a custom requirement
+    await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/requirements",
+        json={"document_type": "BILL_OF_LADING"},
+    )
+
+    r = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/requirements")
+    assert r.status_code == 200
+    reqs = r.json()
+    # 2 auto-generated + 1 custom
+    assert len(reqs) == 3
+    doc_types = {req["document_type"] for req in reqs}
+    assert "PACKING_LIST" in doc_types
+    assert "COMMERCIAL_INVOICE" in doc_types
+    assert "BILL_OF_LADING" in doc_types
+
+
+# --- Upload document ---
+
+
+async def test_upload_document_transitions_requirement_to_collected(
+    authenticated_client: AsyncClient,
+) -> None:
+    shipment_id, _ = await _make_documents_pending_shipment(authenticated_client)
+
+    # Add a custom requirement to upload against
+    r_add = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/requirements",
+        json={"document_type": "BILL_OF_LADING"},
+    )
+    assert r_add.status_code == 201
+    requirement_id: str = r_add.json()["id"]
+
+    file_content = b"test document content"
+    r_upload = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/documents/{requirement_id}/upload",
+        files={"file": ("test.pdf", file_content, "application/pdf")},
+    )
+    assert r_upload.status_code == 200
+    body = r_upload.json()
+    assert body["status"] == DocumentRequirementStatus.COLLECTED.value
+    assert body["document_id"] is not None
+    assert body["id"] == requirement_id
+
+
+async def test_upload_against_nonexistent_requirement_returns_404(
+    authenticated_client: AsyncClient,
+) -> None:
+    shipment_id, _ = await _make_documents_pending_shipment(authenticated_client)
+
+    r = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/documents/nonexistent-req-id/upload",
+        files={"file": ("test.pdf", b"content", "application/pdf")},
+    )
+    assert r.status_code == 404
+
+
+async def test_upload_records_document_uploaded_activity(
+    authenticated_client: AsyncClient,
+) -> None:
+    shipment_id, _ = await _make_documents_pending_shipment(authenticated_client)
+
+    r_add = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/requirements",
+        json={"document_type": "BILL_OF_LADING"},
+    )
+    assert r_add.status_code == 201
+    requirement_id: str = r_add.json()["id"]
+
+    r_upload = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/documents/{requirement_id}/upload",
+        files={"file": ("bill.pdf", b"content", "application/pdf")},
+    )
+    assert r_upload.status_code == 200
+
+    # Check the activity log
+    r_activity = await authenticated_client.get(
+        "/api/v1/activity/",
+        params={"limit": 5},
+    )
+    assert r_activity.status_code == 200
+    events = [e["event"] for e in r_activity.json()]
+    assert ActivityEvent.DOCUMENT_UPLOADED.value in events
+
+
+# --- Readiness check ---
+
+
+async def test_readiness_with_only_auto_generated_docs_is_ready(
+    authenticated_client: AsyncClient,
+) -> None:
+    shipment_id, _ = await _make_documents_pending_shipment(authenticated_client)
+
+    r = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/readiness")
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body.keys()) == _EXPECTED_READINESS_KEYS
+    # Auto-generated documents always pass; no products with qualifications/packaging
+    assert body["documents_ready"] is True
+    assert body["certificates_ready"] is True
+    assert body["packaging_ready"] is True
+    assert body["is_ready"] is True
+    assert body["missing_documents"] == []
+    assert body["missing_certificates"] == []
+    assert body["missing_packaging"] == []
+
+
+async def test_readiness_with_pending_manual_doc_is_not_ready(
+    authenticated_client: AsyncClient,
+) -> None:
+    doc_type = "BILL_OF_LADING"
+    shipment_id, _ = await _make_documents_pending_shipment(authenticated_client)
+
+    # Add a custom (non-auto) requirement and leave it PENDING
+    await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/requirements",
+        json={"document_type": doc_type},
+    )
+
+    r = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/readiness")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["documents_ready"] is False
+    assert body["is_ready"] is False
+    assert doc_type in body["missing_documents"]
+
+
+async def test_readiness_auto_generated_requirements_always_pass_documents_check(
+    authenticated_client: AsyncClient,
+) -> None:
+    shipment_id, _ = await _make_documents_pending_shipment(authenticated_client)
+
+    # Auto-generated PACKING_LIST and COMMERCIAL_INVOICE are PENDING but should
+    # not appear in missing_documents
+    r = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/readiness")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["documents_ready"] is True
+    assert "PACKING_LIST" not in body["missing_documents"]
+    assert "COMMERCIAL_INVOICE" not in body["missing_documents"]
+
+
+# --- Mark ready with readiness gate ---
+
+
+async def test_mark_ready_when_ready_transitions_to_ready_to_ship(
+    authenticated_client: AsyncClient,
+) -> None:
+    shipment_id, _ = await _make_documents_pending_shipment(authenticated_client)
+
+    r = await authenticated_client.post(f"/api/v1/shipments/{shipment_id}/mark-ready")
+    assert r.status_code == 200
+    assert r.json()["status"] == ShipmentStatus.READY_TO_SHIP.value
+
+
+async def test_mark_ready_when_not_ready_returns_409_with_readiness_details(
+    authenticated_client: AsyncClient,
+) -> None:
+    doc_type = "BILL_OF_LADING"
+    shipment_id, _ = await _make_documents_pending_shipment(authenticated_client)
+
+    # Add a pending manual requirement to block mark-ready
+    await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/requirements",
+        json={"document_type": doc_type},
+    )
+
+    r = await authenticated_client.post(f"/api/v1/shipments/{shipment_id}/mark-ready")
+    assert r.status_code == 409
+    detail = r.json()["detail"]
+    assert detail["documents_ready"] is False
+    assert detail["is_ready"] is False
+    assert doc_type in detail["missing_documents"]
+    assert set(detail.keys()) == _EXPECTED_READINESS_KEYS

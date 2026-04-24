@@ -7,6 +7,10 @@ from uuid import uuid4
 import asyncpg
 
 from src.domain.shipment import Shipment, ShipmentLineItem, ShipmentStatus
+from src.domain.shipment_document_requirement import (
+    DocumentRequirementStatus,
+    ShipmentDocumentRequirement,
+)
 
 
 def _iso(dt: datetime) -> str:
@@ -142,6 +146,92 @@ class ShipmentRepository:
         )
         return [dict(r) for r in rows]
 
+    async def save_requirement(self, req: ShipmentDocumentRequirement) -> None:
+        count = await self._conn.fetchval(
+            "SELECT COUNT(*) FROM shipment_document_requirements WHERE id = $1", req.id
+        )
+        exists = (count or 0) > 0
+
+        if not exists:
+            await self._conn.execute(
+                """
+                INSERT INTO shipment_document_requirements (
+                    id, shipment_id, document_type, is_auto_generated,
+                    status, document_id, created_at, updated_at
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                """,
+                req.id,
+                req.shipment_id,
+                req.document_type,
+                1 if req.is_auto_generated else 0,
+                req.status.value,
+                req.document_id,
+                _iso(req.created_at),
+                _iso(req.updated_at),
+            )
+        else:
+            await self._conn.execute(
+                """
+                UPDATE shipment_document_requirements SET
+                    status = $1,
+                    document_id = $2,
+                    updated_at = $3
+                WHERE id = $4
+                """,
+                req.status.value,
+                req.document_id,
+                _iso(req.updated_at),
+                req.id,
+            )
+
+    async def save_requirements_batch(
+        self, requirements: list[ShipmentDocumentRequirement]
+    ) -> None:
+        # Bulk insert on status transition; each requirement is new, no update path needed
+        async with self._conn.transaction():
+            for req in requirements:
+                await self._conn.execute(
+                    """
+                    INSERT INTO shipment_document_requirements (
+                        id, shipment_id, document_type, is_auto_generated,
+                        status, document_id, created_at, updated_at
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    req.id,
+                    req.shipment_id,
+                    req.document_type,
+                    1 if req.is_auto_generated else 0,
+                    req.status.value,
+                    req.document_id,
+                    _iso(req.created_at),
+                    _iso(req.updated_at),
+                )
+
+    async def list_requirements(
+        self, shipment_id: str
+    ) -> list[ShipmentDocumentRequirement]:
+        rows = await self._conn.fetch(
+            """
+            SELECT * FROM shipment_document_requirements
+            WHERE shipment_id = $1
+            ORDER BY created_at
+            """,
+            shipment_id,
+        )
+        return [_reconstruct_requirement(row) for row in rows]
+
+    async def get_requirement(
+        self, requirement_id: str
+    ) -> ShipmentDocumentRequirement | None:
+        row = await self._conn.fetchrow(
+            "SELECT * FROM shipment_document_requirements WHERE id = $1",
+            requirement_id,
+        )
+        if row is None:
+            return None
+        return _reconstruct_requirement(row)
+
     async def get_shipped_quantities(self, po_id: str) -> dict[str, int]:
         """Cumulative shipped quantity per part_number across all shipments for a PO."""
         rows = await self._conn.fetch(
@@ -155,6 +245,19 @@ class ShipmentRepository:
             po_id,
         )
         return {row["part_number"]: int(row["total"]) for row in rows}
+
+
+def _reconstruct_requirement(row: asyncpg.Record) -> ShipmentDocumentRequirement:
+    return ShipmentDocumentRequirement(
+        id=row["id"],
+        shipment_id=row["shipment_id"],
+        document_type=row["document_type"],
+        is_auto_generated=bool(row["is_auto_generated"]),
+        status=DocumentRequirementStatus(row["status"]),
+        document_id=row["document_id"],
+        created_at=_parse_dt(row["created_at"]),
+        updated_at=_parse_dt(row["updated_at"]),
+    )
 
 
 def _decimal_or_none(value: object) -> Decimal | None:
