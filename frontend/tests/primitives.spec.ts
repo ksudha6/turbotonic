@@ -70,3 +70,15 @@ test.describe('StatusPill primitive', () => {
 		}
 	});
 });
+
+test.describe('ProgressBar primitive', () => {
+	test('renders progressbar with accessible value', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const bar = page.getByTestId('ui-progress-60');
+		await expect(bar).toBeVisible();
+		await expect(bar).toHaveAttribute('role', 'progressbar');
+		await expect(bar).toHaveAttribute('aria-valuenow', '60');
+	});
+});

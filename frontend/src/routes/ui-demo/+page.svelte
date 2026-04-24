@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Button from '$lib/ui/Button.svelte';
 	import StatusPill from '$lib/ui/StatusPill.svelte';
+	import ProgressBar from '$lib/ui/ProgressBar.svelte';
 </script>
 
 <h1>Phase 4.0 UI Demo</h1>
@@ -24,4 +25,9 @@
 		<StatusPill tone="red" label="Overdue" data-testid="ui-pill-red" />
 		<StatusPill tone="gray" label="Draft" data-testid="ui-pill-gray" />
 	</div>
+</section>
+
+<section>
+	<h2>ProgressBar</h2>
+	<ProgressBar value={60} label="60%" data-testid="ui-progress-60" />
 </section>
