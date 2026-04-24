@@ -1,7 +1,7 @@
 # Iterations Summary
 
 > Single-file context for future conversations. Replaces reading 29 individual iteration docs.
-> Last updated: iteration 060 closed.
+> Last updated: iters 039, 043, 044, 045, 046 (backend) closed on 2026-04-24.
 
 ---
 
@@ -13,7 +13,7 @@ Turbo Tonic is a vendor portal for purchase order confirmation, invoicing, produ
 
 Python 3.13, FastAPI, Postgres 16 (asyncpg, connection pool), WebAuthn/passkeys + cookie sessions. Frontend: SvelteKit 2 + Svelte 5, adapter-static. Package manager: uv (backend), npm (frontend), nvm for Node. Local dev: Postgres via Homebrew (docker-compose.yml available for Docker environments).
 
-## Current domain model (as of iteration 056)
+## Current domain model (as of iteration 046)
 
 ### Aggregates
 - **PurchaseOrder** — Draft > Pending > MODIFIED (ping-pong with vendor) > Accepted | Rejected (only via all-REMOVED convergence) > Revised > Pending. Contains LineItems each with LineItemStatus (PENDING/MODIFIED_BY_VENDOR/MODIFIED_BY_SM/ACCEPTED/REMOVED), line_edit_history. PO-scoped round_count (0-2), last_actor_role. Types: PROCUREMENT, OPEX.
@@ -23,14 +23,18 @@ Python 3.13, FastAPI, Postgres 16 (asyncpg, connection pool), WebAuthn/passkeys 
 - **QualificationType** — Named qualification requirement (e.g. QUALITY_CERTIFICATE). Linked to products via join table. Target market scoped.
 - **Certificate** — Links product to qualification type. Status: Pending > Valid. EXPIRED computed from expiry_date. Tracks cert_number, issuer, testing_lab, test/issue/expiry dates, target_market. Document attachment via file storage.
 - **PackagingSpec** — Per-product per-marketplace packaging requirement. Status: Pending > Collected (via file upload). Document attachment via file storage. Unique on (product_id, marketplace, spec_name).
+- **Shipment** — DRAFT > DOCUMENTS_PENDING > READY_TO_SHIP. Linked to PO; multiple shipments per PO. ShipmentLineItems carry net_weight, gross_weight, package_count, dimensions, country_of_origin (all nullable, settable in DRAFT/DOCUMENTS_PENDING). Cumulative shipped quantity per part_number cannot exceed PO accepted quantity. Marketplace inherited from PO.
+- **ShipmentDocumentRequirement** — PENDING > COLLECTED. Per-shipment document checklist. Default PACKING_LIST and COMMERCIAL_INVOICE rows (is_auto_generated=True) seeded on submit-for-documents; SM/FREIGHT_MANAGER may add custom user-defined document_type rows. Auto-generated rows always pass the documents readiness check (PDFs render on demand).
 
 ### Supporting concepts
 - **Milestone** — RAW_MATERIALS > PRODUCTION_STARTED > QC_PASSED > READY_TO_SHIP > SHIPPED. Strict sequence enforcement. Attached to PO.
-- **ActivityLog** — Immutable event stream. Categories: LIVE, ACTION_REQUIRED, DELAYED. Target roles: SM, VENDOR. Powers dashboard feed and notification bell.
+- **ActivityLog** — Immutable event stream. Categories: LIVE, ACTION_REQUIRED, DELAYED. Target roles: SM, VENDOR, QUALITY_LAB, FREIGHT_MANAGER. Entity types: PO, INVOICE, CERTIFICATE, PACKAGING, SHIPMENT. Powers dashboard feed and notification bell.
+- **CertWarning** (iter 039) — Advisory result of the PO-submit quality gate. One entry per (line item, missing/expired qualification, marketplace).
+- **ReadinessResult** (iter 046) — Composite of documents_ready + certificates_ready + packaging_ready with structured missing-item lists. Drives the mark-ready gate.
 - **Reference data** — 30 currencies, 11 incoterms, 17 payment terms, 31 countries, 50+ ports, USD exchange rates.
 
 ### Database tables
-purchase_orders, line_items, rejection_history, vendors, products, invoices, invoice_line_items, milestone_updates, activity_log, files, qualification_types, product_qualifications, certificates, packaging_specs, line_edit_history.
+purchase_orders, line_items, rejection_history, vendors, products, invoices, invoice_line_items, milestone_updates, activity_log, files, qualification_types, product_qualifications, certificates, packaging_specs, line_edit_history, shipments, shipment_line_items, shipment_document_requirements.
 
 ## Frontend routes
 
@@ -48,18 +52,22 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 | `/products` | Product catalog list with vendor filter |
 | `/products/new` | Create product |
 | `/products/[id]/edit` | Edit product attributes |
+| `/shipments/[id]` | Shipment detail: edit per-line weights/dims, download Packing List + Commercial Invoice PDFs |
 | `/login` | WebAuthn passkey login, deep link redirect support |
 | `/register` | Invite-only passkey registration (username from query param) |
 | `/setup` | First-user bootstrap, pending-user message, already-configured detection |
 
 ## API surface
 
-- **PO**: CRUD, submit, accept, resubmit, bulk transition, PDF export
+- **PO**: CRUD, submit, accept, resubmit, bulk transition, PDF export. Submit/resubmit return `POSubmitResponse` (po + cert_warnings) per iter 039.
 - **PO line negotiation**: per-line modify, accept, remove, force-accept, force-remove; submit-response for round hand-off
 - **Invoice**: CRUD, submit, approve, pay, dispute, resolve, remaining quantities, PDF export, bulk PDF
 - **Vendor**: CRUD, deactivate, reactivate
 - **Product**: CRUD (POST, GET list, GET by id, PATCH), packaging readiness per marketplace
-- **Milestone**: list by PO, post milestone
+- **Milestone**: list by PO, post milestone. QC_PASSED triggers CERT_REQUESTED activity for products lacking valid certs (iter 039).
+- **Shipment**: create, list (by PO or all), get, remaining-quantities, PATCH line item weights/dims, submit-for-documents, mark-ready (gated by readiness check)
+- **Shipment documents**: list requirements, add custom requirement, upload file against requirement, GET readiness (documents + certificates + packaging composite)
+- **Shipment PDFs**: GET packing-list, GET commercial-invoice (CI number deterministic, not persisted)
 - **Activity**: list (with optional target_role filter), unread count (with optional target_role filter), mark read
 - **Reference data**: all lookups in one GET
 - **Document**: upload (multipart, PDF-only, 10MB limit), download (Content-Disposition), delete, list by entity
@@ -120,6 +128,11 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 | 058 | 2026-04-19 | PDF scoping + negotiation activity events: PO PDF filters to ACCEPTED lines only with MODIFIED stamp when round_count >= 1; 7 new event types (PO_LINE_MODIFIED, PO_LINE_ACCEPTED, PO_LINE_REMOVED, PO_FORCE_ACCEPTED, PO_FORCE_REMOVED, PO_MODIFIED, PO_CONVERGED); router wires events on every per-line endpoint; Partial + Modified pills on PO list. 15 new permanent tests. |
 | 059 | 2026-04-19 | Advance payment gate + post-acceptance line modification: payment_terms metadata with has_advance flag (4 terms flagged), advance_paid_at column on PO, mark_advance_paid + add_line_post_acceptance + remove_line_post_acceptance methods + endpoints (SM-only), downstream-artifact check via services layer, 3 new activity events (PO_ADVANCE_PAID, PO_LINE_ADDED_POST_ACCEPT, PO_LINE_REMOVED_POST_ACCEPT), minimal frontend UI. 37 new permanent tests. |
 | 060 | 2026-04-19 | Email notifications: aiosmtplib-backed EmailService with Jinja2 templates (po_accepted, po_modified, po_line_modified, po_advance_paid), NotificationDispatcher decoupled from activity repo, recipient resolution per role and vendor scope, users.email column + seed backfill, EMAIL_SEND_FAILED activity event on delivery failure, FakeEmailService fixture default in tests. 15 new permanent tests. |
+| 043 | 2026-04-24 | Shipment aggregate: shipments + shipment_line_items tables, DRAFT > DOCUMENTS_PENDING > READY_TO_SHIP, create from accepted PO with cumulative shipped-quantity guard, create/list/get/remaining-quantities endpoints, role guards (SM + FREIGHT_MANAGER for mutations). |
+| 039 | 2026-04-24 | Quality gate at PO submit + CERT_REQUESTED on QC_PASSED: services/quality_gate.py service iterates accepted line items with product_id, checks valid certs against PO marketplace, returns CertWarning list. PO submit/resubmit return new POSubmitResponse wrapper (po + cert_warnings). QC_PASSED milestone fans out CERT_REQUESTED activity to QUALITY_LAB. TargetRole.QUALITY_LAB and FREIGHT_MANAGER added to enum. ~20 new tests. |
+| 044 | 2026-04-24 | Shipment line item weights/dims + packing list PDF: net_weight/gross_weight/package_count/dimensions/country_of_origin (all nullable) + Shipment.update_line_items() guarded by status. PATCH /shipments/{id} (SM + FREIGHT_MANAGER), GET /shipments/{id}/packing-list returning ReportLab PDF (SM + VENDOR + FREIGHT_MANAGER). Frontend shipment detail page with inline weight/dim editing and download button. ~10 new tests. |
+| 045 | 2026-04-24 | Export commercial invoice PDF on Shipment: GET /shipments/{id}/commercial-invoice. Deterministic CI number CI-{shipment_number}, not persisted. HS code + unit price from PO line items (matched by part_number); quantity + weights + country of origin from shipment line items. Same ReportLab pattern as packing list. Frontend Download Commercial Invoice button alongside Packing List. 7 new tests. |
+| 046 | 2026-04-24 | Shipment document requirements + readiness gate (backend): shipment_document_requirements table, ShipmentDocumentRequirement entity (PENDING > COLLECTED), ReadinessResult composite (documents + certificates + packaging). Default PACKING_LIST and COMMERCIAL_INVOICE auto-generated rows seeded on submit-for-documents; both always pass docs check. New endpoints: POST /requirements (custom), POST /documents/{rid}/upload, GET /requirements, GET /readiness. Existing mark-ready endpoint enhanced with readiness gate (409 + ReadinessResult on failure). DOCUMENT_UPLOADED ActivityEvent + EntityType.SHIPMENT added. 12 new tests. Frontend (Documents section, readiness panel, Mark Ready, dashboard counts) deferred to Phase 4. |
 
 ---
 
@@ -163,11 +176,22 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - Post-acceptance line modification: SM can add or remove lines on ACCEPTED POs while gate is open; removal blocked when any invoice or shipment references the line
 - PO line negotiation UI: vendor and SM exchange modifications per line with inline diff, edit-history timeline, force-override at round 2 behind a confirmation dialog; line-level status pills reflect PENDING/MODIFIED_BY_VENDOR/MODIFIED_BY_SM/ACCEPTED/REMOVED
 - Email notifications via SMTP: po_accepted, po_modified, po_line_modified, and po_advance_paid templates dispatched from activity events to role-scoped recipients; development mode logs without network access; failures recorded as EMAIL_SEND_FAILED activity rows
+- PO submit/resubmit return POSubmitResponse wrapper carrying advisory cert_warnings (per line item, MISSING/EXPIRED). Lines without product_id and POs without marketplace skip the gate. (iter 039)
+- QC_PASSED milestone fans out CERT_REQUESTED activity to QUALITY_LAB for products lacking valid certs. (iter 039)
+- Shipment aggregate: create from accepted PO with cumulative shipped-quantity guard, multiple shipments per PO allowed, status DRAFT > DOCUMENTS_PENDING > READY_TO_SHIP, per-line weights/dims/package_count/dimensions/country_of_origin editable in DRAFT/DOCUMENTS_PENDING. Frontend shipment detail page (`/shipments/[id]`) with inline editing. (iters 043, 044)
+- Packing list PDF generated from shipment + PO + vendor data; ReportLab pattern matches PO/Invoice PDFs. None-valued weights render as "-". (iter 044)
+- Export commercial invoice PDF on Shipment with deterministic CI number CI-{shipment_number}; HS code + unit price come from PO line items, weights from shipment line items, line value = qty × unit_price. (iter 045)
+- Shipment document requirements + readiness gate: PACKING_LIST and COMMERCIAL_INVOICE requirements auto-seeded on submit-for-documents; SM/FREIGHT_MANAGER can add custom user-defined types. Upload against a requirement transitions it to COLLECTED and records DOCUMENT_UPLOADED activity. mark-ready blocked unless documents + certificates + packaging all pass; 409 returns structured ReadinessResult with missing items. (iter 046, backend only)
 
 ## What does not exist yet
 
+### Phase 4 UI revamp (iters 049-055, in planning by user)
+The full design system + page redesign covering every existing page (~22 routes). User is drafting the plan based on a Lovable mock. The following backend-complete features are waiting on Phase 4 to ship their UI:
+- **Iter 040 — Certificate UI**: product detail qualification list, certificate upload flow, expiry alerts on dashboard, PO creation cert-warning banner. Quality gate backend already returns warnings (iter 039).
+- **Iter 046 frontend**: Documents section per shipment with status pills + Generate / Upload actions, Add Requirement button, Readiness panel (Documents / Certificates / Packaging pass-fail with details), Mark Ready to Ship button gated by readiness.
+- **Iter 048 dashboard**: shipment counts by status (DRAFT / DOCUMENTS_PENDING / READY_TO_SHIP), certificate expiry alerts, packaging collection progress per marketplace, notification bell routing for new event types (CERT_REQUESTED, DOCUMENT_UPLOADED, etc.).
+
 ### From the backlog (PO confirmation module)
-- Roles: SM vs Vendor views (same data, different controls) — complete (backend scoping iter 032, frontend auth iter 033, role-conditional rendering iter 034)
 - Overdue PO status (time-based trigger past required delivery date)
 - Mobile layout
 - Custom value approval for reference data dropdowns
@@ -209,28 +233,25 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - Remove dev-login endpoint before production deployment
 
 ### From the roadmap (post-confirmation)
-1. **Quality labs** — Certificate entity and QualificationType exist (iter 038, 036a). Lab results, quality gate at PO submission (iter 039), and frontend certificate UI are not yet built.
-2. **Batch creation of partial PO shipments** — Shipment as new aggregate, split PO into shipments
-3. **Shipment document generation** — packing list, commercial invoice, bill of lading
-4. **Shipment document validation (agents/OCR)** — AI reads uploaded docs, flags discrepancies
-5. **Invoice upload** — accept vendor-uploaded invoice files (PDF/image)
-6. **Invoice validation (agents)** — AI cross-checks uploaded invoice against PO/shipment data
-7. **Consolidation algorithm** — combine multiple shipments (explicitly deferrable)
-8. **Packaging file collections for AMZ shipments** — Amazon-specific packaging requirements
-9. **Shipment booking** — carrier selection, booking creation
-10. **Shipment tracking** — carrier integration, status updates, ETA
-11. **Customs validation** — HS code verification, origin/destination rules, compliance checks
+1. **Quality labs frontend** — backend done (iters 036a, 038, 039); frontend cert UI is iter 040 (folded into Phase 4).
+2. **Bill of Lading + Certificate of Origin + Insurance Certificate + EEI/AES** — additional shipment document types beyond packing list and commercial invoice. Iter 046 supports user-defined document_type strings, so adding these is configuration; system-generated BoL or chamber-of-commerce CoO integration would be new iters.
+3. **Shipment document validation (agents/OCR)** — AI reads uploaded docs, flags discrepancies against shipment + PO data.
+4. **Invoice upload** — accept vendor-uploaded invoice files (PDF/image).
+5. **Invoice validation (agents)** — AI cross-checks uploaded invoice against PO/shipment data.
+6. **Consolidation algorithm** — combine multiple shipments (explicitly deferrable).
+7. **Packaging file collections for AMZ shipments** — Amazon-specific packaging requirement templates beyond the generic PackagingSpec.
+8. **Shipment booking** — carrier selection, booking creation.
+9. **Shipment tracking** — carrier integration, status updates, ETA.
+10. **Customs validation** — HS code verification, origin/destination rules, compliance checks.
 
 ### Dependencies in the roadmap
-- Quality labs can run in parallel with shipment work (product.requires_certification is the hook)
-- Shipment creation (2) before shipment docs (3) before doc validation (4)
-- Invoice upload (5) before invoice validation (6)
-- Shipment booking (9) before tracking (10)
-- HS codes + country of origin (already on line items) feed customs validation (11)
-- Auth/roles is a cross-cutting concern that can slot in at any point but gets harder to retrofit the more UI exists
+- Shipment doc validation (3) needs an uploaded-doc corpus from iter 046 in production use first.
+- Invoice upload (4) before invoice validation (5).
+- Shipment booking (8) before tracking (9).
+- HS codes + country of origin (already on PO line items + shipment line items) feed customs validation (10).
 
-### The agent layer (items 4, 6, 11)
-These are the product differentiators. The CRUD workflow (items 1-3, 5, 7-10) is infrastructure. The agent items read uploaded documents, cross-reference them against structured data, and flag discrepancies. This is what makes the system more than a form-filling app.
+### The agent layer (items 3, 5, 10)
+These are the product differentiators. Items 3, 5, and 10 read uploaded documents, cross-reference them against structured data (PO, shipment, certificates), and flag discrepancies. The CRUD workflow is the infrastructure that produces the structured data those agents read.
 
 ---
 
@@ -272,4 +293,8 @@ These are the product differentiators. The CRUD workflow (items 1-3, 5, 7-10) is
 | 058 | ActivityEvent.{PO_LINE_MODIFIED, PO_LINE_ACCEPTED, PO_LINE_REMOVED, PO_FORCE_ACCEPTED, PO_FORCE_REMOVED, PO_MODIFIED, PO_CONVERGED}, PartialPill, ModifiedPill, PDFAcceptedOnly |
 | 059 | PaymentTermMetadata, AdvancePayment, RequiresAdvance, PostAcceptanceGate, DownstreamArtifact, LineHasDownstreamArtifactError, FirstMilestonePostedAt, PO_ADVANCE_PAID, PO_LINE_ADDED_POST_ACCEPT, PO_LINE_REMOVED_POST_ACCEPT |
 | 060 | EmailService, NotificationDispatcher, EmailTemplate, RecipientResolution, FakeEmailService, EMAIL_SEND_FAILED, SMTP_ENV_VARS |
-| 060 | EmailService, NotificationDispatcher, RecipientResolution, FakeEmailService |
+| 043 | Shipment, ShipmentLineItem, ShipmentStatus (DRAFT/DOCUMENTS_PENDING/READY_TO_SHIP), ShipmentNumber, CumulativeShippedQuantityGuard |
+| 039 | CertWarning, CertWarningReason (MISSING/EXPIRED), POSubmitResponse, QualityGate, CERT_REQUESTED, TargetRole.QUALITY_LAB, TargetRole.FREIGHT_MANAGER |
+| 044 | ShipmentLineItem.{net_weight, gross_weight, package_count, dimensions, country_of_origin}, PackingListPDF, ShipmentLineItemUpdate |
+| 045 | CommercialInvoicePDF, CINumber (deterministic CI-{shipment_number}, not persisted) |
+| 046 | ShipmentDocumentRequirement, DocumentRequirementStatus (PENDING/COLLECTED), ReadinessResult, AutoGeneratedRequirement, DOCUMENT_UPLOADED, EntityType.SHIPMENT, MarkReadyGate |
