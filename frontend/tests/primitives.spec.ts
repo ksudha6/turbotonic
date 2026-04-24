@@ -121,3 +121,15 @@ test.describe('Form control primitives', () => {
 		await expect(toggle).toHaveAttribute('aria-pressed', 'true');
 	});
 });
+
+test.describe('FormField primitive', () => {
+	test('shows inline error and sets aria-invalid on child input', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const err = page.getByTestId('ui-field-error');
+		await expect(err).toHaveText('Part number is required');
+		await expect(err).toHaveAttribute('role', 'alert');
+		await expect(page.getByTestId('ui-field-input')).toHaveAttribute('aria-invalid', 'true');
+	});
+});

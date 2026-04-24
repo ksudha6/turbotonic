@@ -21,6 +21,7 @@
 	{type}
 	{placeholder}
 	{disabled}
+	aria-invalid={invalid || undefined}
 	bind:value
 	data-testid={testid}
 	class:invalid

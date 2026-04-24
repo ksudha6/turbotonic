@@ -6,6 +6,7 @@
 	import Select from '$lib/ui/Select.svelte';
 	import DateInput from '$lib/ui/DateInput.svelte';
 	import Toggle from '$lib/ui/Toggle.svelte';
+	import FormField from '$lib/ui/FormField.svelte';
 </script>
 
 <h1>Phase 4.0 UI Demo</h1>
@@ -49,4 +50,18 @@
 		<label>Due <DateInput data-testid="ui-date-due" /></label>
 		<Toggle label="Notifications" data-testid="ui-toggle" />
 	</div>
+</section>
+
+<section>
+	<h2>FormField</h2>
+	<FormField
+		label="Part number"
+		error="Part number is required"
+		required
+		data-testid="ui-field"
+	>
+		{#snippet children({ invalid })}
+			<Input data-testid="ui-field-input" invalid={invalid} />
+		{/snippet}
+	</FormField>
 </section>
