@@ -7,6 +7,9 @@
 	import DateInput from '$lib/ui/DateInput.svelte';
 	import Toggle from '$lib/ui/Toggle.svelte';
 	import FormField from '$lib/ui/FormField.svelte';
+	import PanelCard from '$lib/ui/PanelCard.svelte';
+	import AttributeList from '$lib/ui/AttributeList.svelte';
+	import FormCard from '$lib/ui/FormCard.svelte';
 </script>
 
 <h1>Phase 4.0 UI Demo</h1>
@@ -64,4 +67,24 @@
 			<Input data-testid="ui-field-input" invalid={invalid} />
 		{/snippet}
 	</FormField>
+</section>
+
+<section>
+	<h2>Panel + Attributes</h2>
+	<PanelCard title="Details" data-testid="ui-panel">
+		<AttributeList
+			items={[
+				{ label: 'Vendor', value: 'Acme Inc' },
+				{ label: 'Country', value: 'US' }
+			]}
+			data-testid="ui-attr-list"
+		/>
+	</PanelCard>
+</section>
+
+<section>
+	<h2>FormCard</h2>
+	<FormCard title="New thing" onSubmit={() => console.log('submit')} onCancel={() => console.log('cancel')} data-testid="ui-formcard">
+		<Input data-testid="ui-formcard-input" />
+	</FormCard>
 </section>

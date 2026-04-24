@@ -133,3 +133,29 @@ test.describe('FormField primitive', () => {
 		await expect(page.getByTestId('ui-field-input')).toHaveAttribute('aria-invalid', 'true');
 	});
 });
+
+test.describe('Panel primitives', () => {
+	test('PanelCard renders title and body slot', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByTestId('ui-panel').getByRole('heading', { name: 'Details' })).toBeVisible();
+	});
+
+	test('AttributeList renders rows with label and value', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const list = page.getByTestId('ui-attr-list');
+		await expect(list).toContainText('Vendor');
+		await expect(list).toContainText('Acme Inc');
+	});
+
+	test('FormCard has Cancel and Submit buttons in footer', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByTestId('ui-formcard-cancel')).toBeVisible();
+		await expect(page.getByTestId('ui-formcard-submit')).toBeVisible();
+	});
+});
