@@ -68,11 +68,40 @@ None. Visual verification via `/ui-demo` on dev server.
 
 ## Notes
 
-Pending — filled at iteration close.
+Iter 066 closed on 2026-04-24. Two commits landed on `ux-changes`:
+- `1d5ebaa` Task 14 DataTable with server-driven pagination.
+- `c9c7695` Task 15 PageHeader + DetailHeader.
 
-### PM-delegate decisions (autonomous mode)
+119 Playwright passes at open → 120 after Task 14 → 122 at close. Backend stays 591.
 
-- **Pagination pattern: Prev/Next + `Page X of Y`.** Simplest usable pattern; matches pre-revamp PO list / invoice list. Numbered pages, load-more, and cursor paging deferred until a consumer needs them.
-- **DataTable `<table>` has no class.** Avoids collision with pre-revamp global `.table` rule. Scoped CSS in the primitive targets the bare `table` element selector, which Svelte hashes.
-- **Row click via onclick + Enter/Space keyboard + tabindex=0.** ARIA-wise, `<tr>` as a button target is unusual but matches pre-revamp patterns and is straightforward. More formal `role="button"` is a future enhancement if lint/axe complains.
-- **`.page-header` / `.detail-header` → `ui-pageheader` / `ui-detailheader`.** `ui-<name>` convention. The shorter concatenation (no hyphen inside the name) matches the filename without tokens.
+### Decisions
+
+- **Pagination pattern: Prev/Next + `Page X of Y`.** Simplest pattern; matches pre-revamp PO/invoice list. Numbered pages, load-more, and cursor paging deferred until a real consumer surfaces the need.
+- **DataTable `<table>` has no class attribute.** Avoids collision with pre-revamp global `.table` rule (class selector, not element selector). Scoped CSS uses bare `table`, `th`, `td` element selectors which Svelte hashes per-component.
+- **Row click wired via onclick + Enter/Space keyboard + tabindex=0.** ARIA-wise `<tr>` as a button target is unconventional but matches pre-revamp patterns. More formal `role="button"` can be added later if axe complains; currently clean.
+- **`ui-pageheader` and `ui-detailheader` class names.** Single concatenated form (not `ui-page-header`) reads cleaner and follows the filename shape without hyphens.
+- **No brainstorm stop on pagination.** The plan's contract is minimal and complete for all three planned consumers (PO list, invoice list, product list). Brainstorm marker discharged without user pause.
+
+### DDD vocab assessment
+
+No new domain terms. Primitive vocabulary (DataTable, PageHeader, DetailHeader) is UI design system. `docs/ddd-vocab.md` unchanged.
+
+### Backlog captured
+
+- **DataTable column sort.** The generic `Column<T>` type has no `sortable` flag. Future iteration when a consumer needs sorting can extend the contract with `sortable?: boolean` + `onSort?: (key, dir) => void`.
+- **DataTable column filter.** Similar: no filter surface on the column definition. Defer.
+- **DataTable empty-rows rendering.** Currently if `rows` is empty, the table renders an empty `<tbody>`. A real consumer may want to show EmptyState inside the table. Consumer can conditionally render; primitive stays simple.
+- **Row-click ARIA.** `role="button"` on `<tr>` or switch to a cell-button pattern if axe flags it.
+- **Pagination alternatives.** Numbered pages / load-more / cursor — add when a consumer or mock surfaces the need.
+
+### What exists after iter 066
+
+Twenty-one primitives under `frontend/src/lib/ui/`:
+- Leaves (iter 063, 7): Button, StatusPill, ProgressBar, Input, Select, DateInput, Toggle.
+- Composites (iter 064, 5): FormField, PanelCard, AttributeList, FormCard, KpiCard.
+- Display + state (iter 065, 6): Timeline, ActivityFeed, LoadingState, EmptyState, ErrorState, ErrorBoundary.
+- Table + headers (iter 066, 3): DataTable, PageHeader, DetailHeader.
+
+`primitives.spec.ts`: 22 tests. `/ui-demo`: 13 sections.
+
+Carried forward: none.
