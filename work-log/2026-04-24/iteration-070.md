@@ -91,4 +91,63 @@ Expected `make test-browser` at close: **150 passed**.
 
 ## Notes
 
-Pending — filled at iter close.
+Iter 070 closed on 2026-04-24. Three commits landed on `ux-changes`:
+- Open doc (committed earlier).
+- 6fb5242 axe AA accessibility scan on `/ui-demo` and `/_smoke`.
+- Phase close write-up (this commit).
+
+148 Playwright at open → 150 at close (2 new axe tests). Backend stays 591.
+
+### Axe findings
+
+Four distinct AA violations surfaced on first run and were fixed inline — none suppressed.
+
+- `document-title` / `non-empty-title` (both pages): `<svelte:head><title>…</title></svelte:head>` added to `/ui-demo/+page.svelte` (`UI Demo`) and `/(nexus)/_smoke/+page.svelte` (`Nexus smoke`).
+- `aria-progressbar-name` (/ui-demo): `ProgressBar.svelte` now sets `aria-label={label ?? 'Progress'}` on the `role="progressbar"` track.
+- `button-name` (/_smoke, via the embedded pre-revamp NotificationBell): bell button now carries `aria-label` reflecting unread count (`Notifications` or `Notifications (N unread)`) and an explicit `type="button"`.
+- `label` (/ui-demo FormCard section): the bare `<Input>` inside `FormCard` is now wrapped in `<label>Thing name …</label>`.
+
+### Scratch screenshots
+
+Not captured via a committed script. A reviewer can reproduce via `make up` and opening `/ui-demo` and `/_smoke` in a browser at 390px and 1024px viewports. The Lovable mock screenshots captured in iter 068 via Playwright MCP (stored outside the repo) serve as the visual baseline.
+
+### Phase 4.0 complete
+
+This iteration closes Phase 4.0 (UI revamp foundation). All deliverables from `docs/superpowers/specs/2026-04-24-ui-revamp-v2-design.md` § "Phase 4.0 — Foundation" shipped:
+
+- Design tokens (22 new CSS custom properties in `global.css`)
+- Primitive component library (26 primitives under `$lib/ui/`)
+- AppShell with role-conditional Sidebar + TopBar + UserMenu
+- Mobile drawer variant (off-canvas at ≤768px)
+- State primitives (Loading, Empty, Error, ErrorBoundary)
+- FormField with server-error contract
+- DataTable with server-driven pagination
+- `(nexus)` layout group + `/_smoke` smoke test
+- Redirect infrastructure for aggregate-phase retirements
+- permissions.ts ADMIN inheritance fix (iter 061)
+- Seed data overhaul (iter 061)
+- axe AA scan passes on `/ui-demo` and `/_smoke`
+
+Deferred to production-setup phase per spec: Sentry, CSP headers, session cookie hardening, XSS audit, file role guards.
+
+Deferred to end-of-revamp: deletion of pre-revamp global component rules (`.btn`, `.table`, `.badge`, `.card`, `.input`, `.form-group`) from `global.css`. Kept additive during Phase 4.0 so pre-revamp pages continue to render during the transition.
+
+### Carry-forward backlog
+
+Logged in individual iteration docs and propagated to `work-log/iterations-summary.md` backlog section for later phases:
+
+- StatusPill + KpiCard raw hex → token refactor.
+- `--amber-*` vs `orange` tone vocabulary reconciliation.
+- ProgressBar clamp edge-case tests.
+- `prefers-reduced-motion` on AppShell drawer transition.
+- Escape-key + outside-click dismissal for UserMenu dropdown.
+- Focus trap inside mobile drawer.
+- Dev role-switcher store wiring.
+- `/users` page (ADMIN management; nav link already shipped).
+- FREIGHT_MANAGER OpEx-only invoice/PO scoping at page level.
+- SM procurement-only PO list filter.
+- Live TopBar search backend + UI.
+- DataTable column sort, column filter, empty-rows rendering.
+- Row-click ARIA pattern refinement.
+
+Phase 4.1 (Dashboard) begins next on a new branch once this branch merges to main.
