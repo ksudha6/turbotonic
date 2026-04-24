@@ -1,10 +1,4 @@
 import type { UserRole } from '$lib/types';
-import {
-	canViewPOs,
-	canViewInvoices,
-	canManageVendors,
-	canViewProducts
-} from '$lib/permissions';
 
 export type SidebarItem = {
 	href: string;
@@ -12,40 +6,51 @@ export type SidebarItem = {
 	match: (pathname: string) => boolean;
 };
 
+const DASHBOARD: SidebarItem = {
+	href: '/dashboard',
+	label: 'Dashboard',
+	match: (p) => p === '/' || p.startsWith('/dashboard')
+};
+
+const PURCHASE_ORDERS: SidebarItem = {
+	href: '/po',
+	label: 'Purchase Orders',
+	match: (p) => p.startsWith('/po') || p.startsWith('/production')
+};
+
+const INVOICES: SidebarItem = {
+	href: '/invoices',
+	label: 'Invoices',
+	match: (p) => p.startsWith('/invoice') || p.startsWith('/invoices')
+};
+
+const VENDORS: SidebarItem = {
+	href: '/vendors',
+	label: 'Vendors',
+	match: (p) => p.startsWith('/vendors')
+};
+
+const PRODUCTS: SidebarItem = {
+	href: '/products',
+	label: 'Products',
+	match: (p) => p.startsWith('/products')
+};
+
+const USERS: SidebarItem = {
+	href: '/users',
+	label: 'Users',
+	match: (p) => p.startsWith('/users')
+};
+
+const ROLE_ITEMS: Record<UserRole, SidebarItem[]> = {
+	ADMIN: [DASHBOARD, PURCHASE_ORDERS, INVOICES, VENDORS, PRODUCTS, USERS],
+	SM: [DASHBOARD, PURCHASE_ORDERS, INVOICES, VENDORS, PRODUCTS],
+	VENDOR: [DASHBOARD, PURCHASE_ORDERS, INVOICES],
+	FREIGHT_MANAGER: [DASHBOARD, PURCHASE_ORDERS, INVOICES],
+	QUALITY_LAB: [DASHBOARD, PRODUCTS],
+	PROCUREMENT_MANAGER: [DASHBOARD]
+};
+
 export function sidebarItemsFor(role: UserRole): SidebarItem[] {
-	const items: SidebarItem[] = [];
-	items.push({
-		href: '/dashboard',
-		label: 'Dashboard',
-		match: (p) => p === '/' || p.startsWith('/dashboard')
-	});
-	if (canViewPOs(role)) {
-		items.push({
-			href: '/po',
-			label: 'Purchase Orders',
-			match: (p) => p.startsWith('/po') || p.startsWith('/production')
-		});
-	}
-	if (canViewInvoices(role)) {
-		items.push({
-			href: '/invoices',
-			label: 'Invoices',
-			match: (p) => p.startsWith('/invoice') || p.startsWith('/invoices')
-		});
-	}
-	if (canManageVendors(role)) {
-		items.push({
-			href: '/vendors',
-			label: 'Vendors',
-			match: (p) => p.startsWith('/vendors')
-		});
-	}
-	if (canViewProducts(role)) {
-		items.push({
-			href: '/products',
-			label: 'Products',
-			match: (p) => p.startsWith('/products')
-		});
-	}
-	return items;
+	return ROLE_ITEMS[role];
 }
