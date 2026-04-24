@@ -56,3 +56,14 @@ test.describe('Button primitive', () => {
 		await expect(disabled).toBeDisabled();
 	});
 });
+
+test.describe('StatusPill primitive', () => {
+	test('renders five tone variants with leading dot', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		for (const tone of ['green', 'blue', 'orange', 'red', 'gray']) {
+			await expect(page.getByTestId(`ui-pill-${tone}`)).toBeVisible();
+		}
+	});
+});
