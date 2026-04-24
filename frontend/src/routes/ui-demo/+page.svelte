@@ -11,6 +11,8 @@
 	import AttributeList from '$lib/ui/AttributeList.svelte';
 	import FormCard from '$lib/ui/FormCard.svelte';
 	import KpiCard from '$lib/ui/KpiCard.svelte';
+	import Timeline from '$lib/ui/Timeline.svelte';
+	import ActivityFeed from '$lib/ui/ActivityFeed.svelte';
 </script>
 
 <h1>Phase 4.0 UI Demo</h1>
@@ -97,5 +99,28 @@
 		value="$24,300"
 		delta={{ value: '+12%', tone: 'positive' }}
 		data-testid="ui-kpi"
+	/>
+</section>
+
+<section>
+	<h2>Timeline</h2>
+	<Timeline
+		steps={[
+			{ label: 'Queued', state: 'done' },
+			{ label: 'In production', state: 'current', detail: 'Day 2 of 5' },
+			{ label: 'QC inspection', state: 'upcoming' }
+		]}
+		data-testid="ui-timeline"
+	/>
+</section>
+
+<section>
+	<h2>ActivityFeed</h2>
+	<ActivityFeed
+		entries={[
+			{ id: '1', primary: 'PO accepted', secondary: '2m ago', tone: 'green' },
+			{ id: '2', primary: 'Invoice submitted', secondary: '1h ago', tone: 'blue' }
+		]}
+		data-testid="ui-feed"
 	/>
 </section>

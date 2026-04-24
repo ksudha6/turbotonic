@@ -171,3 +171,22 @@ test.describe('KpiCard primitive', () => {
 		await expect(kpi).toContainText('+12%');
 	});
 });
+
+test.describe('Timeline + ActivityFeed primitives', () => {
+	test('Timeline renders ordered steps with state classes', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const steps = page.getByTestId('ui-timeline').locator('li');
+		await expect(steps).toHaveCount(3);
+	});
+
+	test('ActivityFeed renders entries with dot + primary + secondary lines', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const feed = page.getByTestId('ui-feed');
+		await expect(feed).toContainText('PO accepted');
+		await expect(feed).toContainText('2m ago');
+	});
+});
