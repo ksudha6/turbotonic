@@ -395,3 +395,29 @@ test.describe('UserMenu primitive', () => {
 		await expect(page.getByTestId('ui-usermenu-logout')).toBeVisible();
 	});
 });
+
+import AxeBuilder from '@axe-core/playwright';
+
+test.describe('Phase 4.0 accessibility scan', () => {
+	test('axe: /ui-demo has zero AA violations', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await page.waitForFunction(() => !!document.title);
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa'])
+			.analyze();
+		expect(results.violations).toEqual([]);
+	});
+
+	test('axe: /_smoke has zero AA violations', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/_smoke');
+		await page.waitForFunction(() => !!document.title);
+		const results = await new AxeBuilder({ page })
+			.withTags(['wcag2a', 'wcag2aa'])
+			.analyze();
+		expect(results.violations).toEqual([]);
+	});
+});

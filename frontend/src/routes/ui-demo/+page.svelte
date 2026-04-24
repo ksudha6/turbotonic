@@ -33,6 +33,10 @@
 	];
 </script>
 
+<svelte:head>
+	<title>UI Demo</title>
+</svelte:head>
+
 <h1>Phase 4.0 UI Demo</h1>
 
 <section>
@@ -106,7 +110,7 @@
 <section>
 	<h2>FormCard</h2>
 	<FormCard title="New thing" onSubmit={() => console.log('submit')} onCancel={() => console.log('cancel')} data-testid="ui-formcard">
-		<Input data-testid="ui-formcard-input" />
+		<label>Thing name <Input data-testid="ui-formcard-input" /></label>
 	</FormCard>
 </section>
 

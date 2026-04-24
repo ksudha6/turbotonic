@@ -19,6 +19,10 @@
 	const roleLabel = $derived(ROLE_LABEL[role]);
 </script>
 
+<svelte:head>
+	<title>Nexus smoke</title>
+</svelte:head>
+
 <AppShell {role} {roleLabel} breadcrumb="Smoke" data-testid="smoke-shell">
 	{#snippet userMenu()}
 		<UserMenu {name} {role} data-testid="smoke-usermenu" />

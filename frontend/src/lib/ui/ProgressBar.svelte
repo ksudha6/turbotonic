@@ -14,6 +14,7 @@
 		aria-valuenow={clamped}
 		aria-valuemin="0"
 		aria-valuemax="100"
+		aria-label={label ?? 'Progress'}
 		data-testid={testid}
 	>
 		<div class="fill" style="width: {clamped}%"></div>
