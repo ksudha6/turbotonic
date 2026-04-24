@@ -63,7 +63,10 @@ test.describe('StatusPill primitive', () => {
 		await mockUser(page);
 		await page.goto('/ui-demo');
 		for (const tone of ['green', 'blue', 'orange', 'red', 'gray']) {
-			await expect(page.getByTestId(`ui-pill-${tone}`)).toBeVisible();
+			const pill = page.getByTestId(`ui-pill-${tone}`);
+			await expect(pill).toBeVisible();
+			await expect(pill).toHaveClass(new RegExp(tone));
+			await expect(pill.locator('.dot')).toBeAttached();
 		}
 	});
 });
