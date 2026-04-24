@@ -23,6 +23,7 @@ async def seeded_conn() -> AsyncIterator[asyncpg.Connection]:
     # so the transaction must be clean before calling it.
     conn = await asyncpg.connect(TEST_DATABASE_URL)
     await init_db(conn)
+    # seed() opens its own transaction; asyncpg nests this as a savepoint.
     tx = conn.transaction()
     await tx.start()
     try:

@@ -9,7 +9,7 @@ from uuid import uuid4
 import asyncpg
 
 from src.db import DEFAULT_DATABASE_URL
-from src.domain.activity import ActivityEvent, EntityType, NotificationCategory, TargetRole
+from src.domain.activity import EVENT_METADATA, ActivityEvent, EntityType
 from src.domain.certificate import CertificateStatus
 from src.domain.invoice import InvoiceStatus
 from src.domain.milestone import ProductionMilestone
@@ -447,30 +447,33 @@ def _make_certificates(
 def _make_activity_log(pos: list[dict[str, object]]) -> list[dict[str, object]]:
     # Dashboard uses activity_log as its feed; variety here is what makes the
     # dev-server UI look populated. Covers every event type the Phase 4 dashboard
-    # groups into its "recent activity" panel.
+    # groups into its "recent activity" panel. Category and target_role are
+    # derived from EVENT_METADATA so the seed cannot drift from production
+    # semantics.
     events = (
-        (ActivityEvent.PO_CREATED, NotificationCategory.LIVE, TargetRole.SM),
-        (ActivityEvent.PO_SUBMITTED, NotificationCategory.ACTION_REQUIRED, TargetRole.VENDOR),
-        (ActivityEvent.PO_ACCEPTED, NotificationCategory.LIVE, TargetRole.SM),
-        (ActivityEvent.PO_MODIFIED, NotificationCategory.ACTION_REQUIRED, TargetRole.SM),
-        (ActivityEvent.PO_REJECTED, NotificationCategory.LIVE, TargetRole.SM),
-        (ActivityEvent.PO_REVISED, NotificationCategory.ACTION_REQUIRED, TargetRole.VENDOR),
-        (ActivityEvent.PO_LINE_MODIFIED, NotificationCategory.ACTION_REQUIRED, TargetRole.SM),
-        (ActivityEvent.PO_ADVANCE_PAID, NotificationCategory.LIVE, TargetRole.VENDOR),
-        (ActivityEvent.INVOICE_CREATED, NotificationCategory.LIVE, TargetRole.SM),
-        (ActivityEvent.INVOICE_SUBMITTED, NotificationCategory.ACTION_REQUIRED, TargetRole.SM),
-        (ActivityEvent.INVOICE_APPROVED, NotificationCategory.LIVE, TargetRole.VENDOR),
-        (ActivityEvent.INVOICE_PAID, NotificationCategory.LIVE, TargetRole.VENDOR),
-        (ActivityEvent.INVOICE_DISPUTED, NotificationCategory.ACTION_REQUIRED, TargetRole.VENDOR),
-        (ActivityEvent.MILESTONE_POSTED, NotificationCategory.LIVE, TargetRole.SM),
-        (ActivityEvent.MILESTONE_OVERDUE, NotificationCategory.DELAYED, TargetRole.SM),
-        (ActivityEvent.CERT_UPLOADED, NotificationCategory.LIVE, TargetRole.SM),
-        (ActivityEvent.CERT_REQUESTED, NotificationCategory.ACTION_REQUIRED, TargetRole.VENDOR),
-        (ActivityEvent.PACKAGING_COLLECTED, NotificationCategory.LIVE, TargetRole.SM),
-        (ActivityEvent.DOCUMENT_UPLOADED, NotificationCategory.LIVE, TargetRole.SM),
+        ActivityEvent.PO_CREATED,
+        ActivityEvent.PO_SUBMITTED,
+        ActivityEvent.PO_ACCEPTED,
+        ActivityEvent.PO_MODIFIED,
+        ActivityEvent.PO_REJECTED,
+        ActivityEvent.PO_REVISED,
+        ActivityEvent.PO_LINE_MODIFIED,
+        ActivityEvent.PO_ADVANCE_PAID,
+        ActivityEvent.INVOICE_CREATED,
+        ActivityEvent.INVOICE_SUBMITTED,
+        ActivityEvent.INVOICE_APPROVED,
+        ActivityEvent.INVOICE_PAID,
+        ActivityEvent.INVOICE_DISPUTED,
+        ActivityEvent.MILESTONE_POSTED,
+        ActivityEvent.MILESTONE_OVERDUE,
+        ActivityEvent.CERT_UPLOADED,
+        ActivityEvent.CERT_REQUESTED,
+        ActivityEvent.PACKAGING_COLLECTED,
+        ActivityEvent.DOCUMENT_UPLOADED,
     )
     rows: list[dict[str, object]] = []
-    for i, (event, category, target) in enumerate(events):
+    for i, event in enumerate(events):
+        category, target = EVENT_METADATA[event]
         po = pos[i % len(pos)]
         rows.append(
             {
