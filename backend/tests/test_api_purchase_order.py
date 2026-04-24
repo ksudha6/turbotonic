@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 from httpx import AsyncClient
 
+from src.domain.certificate import Certificate, CertificateStatus
 from src.domain.purchase_order import LineItemStatus, POStatus
+from src.domain.product import Product
+from src.domain.qualification_type import QualificationType
+from src.services.quality_gate import CertWarningReason
 
 pytestmark = pytest.mark.asyncio
 
@@ -76,7 +82,8 @@ async def _create_pending_po(client: AsyncClient, two_lines: bool = False) -> di
     po = await (_create_two_line_po(client) if two_lines else _create_po(client))
     r = await client.post(f"/api/v1/po/{po['id']}/submit")
     assert r.status_code == 200
-    return r.json()
+    # Submit returns POSubmitResponse({po: ..., cert_warnings: []}); unwrap the po.
+    return r.json()["po"]
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +310,10 @@ async def test_submit_transitions_draft_to_pending(authenticated_client: AsyncCl
     po = await _create_po(client)
     resp = await client.post(f"/api/v1/po/{po['id']}/submit")
     assert resp.status_code == 200
-    assert resp.json()["status"] == POStatus.PENDING.value
+    data = resp.json()
+    # Submit returns POSubmitResponse wrapping {po, cert_warnings}.
+    assert data["po"]["status"] == POStatus.PENDING.value
+    assert "cert_warnings" in data
 
 
 async def test_accept_transitions_pending_to_accepted(authenticated_client: AsyncClient) -> None:
@@ -832,3 +842,148 @@ async def test_reference_data_payment_terms_includes_has_advance(
     for entry in terms:
         assert "has_advance" in entry
         assert isinstance(entry["has_advance"], bool)
+
+
+# ---------------------------------------------------------------------------
+# Iter 039: quality gate on PO submit
+# ---------------------------------------------------------------------------
+
+_MARKETPLACE = "AMZ"
+
+_LINE_WITH_PRODUCT: dict = {
+    "part_number": "PN-CERT",
+    "description": "Cert-required widget",
+    "quantity": 1,
+    "uom": "EA",
+    "unit_price": "10.00",
+    "hs_code": "8471.30",
+    "country_of_origin": "CN",
+    "product_id": None,  # populated per test
+}
+
+
+async def _setup_product_with_qual(
+    client: AsyncClient,
+    vendor_id: str,
+) -> tuple[str, str]:
+    """Create a product and assign a qualification type. Returns (product_id, qt_id)."""
+    product_resp = await client.post(
+        "/api/v1/products/",
+        json={"vendor_id": vendor_id, "part_number": "PN-CERT", "description": "Cert widget", "manufacturing_address": ""},
+    )
+    assert product_resp.status_code == 201
+    product_id: str = product_resp.json()["id"]
+
+    qt_resp = await client.post(
+        "/api/v1/qualification-types",
+        json={"name": "CE Mark", "target_market": _MARKETPLACE, "applies_to_category": "", "description": ""},
+    )
+    assert qt_resp.status_code == 201
+    qt_id: str = qt_resp.json()["id"]
+
+    assign_resp = await client.post(
+        f"/api/v1/products/{product_id}/qualifications",
+        json={"qualification_type_id": qt_id},
+    )
+    assert assign_resp.status_code == 201
+
+    return product_id, qt_id
+
+
+async def _create_valid_cert(
+    client: AsyncClient,
+    product_id: str,
+    qt_id: str,
+    *,
+    expired: bool = False,
+    status: str = "VALID",
+) -> str:
+    expiry = "2020-01-01T00:00:00Z" if expired else "2099-01-01T00:00:00Z"
+    cert_resp = await client.post(
+        "/api/v1/certificates/",
+        json={
+            "product_id": product_id,
+            "qualification_type_id": qt_id,
+            "cert_number": "CERT-001",
+            "issuer": "TestLab",
+            "issue_date": "2024-01-01T00:00:00Z",
+            "expiry_date": expiry,
+            "target_market": _MARKETPLACE,
+        },
+    )
+    assert cert_resp.status_code == 201
+    cert_id: str = cert_resp.json()["id"]
+    if status == "VALID":
+        mark_resp = await client.patch(f"/api/v1/certificates/{cert_id}", json={"status": "VALID"})
+        assert mark_resp.status_code == 200
+    return cert_id
+
+
+async def _create_marketplace_po_with_product(
+    client: AsyncClient,
+    product_id: str,
+) -> dict:
+    vendor_resp = await client.post(
+        "/api/v1/vendors/",
+        json={"name": "CertVendor", "country": "US", "vendor_type": "PROCUREMENT"},
+    )
+    assert vendor_resp.status_code == 201
+    vendor_id: str = vendor_resp.json()["id"]
+    line = {**_LINE_WITH_PRODUCT, "product_id": product_id}
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "line_items": [line], "marketplace": _MARKETPLACE}
+    resp = await client.post("/api/v1/po/", json=payload)
+    assert resp.status_code == 201
+    return resp.json()
+
+
+async def test_submit_po_returns_po_submit_response_shape(authenticated_client: AsyncClient) -> None:
+    po = await _create_po(authenticated_client)
+    resp = await authenticated_client.post(f"/api/v1/po/{po['id']}/submit")
+    assert resp.status_code == 200
+    data = resp.json()
+    # Assert the wrapper shape has exactly these top-level keys.
+    assert set(data.keys()) == {"po", "cert_warnings"}
+    assert data["po"]["status"] == POStatus.PENDING.value
+    assert isinstance(data["cert_warnings"], list)
+
+
+async def test_submit_po_with_valid_cert_returns_empty_warnings(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
+    vendor_resp = await client.post(
+        "/api/v1/vendors/", json={"name": "VendorV", "country": "US", "vendor_type": "PROCUREMENT"}
+    )
+    vendor_id: str = vendor_resp.json()["id"]
+    product_id, qt_id = await _setup_product_with_qual(client, vendor_id)
+    await _create_valid_cert(client, product_id, qt_id)
+    line = {**_LINE_WITH_PRODUCT, "product_id": product_id}
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "line_items": [line], "marketplace": _MARKETPLACE}
+    po_resp = await client.post("/api/v1/po/", json=payload)
+    po_id: str = po_resp.json()["id"]
+
+    resp = await client.post(f"/api/v1/po/{po_id}/submit")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["cert_warnings"] == []
+
+
+async def test_submit_po_with_missing_cert_returns_warning(authenticated_client: AsyncClient) -> None:
+    client = authenticated_client
+    vendor_resp = await client.post(
+        "/api/v1/vendors/", json={"name": "VendorM", "country": "US", "vendor_type": "PROCUREMENT"}
+    )
+    vendor_id: str = vendor_resp.json()["id"]
+    product_id, qt_id = await _setup_product_with_qual(client, vendor_id)
+    # No cert created.
+    line = {**_LINE_WITH_PRODUCT, "product_id": product_id}
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "line_items": [line], "marketplace": _MARKETPLACE}
+    po_resp = await client.post("/api/v1/po/", json=payload)
+    po_id: str = po_resp.json()["id"]
+
+    resp = await client.post(f"/api/v1/po/{po_id}/submit")
+    assert resp.status_code == 200
+    warnings = resp.json()["cert_warnings"]
+    assert len(warnings) == 1
+    expected_reason = CertWarningReason.MISSING.value
+    assert warnings[0]["reason"] == expected_reason
+    assert warnings[0]["part_number"] == "PN-CERT"
+    assert warnings[0]["qualification_name"] == "CE Mark"

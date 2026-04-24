@@ -8,16 +8,20 @@ from pydantic import BaseModel
 
 from src.activity_repository import ActivityLogRepository
 from src.auth.dependencies import check_vendor_access, require_auth, require_role
+from src.certificate_repository import CertificateRepository
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType
-from src.domain.user import User, UserRole
 from src.domain.milestone import (
     MilestoneUpdate,
     ProductionMilestone,
     validate_next_milestone,
 )
+from src.domain.user import User, UserRole
 from src.milestone_repository import MilestoneRepository
+from src.product_repository import ProductRepository
+from src.qualification_type_repository import QualificationTypeRepository
 from src.repository import PurchaseOrderRepository
+from src.services.quality_gate import check_po_qualifications
 
 router = APIRouter(prefix="/api/v1/po", tags=["milestones"])
 
@@ -42,6 +46,30 @@ async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
 
 
 ActivityRepoDep = Annotated[ActivityLogRepository, Depends(get_activity_repo)]
+
+
+async def get_product_repo() -> AsyncIterator[ProductRepository]:
+    async with get_db() as conn:
+        yield ProductRepository(conn)
+
+
+ProductRepoDep = Annotated[ProductRepository, Depends(get_product_repo)]
+
+
+async def get_qualification_repo() -> AsyncIterator[QualificationTypeRepository]:
+    async with get_db() as conn:
+        yield QualificationTypeRepository(conn)
+
+
+QualificationRepoDep = Annotated[QualificationTypeRepository, Depends(get_qualification_repo)]
+
+
+async def get_cert_repo() -> AsyncIterator[CertificateRepository]:
+    async with get_db() as conn:
+        yield CertificateRepository(conn)
+
+
+CertRepoDep = Annotated[CertificateRepository, Depends(get_cert_repo)]
 
 
 class MilestonePostRequest(BaseModel):
@@ -79,6 +107,9 @@ async def post_milestone(
     milestone_repo: MilestoneRepoDep,
     po_repo: PORepoDep,
     activity_repo: ActivityRepoDep,
+    product_repo: ProductRepoDep,
+    qualification_repo: QualificationRepoDep,
+    cert_repo: CertRepoDep,
     user: User = require_role(UserRole.VENDOR, UserRole.SM),
 ) -> MilestoneResponse:
     # Reject empty or whitespace-only milestone values before enum lookup.
@@ -114,5 +145,19 @@ async def post_milestone(
     update = MilestoneUpdate(milestone=proposed, posted_at=datetime.now(UTC))
     await milestone_repo.save(po_id, update)
     await activity_repo.append(EntityType.PO, po_id, ActivityEvent.MILESTONE_POSTED, detail=update.milestone.value)
+
+    # On QC_PASSED: emit CERT_REQUESTED for each product line missing valid cert coverage.
+    if proposed is ProductionMilestone.QC_PASSED:
+        warnings = await check_po_qualifications(po, product_repo, qualification_repo, cert_repo)
+        for warning in warnings:
+            detail = f"Product {warning.part_number} requires {warning.qualification_name}"
+            if po.marketplace:
+                detail = f"{detail} for market {po.marketplace}"
+            await activity_repo.append(
+                EntityType.CERTIFICATE,
+                warning.product_id,
+                ActivityEvent.CERT_REQUESTED,
+                detail=detail,
+            )
 
     return MilestoneResponse(milestone=update.milestone.value, posted_at=update.posted_at)

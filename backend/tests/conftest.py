@@ -44,12 +44,18 @@ from src.routers.invoice import get_invoice_repo as invoice_get_invoice_repo
 from src.routers.invoice import get_po_repo as invoice_get_po_repo
 from src.routers.invoice import get_vendor_repo as invoice_get_vendor_repo
 from src.routers.milestone import get_activity_repo as milestone_get_activity_repo
+from src.routers.milestone import get_cert_repo as milestone_get_cert_repo
 from src.routers.milestone import get_milestone_repo as milestone_get_milestone_repo
 from src.routers.milestone import get_po_repo as milestone_get_po_repo
+from src.routers.milestone import get_product_repo as milestone_get_product_repo
+from src.routers.milestone import get_qualification_repo as milestone_get_qualification_repo
 from src.routers.purchase_order import get_activity_repo as po_get_activity_repo
+from src.routers.purchase_order import get_cert_repo as po_get_cert_repo
 from src.routers.purchase_order import get_email_service as po_get_email_service
 from src.routers.purchase_order import get_invoice_repo as po_get_invoice_repo
 from src.routers.purchase_order import get_notification_dispatcher as po_get_notification_dispatcher
+from src.routers.purchase_order import get_product_repo as po_get_product_repo
+from src.routers.purchase_order import get_qualification_repo as po_get_qualification_repo
 from src.routers.purchase_order import get_repo
 from src.routers.purchase_order import get_vendor_repo as po_get_vendor_repo
 from src.routers.product import get_product_repo as product_get_product_repo
@@ -199,6 +205,9 @@ async def _setup_overrides(
     app.dependency_overrides[po_get_vendor_repo] = override_get_vendor_repo
     app.dependency_overrides[po_get_invoice_repo] = override_get_invoice_repo
     app.dependency_overrides[po_get_activity_repo] = override_get_activity_repo
+    app.dependency_overrides[po_get_product_repo] = override_get_product_repo
+    app.dependency_overrides[po_get_qualification_repo] = override_get_qt_repo
+    app.dependency_overrides[po_get_cert_repo] = override_get_cert_repo
     app.dependency_overrides[vendor_get_vendor_repo] = override_get_vendor_repo
     app.dependency_overrides[dash_get_repo] = override_get_repo
     app.dependency_overrides[dash_get_vendor_repo] = override_get_vendor_repo
@@ -212,6 +221,9 @@ async def _setup_overrides(
     app.dependency_overrides[milestone_get_milestone_repo] = override_get_milestone_repo
     app.dependency_overrides[milestone_get_po_repo] = override_get_repo
     app.dependency_overrides[milestone_get_activity_repo] = override_get_activity_repo
+    app.dependency_overrides[milestone_get_product_repo] = override_get_product_repo
+    app.dependency_overrides[milestone_get_qualification_repo] = override_get_qt_repo
+    app.dependency_overrides[milestone_get_cert_repo] = override_get_cert_repo
     app.dependency_overrides[activity_get_activity_repo] = override_get_activity_repo
     app.dependency_overrides[product_get_product_repo] = override_get_product_repo
     app.dependency_overrides[packaging_get_packaging_repo] = override_get_packaging_repo

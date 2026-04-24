@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentUpdate, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, CertWarning, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentUpdate, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -88,16 +88,16 @@ export function updatePO(id: string, data: PurchaseOrderInput): Promise<Purchase
 	return apiPut<PurchaseOrder>(`/api/v1/po/${id}`, data);
 }
 
-export function submitPO(id: string): Promise<PurchaseOrder> {
-	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/submit`);
+export function submitPO(id: string): Promise<POSubmitResponse> {
+	return apiPost<POSubmitResponse>(`/api/v1/po/${id}/submit`);
 }
 
 export function acceptPO(id: string): Promise<PurchaseOrder> {
 	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/accept`);
 }
 
-export function resubmitPO(id: string): Promise<PurchaseOrder> {
-	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/resubmit`);
+export function resubmitPO(id: string): Promise<POSubmitResponse> {
+	return apiPost<POSubmitResponse>(`/api/v1/po/${id}/resubmit`);
 }
 
 // Iter 056 removed the /reject and /accept-lines endpoints in favour of per-line

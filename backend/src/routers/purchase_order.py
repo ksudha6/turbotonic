@@ -27,11 +27,13 @@ from src.dto import (
     BulkTransitionItemResult,
     BulkTransitionRequest,
     BulkTransitionResult,
+    CertWarningResponse,
     ForceAcceptRequest,
     ForceRemoveRequest,
     InvoiceListItem,
     MarkAdvancePaidRequest,
     ModifyLineRequest,
+    POSubmitResponse,
     PaginatedPOList,
     PurchaseOrderCreate,
     PurchaseOrderListItem,
@@ -43,13 +45,17 @@ from src.dto import (
     po_to_list_item,
     po_to_response,
 )
+from src.certificate_repository import CertificateRepository
 from src.invoice_repository import InvoiceRepository
 from src.milestone_repository import MilestoneRepository
+from src.product_repository import ProductRepository
+from src.qualification_type_repository import QualificationTypeRepository
 from src.repository import PurchaseOrderRepository
 from src.schema import init_db
 from src.services.downstream_artifacts import line_has_downstream_artifacts
 from src.services.po_modification_gate import first_milestone_posted_at
 from src.services.po_pdf import generate_po_pdf
+from src.services.quality_gate import CertWarning, check_po_qualifications
 from src.vendor_repository import VendorRepository
 
 router = APIRouter(prefix="/api/v1/po", tags=["purchase-orders"])
@@ -85,6 +91,30 @@ async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
 
 
 ActivityRepoDep = Annotated[ActivityLogRepository, Depends(get_activity_repo)]
+
+
+async def get_product_repo() -> AsyncIterator[ProductRepository]:
+    async with get_db() as conn:
+        yield ProductRepository(conn)
+
+
+ProductRepoDep = Annotated[ProductRepository, Depends(get_product_repo)]
+
+
+async def get_qualification_repo() -> AsyncIterator[QualificationTypeRepository]:
+    async with get_db() as conn:
+        yield QualificationTypeRepository(conn)
+
+
+QualificationRepoDep = Annotated[QualificationTypeRepository, Depends(get_qualification_repo)]
+
+
+async def get_cert_repo() -> AsyncIterator[CertificateRepository]:
+    async with get_db() as conn:
+        yield CertificateRepository(conn)
+
+
+CertRepoDep = Annotated[CertificateRepository, Depends(get_cert_repo)]
 
 
 def get_email_service() -> EmailService:
@@ -339,8 +369,30 @@ async def list_po_invoices(po_id: str, repo: RepoDep, invoice_repo: InvoiceRepoD
     return [invoice_to_list_item(inv) for inv in invoices]
 
 
-@router.post("/{po_id}/submit", response_model=PurchaseOrderResponse)
-async def submit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, user: User = require_role(UserRole.SM)) -> PurchaseOrderResponse:
+def _warnings_to_response(warnings: list[CertWarning]) -> list[CertWarningResponse]:
+    return [
+        CertWarningResponse(
+            line_item_index=w.line_item_index,
+            part_number=w.part_number,
+            product_id=w.product_id,
+            qualification_name=w.qualification_name,
+            reason=w.reason.value,
+        )
+        for w in warnings
+    ]
+
+
+@router.post("/{po_id}/submit", response_model=POSubmitResponse)
+async def submit_po(
+    po_id: str,
+    repo: RepoDep,
+    vendor_repo: VendorRepoDep,
+    activity_repo: ActivityRepoDep,
+    product_repo: ProductRepoDep,
+    qualification_repo: QualificationRepoDep,
+    cert_repo: CertRepoDep,
+    user: User = require_role(UserRole.SM),
+) -> POSubmitResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
@@ -354,7 +406,11 @@ async def submit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activ
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vname = vendor.name if vendor else ""
     vcountry = vendor.country if vendor else ""
-    return po_to_response(po, vendor_name=vname, vendor_country=vcountry)
+    warnings = await check_po_qualifications(po, product_repo, qualification_repo, cert_repo)
+    return POSubmitResponse(
+        po=po_to_response(po, vendor_name=vname, vendor_country=vcountry),
+        cert_warnings=_warnings_to_response(warnings),
+    )
 
 
 @router.post("/{po_id}/accept", response_model=PurchaseOrderResponse)
@@ -828,8 +884,17 @@ async def update_po(po_id: str, body: PurchaseOrderUpdate, repo: RepoDep, vendor
     return po_to_response(po, vendor_name=vendor.name, vendor_country=vendor.country)
 
 
-@router.post("/{po_id}/resubmit", response_model=PurchaseOrderResponse)
-async def resubmit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, user: User = require_role(UserRole.SM)) -> PurchaseOrderResponse:
+@router.post("/{po_id}/resubmit", response_model=POSubmitResponse)
+async def resubmit_po(
+    po_id: str,
+    repo: RepoDep,
+    vendor_repo: VendorRepoDep,
+    activity_repo: ActivityRepoDep,
+    product_repo: ProductRepoDep,
+    qualification_repo: QualificationRepoDep,
+    cert_repo: CertRepoDep,
+    user: User = require_role(UserRole.SM),
+) -> POSubmitResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
@@ -843,4 +908,8 @@ async def resubmit_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, act
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vname = vendor.name if vendor else ""
     vcountry = vendor.country if vendor else ""
-    return po_to_response(po, vendor_name=vname, vendor_country=vcountry)
+    warnings = await check_po_qualifications(po, product_repo, qualification_repo, cert_repo)
+    return POSubmitResponse(
+        po=po_to_response(po, vendor_name=vname, vendor_country=vcountry),
+        cert_warnings=_warnings_to_response(warnings),
+    )

@@ -446,6 +446,22 @@ export interface PackagingSpecUpdate {
 	requirements_text?: string;
 }
 
+// Iter 039: quality gate advisory warnings returned on PO submit/resubmit.
+export type CertWarningReason = 'MISSING' | 'EXPIRED';
+
+export interface CertWarning {
+	line_item_index: number;
+	part_number: string;
+	product_id: string;
+	qualification_name: string;
+	reason: CertWarningReason;
+}
+
+export interface POSubmitResponse {
+	po: PurchaseOrder;
+	cert_warnings: CertWarning[];
+}
+
 export type UserRole = 'ADMIN' | 'PROCUREMENT_MANAGER' | 'SM' | 'VENDOR' | 'QUALITY_LAB' | 'FREIGHT_MANAGER';
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'PENDING';
 
