@@ -230,3 +230,25 @@ test.describe('DataTable primitive', () => {
 		await expect(page.getByTestId('ui-table-pagination')).toContainText('Page 1 of 5');
 	});
 });
+
+test.describe('Page + Detail headers', () => {
+	test('PageHeader shows H1, subtitle, and action slot', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const header = page.getByTestId('ui-pageheader');
+		await expect(header.getByRole('heading', { level: 1, name: 'Invoices' })).toBeVisible();
+		await expect(header).toContainText('Manage invoicing');
+		await expect(page.getByTestId('ui-pageheader-action')).toBeVisible();
+	});
+
+	test('DetailHeader shows back link, title, subtitle, status pill', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const header = page.getByTestId('ui-detailheader');
+		await expect(header.getByRole('link', { name: /All invoices/ })).toBeVisible();
+		await expect(header).toContainText('INV-001');
+		await expect(header).toContainText('Submitted');
+	});
+});

@@ -17,6 +17,8 @@
 	import EmptyState from '$lib/ui/EmptyState.svelte';
 	import ErrorState from '$lib/ui/ErrorState.svelte';
 	import DataTable from '$lib/ui/DataTable.svelte';
+	import PageHeader from '$lib/ui/PageHeader.svelte';
+	import DetailHeader from '$lib/ui/DetailHeader.svelte';
 
 	let lastClicked = $state('');
 	let page = $state(1);
@@ -163,4 +165,24 @@
 		data-testid="ui-table"
 	/>
 	<p data-testid="ui-table-click">{lastClicked}</p>
+</section>
+
+<section>
+	<h2>Headers</h2>
+	<PageHeader title="Invoices" subtitle="Manage invoicing" data-testid="ui-pageheader">
+		{#snippet action()}
+			<Button data-testid="ui-pageheader-action">+ New invoice</Button>
+		{/snippet}
+	</PageHeader>
+	<DetailHeader
+		backHref="/ui-demo"
+		backLabel="All invoices"
+		title="INV-001"
+		subtitle="Acme Inc"
+		data-testid="ui-detailheader"
+	>
+		{#snippet statusPill()}
+			<StatusPill tone="blue" label="Submitted" />
+		{/snippet}
+	</DetailHeader>
 </section>
