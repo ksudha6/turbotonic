@@ -305,15 +305,28 @@ async def test_admin_sees_global_kpis_and_activity() -> None:
         assert set(data.keys()) == {"kpis", "awaiting_acceptance", "activity"}
 
         kpis = data["kpis"]
-        # All four KPI keys present
-        assert set(kpis.keys()) == {"pending_pos", "awaiting_acceptance", "in_production", "outstanding_ap_usd"}
+        # All seven KPI keys present (counts + per-KPI USD values + outstanding A/P)
+        assert set(kpis.keys()) == {
+            "pending_pos",
+            "pending_pos_value_usd",
+            "awaiting_acceptance",
+            "awaiting_acceptance_value_usd",
+            "in_production",
+            "in_production_value_usd",
+            "outstanding_ap_usd",
+        }
         assert isinstance(kpis["pending_pos"], int)
         assert isinstance(kpis["awaiting_acceptance"], int)
         assert isinstance(kpis["in_production"], int)
         assert isinstance(kpis["outstanding_ap_usd"], str)
+        assert isinstance(kpis["pending_pos_value_usd"], str)
+        assert isinstance(kpis["awaiting_acceptance_value_usd"], str)
+        assert isinstance(kpis["in_production_value_usd"], str)
 
         # DRAFT POs count as pending — two were created
         assert kpis["pending_pos"] >= 1
+        # USD value follows the count
+        assert Decimal(kpis["pending_pos_value_usd"]) > Decimal("0")
 
         # Lists present
         assert isinstance(data["awaiting_acceptance"], list)
@@ -322,6 +335,19 @@ async def test_admin_sees_global_kpis_and_activity() -> None:
         # Capped at their limits
         assert len(data["activity"]) <= 20
         assert len(data["awaiting_acceptance"]) <= 10
+
+        # Activity exclusion: no excluded events in the dashboard feed
+        excluded = {
+            "PO_LINE_MODIFIED",
+            "PO_LINE_ACCEPTED",
+            "PO_LINE_REMOVED",
+            "PO_FORCE_ACCEPTED",
+            "PO_FORCE_REMOVED",
+            "PO_CONVERGED",
+            "EMAIL_SEND_FAILED",
+        }
+        for entry in data["activity"]:
+            assert entry["event"] not in excluded
 
 
 async def test_sm_scopes_to_procurement() -> None:
@@ -390,8 +416,11 @@ async def test_vendor_returns_empty_payload() -> None:
         kpis = data["kpis"]
 
         assert kpis["pending_pos"] == 0
+        assert kpis["pending_pos_value_usd"] == "0.00"
         assert kpis["awaiting_acceptance"] == 0
+        assert kpis["awaiting_acceptance_value_usd"] == "0.00"
         assert kpis["in_production"] == 0
+        assert kpis["in_production_value_usd"] == "0.00"
         assert kpis["outstanding_ap_usd"] == "0.00"
         assert data["awaiting_acceptance"] == []
         assert data["activity"] == []

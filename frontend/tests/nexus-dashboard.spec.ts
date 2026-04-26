@@ -34,8 +34,11 @@ const VENDOR_USER = {
 const FULL_SUMMARY = {
 	kpis: {
 		pending_pos: 4,
+		pending_pos_value_usd: '52000.00',
 		awaiting_acceptance: 2,
+		awaiting_acceptance_value_usd: '12500.00',
 		in_production: 3,
+		in_production_value_usd: '38000.00',
 		outstanding_ap_usd: '12500.00'
 	},
 	awaiting_acceptance: [
@@ -55,9 +58,21 @@ const FULL_SUMMARY = {
 	activity: [
 		{
 			id: 'act-1',
-			event: 'PO_CREATED',
-			category: 'INFO',
+			entity_type: 'PO',
+			entity_id: 'po-9',
+			event: 'PO_SUBMITTED',
+			detail: null,
+			category: 'ACTION_REQUIRED',
 			created_at: new Date(Date.now() - 3600000).toISOString()
+		},
+		{
+			id: 'act-2',
+			entity_type: 'INVOICE',
+			entity_id: 'inv-3',
+			event: 'INVOICE_APPROVED',
+			detail: null,
+			category: 'LIVE',
+			created_at: new Date(Date.now() - 7200000).toISOString()
 		}
 	]
 };
@@ -65,8 +80,11 @@ const FULL_SUMMARY = {
 const EMPTY_SUMMARY = {
 	kpis: {
 		pending_pos: 0,
+		pending_pos_value_usd: '0.00',
 		awaiting_acceptance: 0,
+		awaiting_acceptance_value_usd: '0.00',
 		in_production: 0,
+		in_production_value_usd: '0.00',
 		outstanding_ap_usd: '0.00'
 	},
 	awaiting_acceptance: [],
@@ -134,6 +152,28 @@ test('ADMIN sees the four KPI cards with correct values', async ({ page }) => {
 	await expect(page.getByTestId('kpi-awaiting')).toContainText('2');
 	await expect(page.getByTestId('kpi-in-production')).toContainText('3');
 	await expect(page.getByTestId('kpi-outstanding-ap')).toContainText('$12,500');
+
+	// USD value chip on each PO-derived KPI card
+	await expect(page.getByTestId('kpi-pending-pos')).toContainText('$52,000');
+	await expect(page.getByTestId('kpi-awaiting')).toContainText('$12,500');
+	await expect(page.getByTestId('kpi-in-production')).toContainText('$38,000');
+});
+
+test('Activity row links to PO detail with permission', async ({ page }) => {
+	await mockApiCatchAll(page);
+	await mockUser(page, ADMIN_USER);
+	await mockUnreadCount(page);
+	await mockDashboardSummary(page, FULL_SUMMARY);
+
+	await page.goto('/dashboard');
+	const activityPanel = page.getByTestId('panel-activity');
+	await expect(activityPanel).toBeVisible();
+
+	const poRow = page.getByTestId('activity-row-act-1');
+	await expect(poRow).toHaveAttribute('href', '/po/po-9');
+
+	const invoiceRow = page.getByTestId('activity-row-act-2');
+	await expect(invoiceRow).toHaveAttribute('href', '/invoice/inv-3');
 });
 
 test('SM sees the same full layout', async ({ page }) => {
