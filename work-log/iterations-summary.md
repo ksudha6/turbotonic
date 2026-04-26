@@ -1,7 +1,7 @@
 # Iterations Summary
 
 > Single-file context for future conversations. Replaces reading 29 individual iteration docs.
-> Last updated: iter 070 closed on 2026-04-24 — **Phase 4.0 complete**.
+> Last updated: iter 071 closed on 2026-04-26 — **Phase 4.1 dashboard for ADMIN+SM**.
 
 ---
 
@@ -40,7 +40,7 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 
 | Route | Purpose |
 |-------|---------|
-| `/dashboard` | PO/invoice/vendor summary cards, activity feed, production pipeline, overdue table |
+| `/dashboard` | (Phase 4.1) ADMIN/SM 4-KPI grid (Pending POs, Awaiting acceptance, In production, Outstanding A/P) + recent activity + awaiting-acceptance panel under `(nexus)` AppShell. Other roles see a placeholder pending their dashboard iter. |
 | `/po` | PO list with filters, search, sort, pagination, bulk actions |
 | `/po/new` | Create PO form |
 | `/po/[id]` | PO detail: status actions, line items, invoices, milestones, activity timeline, PDF |
@@ -68,6 +68,7 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 - **Shipment**: create, list (by PO or all), get, remaining-quantities, PATCH line item weights/dims, submit-for-documents, mark-ready (gated by readiness check)
 - **Shipment documents**: list requirements, add custom requirement, upload file against requirement, GET readiness (documents + certificates + packaging composite)
 - **Shipment PDFs**: GET packing-list, GET commercial-invoice (CI number deterministic, not persisted)
+- **Dashboard**: legacy `/dashboard/` returns the pre-revamp aggregate (kept additively during the revamp); `/dashboard/summary` (iter 071) returns role-scoped KPIs + awaiting-acceptance list + activity feed for the `(nexus)` page. Pre-revamp endpoint will retire end of Phase 4.
 - **Activity**: list (with optional target_role filter), unread count (with optional target_role filter), mark read
 - **Reference data**: all lookups in one GET
 - **Document**: upload (multipart, PDF-only, 10MB limit), download (Content-Disposition), delete, list by entity
@@ -143,6 +144,7 @@ purchase_orders, line_items, rejection_history, vendors, products, invoices, inv
 | 068 | 2026-04-24 | Phase 4.0 shell: `TopBar.svelte` (hamburger toggle + optional breadcrumb hidden on mobile via `@media max-width: 767px` + embedded pre-revamp NotificationBell + optional userMenu snippet; search omitted in 4.0) and `AppShell.svelte` (composes Sidebar + TopBar + iter-065 ErrorBoundary; desktop 240px + 1fr grid; mobile ≤768px off-canvas drawer at `min(280px, 70vw)` with `translateX` + `visibility:hidden` transition + tap-to-dismiss overlay). Separate `/ui-demo/shell` route hosts the AppShell preview. All three Phase 4.0 brainstorms (Tasks 18, 20, 22) resolved from Lovable mock screenshots captured at 1440/768/390 viewports via Playwright MCP. Chrome scope = Option B: mock visual chrome + real routes. Retrofits to existing primitives: `sidebar-items.ts` returns `SidebarSection[]`; `Sidebar.svelte` gains section headers + `roleLabel?: string` + `footer?: Snippet`; `KpiCard.svelte` gains `icon?: Snippet` slot. `primitives.spec.ts` grows to 31 tests. 591 backend + 140 Playwright green. |
 | 069 | 2026-04-24 | Phase 4.0 shell finish: `UserMenu.svelte` (pill with avatar + name + role stacked on desktop, collapses to avatar + chevron on mobile via `@media max-width: 767px`; dropdown with Log out; `import.meta.env.DEV`-gated Switch role placeholder for future dev-store wiring; logout swallows API errors and always redirects to `/login`). `redirects.ts` + spec (empty registry in Phase 4.0; `resolveRedirect` substitutes `:param` tokens via named-capture regex). `(nexus)/_smoke/+page.svelte` sentinel route mounts AppShell + UserMenu with `page.data.user`-derived role/name/roleLabel. `nexus-shell.spec.ts` permanent E2E test covers ADMIN-full-nav, VENDOR-no-Vendors, and 401-redirect invariants, scoping assertions to `ui-appshell-sidebar` testid to avoid colliding with pre-revamp nav links. `primitives.spec.ts` grows to 33 tests; new `redirects.spec.ts` (3) and `nexus-shell.spec.ts` (3). 591 backend + 148 Playwright green. |
 | 070 | 2026-04-24 | **Phase 4.0 close.** Adds @axe-core/playwright and runs AA accessibility scan on `/ui-demo` and `/_smoke` (zero violations / fixed inline — see iter doc). Scratch 390px + 1024px screenshots captured locally for visual verification but not committed (per CLAUDE.md scratch-test rule). Work-log summary updated to mark Phase 4.0 complete. 591 backend + 150 Playwright green. Branch `ux-changes` ready for PR to main. |
+| 071 | 2026-04-26 | **Phase 4.1 dashboard for ADMIN+SM.** New `frontend/src/routes/(nexus)/dashboard/+page.svelte` consuming new `GET /api/v1/dashboard/summary` (ADMIN global, SM PROCUREMENT-scoped, others empty payload). 4 KPIs (Pending POs, Awaiting acceptance, In production, Outstanding A/P) + Awaiting-acceptance panel + Recent activity panel via Phase 4.0 primitives (AppShell, KpiCard, ActivityFeed, PanelCard, EmptyState). Other roles get a thin placeholder. Pre-revamp `frontend/src/routes/dashboard/+page.svelte` and its specs deleted. Sidebar/permissions matrix patched: FREIGHT_MANAGER drops POs, VENDOR adds Products, PROCUREMENT_MANAGER promoted to SM-equivalent (read-only). Root layout `isRevampRoute` extended for `/dashboard*`. New `nexus-dashboard.spec.ts` (6 tests). Test fixture updates in `auth-flow.spec.ts`, `notification-bell.spec.ts`, `role-rendering.spec.ts`, `invoice-list.spec.ts` per route migration. 595 backend + 145 Playwright green. |
 
 ---
 

@@ -57,24 +57,31 @@ RFQ aggregate is a future module that will flow into PO; no RFQ-derived data on 
 
 ### Task 3 -- Frontend `(nexus)/dashboard/+page.svelte`
 
-- [ ] Add `DashboardSummary` types + `fetchDashboardSummary()` API helper.
-- [ ] Create `frontend/src/routes/(nexus)/dashboard/+page.svelte` with AppShell + 4 KpiCards + ActivityFeed + awaiting-acceptance PanelCard. Branch on `role`: ADMIN/SM full layout, others render placeholder PanelCard.
-- [ ] Delete `frontend/src/routes/dashboard/+page.svelte`, `frontend/tests/dashboard.spec.ts`, `frontend/tests/dashboard-activity.spec.ts`.
-- [ ] Run `cd frontend && npm run build` — expect success.
-- [ ] Smoke-test locally as ADMIN, SM, VENDOR via `make up`.
-- [ ] Commit: `Replace /dashboard with (nexus)/dashboard for ADMIN+SM (iter 071 task 3)`.
+- [x] Add `DashboardSummary` types + `fetchDashboardSummary()` API helper.
+- [x] Create `frontend/src/routes/(nexus)/dashboard/+page.svelte` with AppShell + 4 KpiCards + ActivityFeed + awaiting-acceptance PanelCard. Branch on `role`: ADMIN/SM full layout, others render placeholder PanelCard.
+- [x] Delete `frontend/src/routes/dashboard/+page.svelte`, `frontend/tests/dashboard.spec.ts`, `frontend/tests/dashboard-activity.spec.ts`.
+- [x] Run `cd frontend && npm run build` — success.
+- [x] Run `make test-browser` — 139 passed (150 baseline − 11 deleted pre-revamp tests; 9 in `dashboard.spec.ts` + 2 in `dashboard-activity.spec.ts` + 1 in `invoice-list.spec.ts:198`).
+- [x] Commit `cf05fac`: `Replace /dashboard with (nexus)/dashboard for ADMIN+SM (iter 071 task 3)`.
+
+Collateral test-fixture updates required by the route migration (also in `cf05fac`):
+- `frontend/src/routes/+layout.svelte` `isRevampRoute` extended to include `/dashboard` and `/dashboard/*` so the pre-revamp root nav stops doubling up over AppShell's Sidebar.
+- `frontend/tests/role-rendering.spec.ts` `mockDashboardRoute` adds an empty `DashboardSummary` mock so ADMIN/SM tests don't hit the catch-all `[]` and crash the new page.
+- `frontend/tests/auth-flow.spec.ts` `mockDashboard` adds the same summary mock; the "logout button redirects to /login" and "nav shows user display name" tests updated to click the UserMenu pill before asserting Log out (Log out now lives inside the UserMenu dropdown, not directly in the nav).
+- `frontend/tests/notification-bell.spec.ts` `beforeEach` adds `EMPTY_DASHBOARD_SUMMARY` mock so the bell tests don't crash on the new dashboard route.
+- `frontend/tests/invoice-list.spec.ts` `dashboard shows invoice summary section` test deleted (asserted on a pre-revamp section that no longer exists).
 
 ### Task 4 -- Permanent Playwright spec
 
-- [ ] Create `frontend/tests/nexus-dashboard.spec.ts` (5 tests: ADMIN KPIs, SM same layout, awaiting-row click navigates, VENDOR sees placeholder, empty awaiting renders EmptyState).
-- [ ] Run `make test-browser` — record exact pass count.
-- [ ] Commit: `Add Playwright spec for (nexus)/dashboard (iter 071 task 4)`.
+- [x] Create `frontend/tests/nexus-dashboard.spec.ts` (6 tests: ADMIN KPIs, SM same layout, awaiting-row click navigates, VENDOR sees placeholder, empty awaiting + empty activity render EmptyState).
+- [x] Run `make test-browser` — 145 passed.
+- [x] Commit `4dbdf4e`: `Add Playwright spec for (nexus)/dashboard (iter 071 task 4)`.
 
 ### Task 5 -- Phase 4.1.0 close
 
-- [ ] Finalize this iter doc with test counts + commit SHAs in Notes.
-- [ ] Update `work-log/iterations-summary.md` (header date, iteration log row, frontend routes, API surface, Phase 4 backlog).
-- [ ] Commit and `git push origin phase-4-1-dashboard`.
+- [x] Finalize this iter doc with test counts + commit SHAs in Notes.
+- [x] Update `work-log/iterations-summary.md` (header date, iteration log row, frontend routes, API surface, Phase 4 backlog).
+- [x] Commit and `git push origin phase-4-1-dashboard`.
 
 ## Existing test impact
 
@@ -105,6 +112,37 @@ None.
 
 ## Notes
 
-In progress.
+Iter 071 closed on 2026-04-26. Five commits landed on `phase-4-1-dashboard`:
+- `0aec436` Open iter 071: Phase 4.1 dashboard plan + spec decisions log.
+- `21201db` Patch sidebar items + permissions per Phase 4.1 matrix (task 1).
+- `16290c2` Add GET /api/v1/dashboard/summary with role scoping (task 2). Two review-loop amends folded in: spec compliance fix (IN PRODUCTION KPI made conditional on `procurement_only` so ADMIN sees OPEX) and code quality fix (KPIs 1/2/3 + awaiting list deduplicated via a `po_type_clause` f-string fragment; KPI 4 left branched because the SM JOIN delta is structural).
+- `cf05fac` Replace /dashboard with (nexus)/dashboard for ADMIN+SM (task 3). Includes collateral test fixture updates (root layout `isRevampRoute` extension, role-rendering / auth-flow / notification-bell summary mocks, and one deleted pre-revamp invoice-list dashboard test).
+- `4dbdf4e` Add Playwright spec for (nexus)/dashboard (task 4). 6 new tests.
 
-- TaskGroup fan-out for dashboard summary queries (deferred — iter-scoped to keep connection-pool semantics conservative).
+Test counts:
+- Backend: 591 at iter open → 595 at close (+4 in `test_dashboard_summary.py`).
+- Playwright: 150 at iter open → 145 at close. Net delta -5: -11 deleted (9 in pre-revamp `dashboard.spec.ts` + 2 in `dashboard-activity.spec.ts` + 1 retired test in `invoice-list.spec.ts`) and +6 new in `nexus-dashboard.spec.ts`. The `auth-flow.spec.ts` and `notification-bell.spec.ts` updates kept their pass counts unchanged.
+
+### Decisions and design notes
+
+- **Endpoint additivity.** The pre-revamp `GET /api/v1/dashboard/` endpoint stays intact during transition. Phase 4.1 adds `/summary` alongside it. Both will live on until the end-of-revamp cleanup once every aggregate has migrated to a `(nexus)` page.
+- **`isRevampRoute` extension.** Adding `/dashboard` to the root layout's revamp-route set was necessary collateral. As more pages move to `(nexus)`, this set will grow. A path-based check is the cleanest signal we have without baking SvelteKit-internal knowledge of route groups into the layout. Each future phase adds its aggregate's path here.
+- **Read-only enforcement for PROCUREMENT_MANAGER.** The Phase 4.1 matrix promotes PROCUREMENT_MANAGER to SM-equivalent read access (Dashboard, POs, Invoices, Products). Read-helpers in `permissions.ts` updated; mutation helpers (`canCreatePO`, `canEditPO`, `canSubmitPO`, `canApproveInvoice`, etc.) intentionally untouched — PROCUREMENT_MANAGER is read-only by virtue of not appearing in any mutate guard.
+- **`canViewPOs` correction.** Iter 067 had FREIGHT_MANAGER in `canViewPOs`. The Phase 4.1 matrix removes POs from FREIGHT_MANAGER's sidebar; the page-level guard had to follow. Removed FREIGHT_MANAGER, added PROCUREMENT_MANAGER.
+- **Spec gap caught in review.** Task 2's first cut applied `AND po_type = 'PROCUREMENT'` unconditionally on the IN PRODUCTION KPI, which would have hidden OPEX POs from ADMIN's count. Spec compliance reviewer caught it; fix branched the query on `procurement_only`. The bug was inherited from the existing `get_dashboard()` endpoint — left alone there since that endpoint is being retired.
+- **UserMenu interaction shift.** The pre-revamp root nav put "Log out" directly in the navigation bar; the new `UserMenu` primitive hides it inside a click-to-open dropdown. `auth-flow.spec.ts` two tests (`logout button redirects to /login` and `nav shows user display name when authenticated`) updated to click the user pill before asserting the Log out menuitem is visible.
+
+### DDD vocab assessment
+
+No new domain terms emerged. `KPI`, `awaiting acceptance`, and `outstanding A/P` are presentation-layer rollups, not domain concepts. `docs/ddd-vocab.md` unchanged.
+
+### Carry-forward backlog
+
+Logged in `work-log/iterations-summary.md` for later iters:
+- TaskGroup fan-out for dashboard summary queries (deferred — iter-scoped to keep connection-pool semantics conservative; hit a transaction-related deadlock in this iter when an over-engineered test attempted shared-connection patching).
+- VENDOR / FREIGHT_MANAGER / QUALITY_LAB / PROCUREMENT_MANAGER full dashboards (placeholder shipped this iter; per-role panel sets in subsequent iters).
+- Quality flags KPI/panel for SM (line-level cert join — needs Certificate-status read paths integrated into the dashboard query; was discussed during brainstorm and explicitly deferred).
+- Shipments-in-transit KPI (waits on shipment aggregate completion).
+- QUALITY_LAB lab-scoping requires `User.lab` schema column — its own iter.
+- ADMIN dashboard module summary expansions: as more aggregates ship under `(nexus)`, ADMIN may want filterable per-module rollups; not in scope for 4.1.
+- Backend cleanup at end of Phase 4: drop `GET /api/v1/dashboard/` and the `fetchDashboard()`/`fetchActivity()` frontend helpers once every aggregate has its own `(nexus)` page.
