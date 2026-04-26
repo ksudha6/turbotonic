@@ -50,6 +50,17 @@ async function mockDashboardRoute(page: import('@playwright/test').Page) {
 			})
 		});
 	});
+	await page.route('**/api/v1/dashboard/summary', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				kpis: { pending_pos: 0, awaiting_acceptance: 0, in_production: 0, outstanding_ap_usd: '0.00' },
+				awaiting_acceptance: [],
+				activity: []
+			})
+		});
+	});
 }
 
 // ---------------------------------------------------------------------------

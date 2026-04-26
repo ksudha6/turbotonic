@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, CertWarning, DashboardData, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentUpdate, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, CertWarning, DashboardData, DashboardSummary, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentUpdate, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -256,6 +256,10 @@ export function fetchReferenceData(): Promise<ReferenceData> {
 
 export function fetchDashboard(): Promise<DashboardData> {
 	return apiGet<DashboardData>('/api/v1/dashboard/');
+}
+
+export function fetchDashboardSummary(): Promise<DashboardSummary> {
+	return apiGet<DashboardSummary>('/api/v1/dashboard/summary');
 }
 
 export function bulkTransition(poIds: string[], action: string, comment?: string): Promise<BulkTransitionResult> {

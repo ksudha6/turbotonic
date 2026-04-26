@@ -11,10 +11,13 @@
 
 	const user = $derived(page.data.user);
 
-	// Phase 4.0 revamp routes own their own chrome (AppShell, Sidebar, TopBar).
+	// Phase 4.0+ revamp routes own their own chrome (AppShell, Sidebar, TopBar).
 	// Pre-revamp root nav + container wrapper would double up and clip the new shell.
 	const isRevampRoute = $derived(
-		page.url.pathname.startsWith('/ui-demo') || page.url.pathname.startsWith('/_smoke')
+		page.url.pathname.startsWith('/ui-demo') ||
+			page.url.pathname.startsWith('/_smoke') ||
+			page.url.pathname === '/dashboard' ||
+			page.url.pathname.startsWith('/dashboard/')
 	);
 
 	async function handleLogout() {
