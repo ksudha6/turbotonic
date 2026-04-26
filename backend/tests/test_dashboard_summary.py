@@ -287,6 +287,53 @@ async def _seed_opex_po(client: AsyncClient, vendor_id: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
+async def _seed_freight_vendor(client: AsyncClient, name: str = "Freight Vendor") -> dict:
+    """Create a FREIGHT vendor."""
+    resp = await client.post(
+        "/api/v1/vendors/",
+        json={"name": name, "country": "DE", "vendor_type": "FREIGHT"},
+    )
+    assert resp.status_code == 201
+    return resp.json()
+
+
+async def _submit_and_accept_po(client: AsyncClient, po_id: str) -> None:
+    """Submit then accept a PO via the API."""
+    submit_resp = await client.post(f"/api/v1/po/{po_id}/submit")
+    assert submit_resp.status_code == 200
+    accept_resp = await client.post(f"/api/v1/po/{po_id}/accept")
+    assert accept_resp.status_code == 200
+
+
+async def _post_milestones_up_to(
+    client: AsyncClient, po_id: str, target: str
+) -> None:
+    """Post milestones in sequence up to and including target."""
+    order = ["RAW_MATERIALS", "PRODUCTION_STARTED", "QC_PASSED", "READY_TO_SHIP", "SHIPPED"]
+    for ms in order:
+        resp = await client.post(
+            f"/api/v1/po/{po_id}/milestones", json={"milestone": ms}
+        )
+        assert resp.status_code == 201
+        if ms == target:
+            break
+
+
+async def _create_and_submit_invoice(
+    client: AsyncClient, po_id: str, part_number: str, quantity: int
+) -> dict:
+    """Create an invoice and submit it; return the invoice JSON."""
+    create_resp = await client.post(
+        "/api/v1/invoices/",
+        json={"po_id": po_id, "line_items": [{"part_number": part_number, "quantity": quantity}]},
+    )
+    assert create_resp.status_code == 201
+    inv = create_resp.json()
+    submit_resp = await client.post(f"/api/v1/invoices/{inv['id']}/submit")
+    assert submit_resp.status_code == 200
+    return submit_resp.json()
+
+
 async def test_admin_sees_global_kpis_and_activity() -> None:
     async with _client_ctx(UserRole.ADMIN) as (ac, _conn):
         vendor = await _seed_vendor(ac, "AdminVendor")
@@ -301,8 +348,10 @@ async def test_admin_sees_global_kpis_and_activity() -> None:
 
         data = resp.json()
 
-        # Response shape: all required top-level keys present
-        assert set(data.keys()) == {"kpis", "awaiting_acceptance", "activity"}
+        # ADMIN/SM roles must not receive FM fields
+        assert data["fm_kpis"] is None
+        assert data["fm_ready_batches"] == []
+        assert data["fm_pending_invoices"] == []
 
         kpis = data["kpis"]
         # All seven KPI keys present (counts + per-KPI USD values + outstanding A/P)
@@ -397,6 +446,11 @@ async def test_sm_scopes_to_procurement() -> None:
         sm_kpis = sm_data["kpis"]
         admin_kpis = admin_data["kpis"]
 
+        # SM must not receive FM fields
+        assert sm_data["fm_kpis"] is None
+        assert sm_data["fm_ready_batches"] == []
+        assert sm_data["fm_pending_invoices"] == []
+
         # SM counts must be a subset of ADMIN counts (SM = PROCUREMENT only)
         assert sm_kpis["pending_pos"] <= admin_kpis["pending_pos"]
         assert sm_kpis["awaiting_acceptance"] <= admin_kpis["awaiting_acceptance"]
@@ -424,8 +478,59 @@ async def test_vendor_returns_empty_payload() -> None:
         assert kpis["outstanding_ap_usd"] == "0.00"
         assert data["awaiting_acceptance"] == []
         assert data["activity"] == []
+        # VENDOR role must not receive FM fields
+        assert data["fm_kpis"] is None
+        assert data["fm_ready_batches"] == []
+        assert data["fm_pending_invoices"] == []
 
 
 async def test_unauthenticated_returns_401(client: AsyncClient) -> None:
     resp = await client.get(SUMMARY_URL)
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# FREIGHT_MANAGER tests
+# ---------------------------------------------------------------------------
+
+
+async def test_fm_sees_shipment_and_invoice_kpis() -> None:
+    async with _client_ctx(UserRole.FREIGHT_MANAGER) as (ac, _conn):
+        resp = await ac.get(SUMMARY_URL)
+        assert resp.status_code == 200
+
+        data = resp.json()
+
+        # FM-specific fields populated
+        assert data["fm_kpis"] is not None
+        fm_kpis = data["fm_kpis"]
+        assert set(fm_kpis.keys()) == {
+            "ready_batches",
+            "shipments_in_flight",
+            "pending_invoices",
+            "pending_invoices_value_usd",
+            "docs_missing",
+        }
+        assert isinstance(fm_kpis["ready_batches"], int)
+        assert isinstance(fm_kpis["shipments_in_flight"], int)
+        assert fm_kpis["shipments_in_flight"] >= 0
+        assert isinstance(fm_kpis["pending_invoices"], int)
+        assert isinstance(fm_kpis["pending_invoices_value_usd"], str)
+        # pending_invoices_value_usd is a decimal string
+        Decimal(fm_kpis["pending_invoices_value_usd"])
+
+        assert isinstance(data["fm_ready_batches"], list)
+        assert isinstance(data["fm_pending_invoices"], list)
+
+        # ADMIN-style KPI block is all zeros for FM
+        kpis = data["kpis"]
+        assert kpis["pending_pos"] == 0
+        assert kpis["pending_pos_value_usd"] == "0.00"
+        assert kpis["awaiting_acceptance"] == 0
+        assert kpis["awaiting_acceptance_value_usd"] == "0.00"
+        assert kpis["in_production"] == 0
+        assert kpis["in_production_value_usd"] == "0.00"
+        assert kpis["outstanding_ap_usd"] == "0.00"
+        assert data["awaiting_acceptance"] == []
+
+
