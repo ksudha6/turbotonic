@@ -156,9 +156,26 @@ These are brainstorm stops inside 4.0, not implementer judgment calls:
 
 Replaces `/dashboard` under `(nexus)` layout.
 
-**Scope:** KPI cards, Active production panel, Recent activity panel, Pending RFQs panel (seed-backed until RFQ aggregate lands), Shipments in motion panel (seed-backed until Shipments phase lands), Overdue table.
+**Scope (minimum cut, brainstorm-resolved 2026-04-25):** ADMIN and SM dashboards only. Other four roles (VENDOR, FREIGHT_MANAGER, QUALITY_LAB, PROCUREMENT_MANAGER) get a thin placeholder card on `/dashboard` deferring their full dashboard to a later iter. Each shipped dashboard renders 4 KPI cards + recent activity panel + awaiting-acceptance panel.
 
-**Mock-clarity gaps:** specific KPI metrics and their data sources, how QUALITY_LAB dashboard differs, how VENDOR dashboard scopes to their vendor.
+**KPIs (both ADMIN and SM):**
+1. PENDING POs — count of POs in `DRAFT` or `PENDING` status.
+2. AWAITING ACCEPTANCE — count of POs sent to vendor (status `PENDING`, last_actor_role = SM).
+3. IN PRODUCTION — count of POs with status `ACCEPTED` and a milestone update other than SHIPPED.
+4. OUTSTANDING A/P — sum (USD-converted) of unpaid invoices (`SUBMITTED` + `APPROVED` + `DISPUTED`).
+
+**Scoping rules:** ADMIN sees global counts; SM scopes to `po.po_type='PROCUREMENT'` and procurement-vendor invoices. Backend endpoint applies scoping based on caller role.
+
+**Deferred to later iters within Phase 4.1+:** quality flags KPI/panel for SM (line-level cert join), shipments-in-transit KPI (waits on shipment aggregate completion), VENDOR/FREIGHT_MANAGER/QUALITY_LAB/PROCUREMENT_MANAGER dashboards, role-specific panel sets, role-context labels.
+
+**RFQ aggregate** is a future module that will flow into PO. No RFQ-derived data on the Phase 4.1 dashboard.
+
+**Sidebar/permissions matrix patch** is a separate small foundation iter (iter 4.0a) that ships before Phase 4.1's dashboard implementer subagent. Required updates from the Phase 4.1 brainstorm:
+- FREIGHT_MANAGER sidebar: drop POs, keep Dashboard + Invoices (OpEx-scoped, page-level).
+- VENDOR sidebar: add Products.
+- PROCUREMENT_MANAGER: promote from Dashboard-only to SM-equivalent (Dashboard, POs, Invoices, Products) with read-only enforcement.
+- `permissions.ts` gains: `canViewProducts` includes VENDOR, PROCUREMENT_MANAGER; `canViewPOs` includes PROCUREMENT_MANAGER; `canViewInvoices` includes PROCUREMENT_MANAGER + FREIGHT_MANAGER; mutate-helpers exclude PROCUREMENT_MANAGER (read-only).
+- QUALITY_LAB lab-scoped products requires a `lab` field on `User` — schema change. **Out of Phase 4.1**; backlog for a dedicated iter that ships the user.lab column + product filter.
 
 ---
 
