@@ -363,11 +363,27 @@ _IN_PRODUCTION_MILESTONES = (
     ProductionMilestone.READY_TO_SHIP.value,
 )
 
+# Activity events excluded from the dashboard feed. Line-level negotiation deltas, force
+# transitions, and convergence are noise at the dashboard level — surfaced on entity detail
+# pages instead. Email send failures are an ops concern, not a workflow signal.
+_DASHBOARD_EXCLUDED_EVENTS = frozenset({
+    ActivityEvent.PO_LINE_MODIFIED.value,
+    ActivityEvent.PO_LINE_ACCEPTED.value,
+    ActivityEvent.PO_LINE_REMOVED.value,
+    ActivityEvent.PO_FORCE_ACCEPTED.value,
+    ActivityEvent.PO_FORCE_REMOVED.value,
+    ActivityEvent.PO_CONVERGED.value,
+    ActivityEvent.EMAIL_SEND_FAILED.value,
+})
+
 
 class DashboardKpis(BaseModel):
     pending_pos: int
+    pending_pos_value_usd: str
     awaiting_acceptance: int
+    awaiting_acceptance_value_usd: str
     in_production: int
+    in_production_value_usd: str
     outstanding_ap_usd: str  # Decimal as string for stable serialization
 
 
@@ -408,8 +424,11 @@ async def get_dashboard_summary(
         return DashboardSummaryResponse(
             kpis=DashboardKpis(
                 pending_pos=0,
+                pending_pos_value_usd="0.00",
                 awaiting_acceptance=0,
+                awaiting_acceptance_value_usd="0.00",
                 in_production=0,
+                in_production_value_usd="0.00",
                 outstanding_ap_usd="0.00",
             ),
             awaiting_acceptance=[],
@@ -419,28 +438,46 @@ async def get_dashboard_summary(
     # SM scopes PO-derived KPIs to PROCUREMENT POs and invoice-derived KPIs to
     # invoices whose PO's vendor has vendor_type='PROCUREMENT'.
     procurement_only = user.role is UserRole.SM
-    po_type_clause = "AND po_type = 'PROCUREMENT'" if procurement_only else ""
+    po_type_clause = "AND p.po_type = 'PROCUREMENT'" if procurement_only else ""
+
+    def _sum_usd(rows: list) -> Decimal:
+        # Each row is one PO with its line-item subtotal in PO's native currency.
+        total = Decimal("0")
+        for r in rows:
+            rate = RATE_TO_USD.get(r["currency"], Decimal("1"))
+            total += Decimal(str(r["total_value"])) * rate
+        return total.quantize(Decimal("0.01"))
 
     # --- KPI 1: PENDING POs ---
-    # status IN ('DRAFT', 'PENDING', 'MODIFIED'), optionally filtered to PROCUREMENT.
-    pending_count: int = await repo._conn.fetchval(
+    pending_rows = await repo._conn.fetch(
         f"""
-        SELECT COUNT(*) FROM purchase_orders
-        WHERE status IN ('DRAFT', 'PENDING', 'MODIFIED')
+        SELECT p.currency,
+               COALESCE(SUM(CAST(li.quantity AS REAL) * CAST(li.unit_price AS REAL)), 0) AS total_value
+        FROM purchase_orders p
+        LEFT JOIN line_items li ON li.po_id = p.id
+        WHERE p.status IN ('DRAFT', 'PENDING', 'MODIFIED')
           {po_type_clause}
+        GROUP BY p.id, p.currency
         """
     )
+    pending_count = len(pending_rows)
+    pending_total_usd = _sum_usd(pending_rows)
 
     # --- KPI 2: AWAITING ACCEPTANCE ---
-    # status='PENDING' AND last_actor_role='SM' (SM sent a counter-proposal, vendor must respond).
-    awaiting_count: int = await repo._conn.fetchval(
+    awaiting_rows_for_kpi = await repo._conn.fetch(
         f"""
-        SELECT COUNT(*) FROM purchase_orders
-        WHERE status = 'PENDING'
-          AND last_actor_role = 'SM'
+        SELECT p.currency,
+               COALESCE(SUM(CAST(li.quantity AS REAL) * CAST(li.unit_price AS REAL)), 0) AS total_value
+        FROM purchase_orders p
+        LEFT JOIN line_items li ON li.po_id = p.id
+        WHERE p.status = 'PENDING'
+          AND p.last_actor_role = 'SM'
           {po_type_clause}
+        GROUP BY p.id, p.currency
         """
     )
+    awaiting_count = len(awaiting_rows_for_kpi)
+    awaiting_total_usd = _sum_usd(awaiting_rows_for_kpi)
 
     # --- KPI 3: IN PRODUCTION ---
     # ACCEPTED POs whose latest milestone is an in-production state.
@@ -448,9 +485,11 @@ async def get_dashboard_summary(
     milestone_placeholders = ", ".join(
         f"${i + 1}" for i in range(len(_IN_PRODUCTION_MILESTONES))
     )
-    in_production_count: int = await milestone_repo._conn.fetchval(
+    in_production_rows = await milestone_repo._conn.fetch(
         f"""
-        SELECT COUNT(*) FROM purchase_orders p
+        SELECT p.currency,
+               COALESCE(SUM(CAST(li.quantity AS REAL) * CAST(li.unit_price AS REAL)), 0) AS total_value
+        FROM purchase_orders p
         INNER JOIN (
             SELECT mu.po_id, mu.milestone
             FROM milestone_updates mu
@@ -460,12 +499,16 @@ async def get_dashboard_summary(
                 GROUP BY po_id
             ) latest ON mu.po_id = latest.po_id AND mu.posted_at = latest.max_posted_at
         ) lm ON lm.po_id = p.id
+        LEFT JOIN line_items li ON li.po_id = p.id
         WHERE p.status = 'ACCEPTED'
           {po_type_clause}
           AND lm.milestone IN ({milestone_placeholders})
+        GROUP BY p.id, p.currency
         """,
         *_IN_PRODUCTION_MILESTONES,
     )
+    in_production_count = len(in_production_rows)
+    in_production_total_usd = _sum_usd(in_production_rows)
 
     # --- KPI 4: OUTSTANDING A/P ---
     # Sum of invoice subtotals where status IN ('SUBMITTED','APPROVED','DISPUTED').
@@ -551,25 +594,37 @@ async def get_dashboard_summary(
         )
 
     # --- Activity feed (capped at 20) ---
-    recent_activity = await activity_repo.list_recent(limit=20)
-    activity_items: list[DashboardActivityItem] = [
-        DashboardActivityItem(
-            id=entry.id,
-            entity_type=entry.entity_type.value,
-            entity_id=entry.entity_id,
-            event=entry.event.value,
-            detail=entry.detail,
-            category=entry.category.value,
-            created_at=entry.created_at,
+    # ADMIN sees all events (target_role=None); SM sees SM-targeted plus universal
+    # (target_role IS NULL) entries via list_recent's role filter.
+    activity_target_role = user.role.value if user.role is UserRole.SM else None
+    # Fetch a few extra so the dashboard exclusion filter still leaves us a useful feed.
+    raw_activity = await activity_repo.list_recent(limit=40, target_role=activity_target_role)
+    activity_items: list[DashboardActivityItem] = []
+    for entry in raw_activity:
+        if entry.event.value in _DASHBOARD_EXCLUDED_EVENTS:
+            continue
+        activity_items.append(
+            DashboardActivityItem(
+                id=entry.id,
+                entity_type=entry.entity_type.value,
+                entity_id=entry.entity_id,
+                event=entry.event.value,
+                detail=entry.detail,
+                category=entry.category.value,
+                created_at=entry.created_at,
+            )
         )
-        for entry in recent_activity
-    ]
+        if len(activity_items) >= 20:
+            break
 
     return DashboardSummaryResponse(
         kpis=DashboardKpis(
             pending_pos=pending_count,
+            pending_pos_value_usd=str(pending_total_usd),
             awaiting_acceptance=awaiting_count,
+            awaiting_acceptance_value_usd=str(awaiting_total_usd),
             in_production=in_production_count,
+            in_production_value_usd=str(in_production_total_usd),
             outstanding_ap_usd=str(outstanding_ap.quantize(Decimal("0.01"))),
         ),
         awaiting_acceptance=awaiting_list,
