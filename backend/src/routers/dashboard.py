@@ -20,6 +20,9 @@ from src.milestone_repository import MilestoneRepository
 from src.repository import PurchaseOrderRepository
 from src.vendor_repository import VendorRepository
 
+# Roles that receive a populated dashboard/summary payload.
+_ADMIN_OR_SM = {UserRole.ADMIN, UserRole.SM}
+
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 
 
@@ -345,4 +348,230 @@ async def get_dashboard(
         invoice_summary=invoice_summary,
         production_summary=production_summary,
         overdue_pos=overdue_pos,
+    )
+
+
+# ---------------------------------------------------------------------------
+# /summary endpoint
+# ---------------------------------------------------------------------------
+
+# Production milestones that count as "in production" (not yet shipped).
+_IN_PRODUCTION_MILESTONES = (
+    ProductionMilestone.RAW_MATERIALS.value,
+    ProductionMilestone.PRODUCTION_STARTED.value,
+    ProductionMilestone.QC_PASSED.value,
+    ProductionMilestone.READY_TO_SHIP.value,
+)
+
+
+class DashboardKpis(BaseModel):
+    pending_pos: int
+    awaiting_acceptance: int
+    in_production: int
+    outstanding_ap_usd: str  # Decimal as string for stable serialization
+
+
+class AwaitingAcceptanceItem(BaseModel):
+    id: str
+    po_number: str
+    vendor_name: str
+    total_value_usd: str
+    submitted_at: datetime  # set to PO.updated_at (PENDING is the post-submit state)
+
+
+class DashboardActivityItem(BaseModel):
+    id: str
+    entity_type: str
+    entity_id: str
+    event: str
+    detail: str | None
+    category: str
+    created_at: datetime
+
+
+class DashboardSummaryResponse(BaseModel):
+    kpis: DashboardKpis
+    awaiting_acceptance: list[AwaitingAcceptanceItem]
+    activity: list[DashboardActivityItem]
+
+
+@router.get("/summary", response_model=DashboardSummaryResponse)
+async def get_dashboard_summary(
+    repo: RepoDep,
+    vendor_repo: VendorRepoDep,
+    invoice_repo: InvoiceRepoDep,
+    milestone_repo: MilestoneRepoDep,
+    activity_repo: ActivityRepoDep,
+    user: User = require_auth,
+) -> DashboardSummaryResponse:
+    if user.role not in _ADMIN_OR_SM:
+        return DashboardSummaryResponse(
+            kpis=DashboardKpis(
+                pending_pos=0,
+                awaiting_acceptance=0,
+                in_production=0,
+                outstanding_ap_usd="0.00",
+            ),
+            awaiting_acceptance=[],
+            activity=[],
+        )
+
+    # SM scopes PO-derived KPIs to PROCUREMENT POs and invoice-derived KPIs to
+    # invoices whose PO's vendor has vendor_type='PROCUREMENT'.
+    procurement_only = user.role is UserRole.SM
+    po_type_clause = "AND po_type = 'PROCUREMENT'" if procurement_only else ""
+
+    # --- KPI 1: PENDING POs ---
+    # status IN ('DRAFT', 'PENDING', 'MODIFIED'), optionally filtered to PROCUREMENT.
+    pending_count: int = await repo._conn.fetchval(
+        f"""
+        SELECT COUNT(*) FROM purchase_orders
+        WHERE status IN ('DRAFT', 'PENDING', 'MODIFIED')
+          {po_type_clause}
+        """
+    )
+
+    # --- KPI 2: AWAITING ACCEPTANCE ---
+    # status='PENDING' AND last_actor_role='SM' (SM sent a counter-proposal, vendor must respond).
+    awaiting_count: int = await repo._conn.fetchval(
+        f"""
+        SELECT COUNT(*) FROM purchase_orders
+        WHERE status = 'PENDING'
+          AND last_actor_role = 'SM'
+          {po_type_clause}
+        """
+    )
+
+    # --- KPI 3: IN PRODUCTION ---
+    # ACCEPTED POs whose latest milestone is an in-production state.
+    # SM scopes to PROCUREMENT only; ADMIN sees all po_types.
+    milestone_placeholders = ", ".join(
+        f"${i + 1}" for i in range(len(_IN_PRODUCTION_MILESTONES))
+    )
+    in_production_count: int = await milestone_repo._conn.fetchval(
+        f"""
+        SELECT COUNT(*) FROM purchase_orders p
+        INNER JOIN (
+            SELECT mu.po_id, mu.milestone
+            FROM milestone_updates mu
+            INNER JOIN (
+                SELECT po_id, MAX(posted_at) AS max_posted_at
+                FROM milestone_updates
+                GROUP BY po_id
+            ) latest ON mu.po_id = latest.po_id AND mu.posted_at = latest.max_posted_at
+        ) lm ON lm.po_id = p.id
+        WHERE p.status = 'ACCEPTED'
+          {po_type_clause}
+          AND lm.milestone IN ({milestone_placeholders})
+        """,
+        *_IN_PRODUCTION_MILESTONES,
+    )
+
+    # --- KPI 4: OUTSTANDING A/P ---
+    # Sum of invoice subtotals where status IN ('SUBMITTED','APPROVED','DISPUTED').
+    # SM also joins through PO -> vendor with vendor_type='PROCUREMENT'.
+    if procurement_only:
+        ap_rows = await invoice_repo._conn.fetch(
+            """
+            SELECT i.currency,
+                   COALESCE(SUM(sub.subtotal), 0) AS total
+            FROM invoices i
+            JOIN purchase_orders po ON i.po_id = po.id
+            JOIN vendors v ON po.vendor_id = v.id
+            LEFT JOIN (
+                SELECT invoice_id,
+                       SUM(CAST(quantity AS REAL) * CAST(unit_price AS REAL)) AS subtotal
+                FROM invoice_line_items
+                GROUP BY invoice_id
+            ) sub ON sub.invoice_id = i.id
+            WHERE i.status IN ('SUBMITTED', 'APPROVED', 'DISPUTED')
+              AND v.vendor_type = 'PROCUREMENT'
+            GROUP BY i.currency
+            """
+        )
+    else:
+        ap_rows = await invoice_repo._conn.fetch(
+            """
+            SELECT i.currency,
+                   COALESCE(SUM(sub.subtotal), 0) AS total
+            FROM invoices i
+            LEFT JOIN (
+                SELECT invoice_id,
+                       SUM(CAST(quantity AS REAL) * CAST(unit_price AS REAL)) AS subtotal
+                FROM invoice_line_items
+                GROUP BY invoice_id
+            ) sub ON sub.invoice_id = i.id
+            WHERE i.status IN ('SUBMITTED', 'APPROVED', 'DISPUTED')
+            GROUP BY i.currency
+            """
+        )
+
+    outstanding_ap = Decimal("0")
+    for row in ap_rows:
+        rate = RATE_TO_USD.get(row["currency"], Decimal("1"))
+        outstanding_ap += Decimal(str(row["total"])) * rate
+
+    # --- Awaiting acceptance list (capped at 10) ---
+    # total_value is computed from line_items (not stored on the PO row).
+    awaiting_rows = await repo._conn.fetch(
+        f"""
+        SELECT p.id, p.po_number, p.vendor_id, p.currency, p.updated_at,
+               COALESCE(SUM(CAST(li.quantity AS REAL) * CAST(li.unit_price AS REAL)), 0) AS total_value
+        FROM purchase_orders p
+        LEFT JOIN line_items li ON li.po_id = p.id
+        WHERE p.status = 'PENDING'
+          AND p.last_actor_role = 'SM'
+          {po_type_clause}
+        GROUP BY p.id, p.po_number, p.vendor_id, p.currency, p.updated_at
+        ORDER BY p.updated_at DESC
+        LIMIT 10
+        """
+    )
+
+    # Build vendor name map for awaiting list
+    all_vendors = await vendor_repo.list_vendors()
+    vendor_map: dict[str, str] = {v.id: v.name for v in all_vendors}
+
+    awaiting_list: list[AwaitingAcceptanceItem] = []
+    for row in awaiting_rows:
+        rate = RATE_TO_USD.get(row["currency"], Decimal("1"))
+        total_usd = Decimal(str(row["total_value"])) * rate
+        updated_raw: str = row["updated_at"]
+        updated_dt = datetime.fromisoformat(updated_raw)
+        if updated_dt.tzinfo is None:
+            updated_dt = updated_dt.replace(tzinfo=UTC)
+        awaiting_list.append(
+            AwaitingAcceptanceItem(
+                id=row["id"],
+                po_number=row["po_number"],
+                vendor_name=vendor_map.get(row["vendor_id"], ""),
+                total_value_usd=str(total_usd.quantize(Decimal("0.01"))),
+                submitted_at=updated_dt,
+            )
+        )
+
+    # --- Activity feed (capped at 20) ---
+    recent_activity = await activity_repo.list_recent(limit=20)
+    activity_items: list[DashboardActivityItem] = [
+        DashboardActivityItem(
+            id=entry.id,
+            entity_type=entry.entity_type.value,
+            entity_id=entry.entity_id,
+            event=entry.event.value,
+            detail=entry.detail,
+            category=entry.category.value,
+            created_at=entry.created_at,
+        )
+        for entry in recent_activity
+    ]
+
+    return DashboardSummaryResponse(
+        kpis=DashboardKpis(
+            pending_pos=pending_count,
+            awaiting_acceptance=awaiting_count,
+            in_production=in_production_count,
+            outstanding_ap_usd=str(outstanding_ap.quantize(Decimal("0.01"))),
+        ),
+        awaiting_acceptance=awaiting_list,
+        activity=activity_items,
     )

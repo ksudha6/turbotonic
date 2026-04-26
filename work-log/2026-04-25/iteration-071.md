@@ -38,22 +38,22 @@ RFQ aggregate is a future module that will flow into PO; no RFQ-derived data on 
 
 ### Task 1 -- Sidebar items + permissions matrix patch
 
-- [ ] Update `frontend/tests/sidebar-items.spec.ts` for new matrix.
-- [ ] Run spec — expect FAIL on FREIGHT_MANAGER (still has POs), VENDOR (no Products), PROCUREMENT_MANAGER (Dashboard-only).
-- [ ] Update `frontend/src/lib/ui/sidebar-items.ts` per matrix.
-- [ ] Run spec — expect PASS.
-- [ ] Update `frontend/src/lib/permissions.ts` (canViewProducts adds VENDOR + PROCUREMENT_MANAGER; canViewInvoices adds PROCUREMENT_MANAGER + FREIGHT_MANAGER; canViewPOs adds PROCUREMENT_MANAGER; mutate-helpers untouched).
-- [ ] Run `make test-browser` — expect 150 + sidebar-items pass with new matrix.
-- [ ] Commit: `Patch sidebar items + permissions per Phase 4.1 matrix (iter 071 task 1)`.
+- [x] Update `frontend/tests/sidebar-items.spec.ts` for new matrix.
+- [x] Run spec — expect FAIL on FREIGHT_MANAGER (still has POs), VENDOR (no Products), PROCUREMENT_MANAGER (Dashboard-only).
+- [x] Update `frontend/src/lib/ui/sidebar-items.ts` per matrix.
+- [x] Run spec — expect PASS.
+- [x] Update `frontend/src/lib/permissions.ts` (canViewProducts adds VENDOR + PROCUREMENT_MANAGER; canViewInvoices adds PROCUREMENT_MANAGER + FREIGHT_MANAGER; canViewPOs adjusted; FREIGHT_MANAGER removed from canViewPOs to match matrix; mutate-helpers untouched).
+- [x] Run `make test-browser` — 150 passed.
+- [x] Commit `21201db`: `Patch sidebar items + permissions per Phase 4.1 matrix (iter 071 task 1)`. Also touched `frontend/tests/role-rendering.spec.ts` (pre-existing permanent spec encoding old matrix; updated to new matrix).
 
 ### Task 2 -- Backend `/api/v1/dashboard/summary` with role scoping
 
-- [ ] Write `backend/tests/test_dashboard_summary.py` with four tests (ADMIN global, SM scoped ≤ ADMIN, VENDOR empty payload, unauthenticated 401).
-- [ ] Run pytest — expect 4 fails (404).
-- [ ] Add `@router.get("/summary")` in `backend/src/routers/dashboard.py` with role-scoped queries for the four KPIs + awaiting-acceptance list (limit 10) + activity feed (limit 20).
-- [ ] Add pydantic models: `DashboardKpis`, `AwaitingAcceptanceItem`, `DashboardActivityItem`, `DashboardSummaryResponse`.
-- [ ] Run `make test` — expect 595 passed.
-- [ ] Commit: `Add GET /api/v1/dashboard/summary with role scoping (iter 071 task 2)`.
+- [x] Write `backend/tests/test_dashboard_summary.py` with four tests (ADMIN global, SM scoped ≤ ADMIN, VENDOR empty payload, unauthenticated 401).
+- [x] Run pytest — 4 fails (404) on first run.
+- [x] Add `@router.get("/summary")` in `backend/src/routers/dashboard.py` with role-scoped queries for the four KPIs + awaiting-acceptance list (limit 10) + activity feed (limit 20).
+- [x] Add pydantic models: `DashboardKpis`, `AwaitingAcceptanceItem`, `DashboardActivityItem`, `DashboardSummaryResponse`.
+- [x] Run `make test` — 595 passed.
+- [x] Commit `cb17068`: `Add GET /api/v1/dashboard/summary with role scoping (iter 071 task 2)`. Two review-loop amends folded in: spec compliance fix (IN PRODUCTION KPI made conditional on `procurement_only`; ADMIN sees OPEX) and code quality fix (KPIs 1/2/3 + awaiting list deduplicated via `po_type_clause` f-string interpolation; KPI 4 left branched because the SM JOIN delta is structural, not a single clause).
 
 ### Task 3 -- Frontend `(nexus)/dashboard/+page.svelte`
 
@@ -106,3 +106,5 @@ None.
 ## Notes
 
 In progress.
+
+- TaskGroup fan-out for dashboard summary queries (deferred — iter-scoped to keep connection-pool semantics conservative).
