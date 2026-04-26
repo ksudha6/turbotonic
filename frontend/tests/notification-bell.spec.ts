@@ -22,6 +22,12 @@ const EMPTY_DASHBOARD = {
 	recent_pos: [], invoice_summary: [], production_summary: [], overdue_pos: []
 };
 
+const EMPTY_DASHBOARD_SUMMARY = {
+	kpis: { pending_pos: 0, awaiting_acceptance: 0, in_production: 0, outstanding_ap_usd: '0.00' },
+	awaiting_acceptance: [],
+	activity: []
+};
+
 // Registers activity mocks with correct LIFO ordering:
 // catch-all first (lower priority) so unread-count (registered after) takes priority.
 // The bell component calls /unread-count on mount and /activity/?limit=10 on click.
@@ -42,7 +48,12 @@ test.beforeEach(async ({ page }) => {
 	await page.route('**/api/v1/auth/me', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ user: { id: 'test-user-id', username: 'test-sm', display_name: 'Test User', role: 'SM', status: 'ACTIVE', vendor_id: null } }) });
 	});
-	await page.route('**/api/v1/dashboard**', (route) => {
+	// Summary mock (registered first so dashboard/ catch-all that follows wins LIFO for the
+	// pre-revamp shape, but the more-specific summary route here doesn't conflict).
+	await page.route('**/api/v1/dashboard/summary', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(EMPTY_DASHBOARD_SUMMARY) });
+	});
+	await page.route('**/api/v1/dashboard/', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(EMPTY_DASHBOARD) });
 	});
 });

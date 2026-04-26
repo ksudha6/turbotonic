@@ -33,6 +33,17 @@ async function mockDashboard(page: import('@playwright/test').Page) {
 	await page.route('**/api/v1/dashboard/', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(EMPTY_DASHBOARD) });
 	});
+	await page.route('**/api/v1/dashboard/summary', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				kpis: { pending_pos: 0, awaiting_acceptance: 0, in_production: 0, outstanding_ap_usd: '0.00' },
+				awaiting_acceptance: [],
+				activity: []
+			})
+		});
+	});
 }
 
 // ---------------------------------------------------------------------------
@@ -149,7 +160,9 @@ test('logout button redirects to /login', async ({ page }) => {
 	});
 
 	await page.goto('/dashboard');
-	await page.getByRole('button', { name: 'Log out' }).click();
+	// AppShell UserMenu hides Log out behind a click on the user pill.
+	await page.getByRole('button', { expanded: false }).filter({ hasText: 'Test User' }).click();
+	await page.getByRole('menuitem', { name: 'Log out' }).click();
 	await expect(page).toHaveURL(/\/login/);
 });
 
@@ -165,6 +178,9 @@ test('nav shows user display name when authenticated', async ({ page }) => {
 	await mockDashboard(page);
 
 	await page.goto('/dashboard');
+	// New AppShell UserMenu: display name visible directly in the pill,
+	// Log out lives in the dropdown that opens on click.
 	await expect(page.getByText('Test User')).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible();
+	await page.getByRole('button', { expanded: false }).filter({ hasText: 'Test User' }).click();
+	await expect(page.getByRole('menuitem', { name: 'Log out' })).toBeVisible();
 });

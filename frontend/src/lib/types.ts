@@ -462,6 +462,37 @@ export interface POSubmitResponse {
 	cert_warnings: CertWarning[];
 }
 
+export interface DashboardKpis {
+	pending_pos: number;
+	awaiting_acceptance: number;
+	in_production: number;
+	outstanding_ap_usd: string;
+}
+
+export interface AwaitingAcceptanceItem {
+	id: string;
+	po_number: string;
+	vendor_name: string;
+	total_value_usd: string;
+	submitted_at: string;
+}
+
+export interface DashboardActivityItem {
+	id: string;
+	entity_type: string;
+	entity_id: string;
+	event: string;
+	detail: string | null;
+	category: string;
+	created_at: string;
+}
+
+export interface DashboardSummary {
+	kpis: DashboardKpis;
+	awaiting_acceptance: AwaitingAcceptanceItem[];
+	activity: DashboardActivityItem[];
+}
+
 export type UserRole = 'ADMIN' | 'PROCUREMENT_MANAGER' | 'SM' | 'VENDOR' | 'QUALITY_LAB' | 'FREIGHT_MANAGER';
 export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'PENDING';
 

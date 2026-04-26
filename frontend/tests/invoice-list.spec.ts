@@ -195,25 +195,3 @@ test('invoice detail page shows Download PDF button', async ({ page }) => {
 	await expect(page.getByRole('button', { name: 'Download PDF' })).toBeVisible();
 });
 
-test('dashboard shows invoice summary section', async ({ page }) => {
-	await page.route('**/api/v1/dashboard**', (route) => {
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify(MOCK_DASHBOARD_WITH_INVOICES)
-		});
-	});
-
-	await page.goto('/dashboard');
-	await expect(page.getByRole('heading', { name: 'Invoices' })).toBeVisible();
-
-	// Invoice summary cards: DRAFT count=2, SUBMITTED count=1
-	// The page renders all .summary-card elements for both PO and invoice sections;
-	// scope assertions to the Invoices section.
-	const invoiceSection = page.locator('section').filter({ hasText: /^Invoices/ });
-	await expect(invoiceSection.locator('.summary-card')).toHaveCount(2);
-	await expect(invoiceSection).toContainText('2'); // DRAFT count
-	await expect(invoiceSection).toContainText('1'); // SUBMITTED count
-	await expect(invoiceSection).toContainText('$1,500'); // DRAFT total
-	await expect(invoiceSection).toContainText('$800');   // SUBMITTED total
-});
