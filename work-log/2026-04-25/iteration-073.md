@@ -158,9 +158,27 @@ None.
 
 ## Notes
 
-In progress.
+Iter 073 closed on 2026-04-26. Five commits landed on `iter-073-freight-manager-dashboard`:
+- `0c8c7e5` Open iter 073 doc.
+- `70a74c0` Lock scope: dashboard wiring only, defer shipment seed extension.
+- `cadb4bd` Backend: FM branch on `/dashboard/summary` (1 new test, total 5 dashboard summary tests).
+- `7e560fc` Frontend: FM layout + permissions widening + 3 new Playwright tests.
+- (close commit follows)
 
-### Carry-forward backlog (will be promoted to iter doc Notes at close)
+Test counts: backend 595 → 596 (+1 FM shape test); Playwright 146 → 149 (+3 FM tests).
+
+### Decisions
+
+- **Additive response shape (Option B from plan).** New optional `fm_kpis: FmKpis | None`, `fm_ready_batches: list[FmReadyBatch]`, `fm_pending_invoices: list[FmPendingInvoiceItem]` fields on `DashboardSummaryResponse`. ADMIN/SM responses leave these as `None` / `[]`. FM response zeros out the existing `kpis` block and populates fm_*. Future role iters layer their own typed nested object the same way; refactor to keyed dict (Option C) only if this becomes unwieldy.
+- **`canViewPOs` widened to include FREIGHT_MANAGER.** Sidebar visibility (iter 067 sidebar-items.ts) and page-level read access are decoupled per the iter 067 design. FM's sidebar still excludes POs, but FM needs PO-detail read for the dashboard's ready-batch click-through. Pre-revamp root nav still gates by `canViewPOs`, so FM at non-revamp routes will see a "Purchase Orders" link in the legacy nav. Acceptable transition state — the legacy nav goes away at end of Phase 4.
+- **`READY_TO_SHIP` milestone is the proxy for "ready batch".** A new `READY_FOR_SHIPMENT` milestone is on backlog; using the existing milestone keeps iter 073 small.
+- **No deadlock-prone shared-conn tests this iter.** Two complex FM tests (cross-role create-then-read patterns) were dropped early after they hit the same pytest deadlock as iter 072's removed test. The simple `test_fm_sees_shipment_and_invoice_kpis` covers response shape; click-through and KPI math are validated via Playwright with mocked summaries. Per-iter integration coverage of "create shipment → verify count" is deferred to the seed-extension iter.
+
+### DDD vocab assessment
+
+No new domain terms. "Ready batch" is a presentation-layer rollup of (PO at READY_TO_SHIP milestone with unshipped quantity), not a domain concept. `docs/ddd-vocab.md` unchanged.
+
+### Carry-forward backlog
 
 - **`READY_FOR_SHIPMENT` production milestone.** New milestone between `QC_PASSED` and `SHIPPED`, marking the explicit handoff to FM. Today's `READY_TO_SHIP` is the closest equivalent and serves the dashboard for now.
 - **Vendor → FM mapping.** Each FM should be mapped to specific OPEX/FREIGHT vendors, and only their shipments + invoices appear on that FM's dashboard. Schema change: a join table or `freight_manager_id` foreign key on `vendor`. Today's iter 073 shows all FM-relevant entities globally.
