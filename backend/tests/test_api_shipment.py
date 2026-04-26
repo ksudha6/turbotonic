@@ -128,7 +128,11 @@ async def test_create_shipment_returns_201(authenticated_client: AsyncClient) ->
     )
     assert r.status_code == 201
     body = r.json()
-    expected_keys = {"id", "po_id", "shipment_number", "marketplace", "status", "line_items", "created_at", "updated_at"}
+    expected_keys = {
+        "id", "po_id", "shipment_number", "marketplace", "status",
+        "line_items", "created_at", "updated_at",
+        "carrier", "booking_reference", "pickup_date", "shipped_at",
+    }
     assert expected_keys == set(body.keys())
     assert body["po_id"] == po_id
     assert body["marketplace"] == "AMZ"
@@ -482,6 +486,81 @@ async def test_patch_shipment_unknown_part_number_returns_422(authenticated_clie
     )
     assert r2.status_code == 422
     assert "UNKNOWN-PN" in r2.json()["detail"]
+
+
+async def _ready_shipment_id(client: AsyncClient) -> str:
+    """Helper: create a shipment, submit for documents, mark ready. Returns its id."""
+    vendor_id = await _make_vendor(client)
+    po = await _make_accepted_po(client, vendor_id)
+    r1 = await client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+    r_sub = await client.post(f"/api/v1/shipments/{shipment_id}/submit-for-documents")
+    assert r_sub.status_code == 200
+    r_ready = await client.post(f"/api/v1/shipments/{shipment_id}/mark-ready")
+    assert r_ready.status_code == 200
+    return shipment_id
+
+
+async def test_book_shipment_transitions_to_booked(authenticated_client: AsyncClient) -> None:
+    shipment_id = await _ready_shipment_id(authenticated_client)
+    r = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/book",
+        json={"carrier": "Maersk", "booking_reference": "BK-12345", "pickup_date": "2026-05-15"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "BOOKED"
+    assert body["carrier"] == "Maersk"
+    assert body["booking_reference"] == "BK-12345"
+    assert body["pickup_date"] == "2026-05-15"
+
+
+async def test_book_shipment_from_draft_returns_409(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    shipment_id: str = r1.json()["id"]
+    r = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/book",
+        json={"carrier": "DHL", "booking_reference": "BK-1", "pickup_date": "2026-05-15"},
+    )
+    assert r.status_code == 409
+
+
+async def test_book_shipment_empty_carrier_returns_422(authenticated_client: AsyncClient) -> None:
+    shipment_id = await _ready_shipment_id(authenticated_client)
+    r = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/book",
+        json={"carrier": "  ", "booking_reference": "BK-1", "pickup_date": "2026-05-15"},
+    )
+    assert r.status_code == 422
+
+
+async def test_mark_shipped_transitions_to_shipped(authenticated_client: AsyncClient) -> None:
+    shipment_id = await _ready_shipment_id(authenticated_client)
+    r_book = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/book",
+        json={"carrier": "Maersk", "booking_reference": "BK-1", "pickup_date": "2026-05-15"},
+    )
+    assert r_book.status_code == 200
+    r_ship = await authenticated_client.post(f"/api/v1/shipments/{shipment_id}/ship")
+    assert r_ship.status_code == 200
+    body = r_ship.json()
+    assert body["status"] == "SHIPPED"
+    assert body["shipped_at"] is not None
+
+
+async def test_mark_shipped_from_ready_returns_409(authenticated_client: AsyncClient) -> None:
+    shipment_id = await _ready_shipment_id(authenticated_client)
+    r = await authenticated_client.post(f"/api/v1/shipments/{shipment_id}/ship")
+    assert r.status_code == 409
 
 
 async def test_patch_shipment_ready_to_ship_returns_409(authenticated_client: AsyncClient) -> None:

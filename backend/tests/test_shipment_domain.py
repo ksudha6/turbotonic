@@ -130,6 +130,89 @@ def test_mark_ready_rejects_ready_to_ship():
         s.mark_ready()
 
 
+# --- iter 074: book_shipment + mark_shipped ---
+
+from datetime import date as _date
+
+
+def _ready_shipment() -> Shipment:
+    s = _make_shipment()
+    s.submit_for_documents()
+    s.mark_ready()
+    return s
+
+
+def test_book_shipment_transitions_ready_to_booked():
+    s = _ready_shipment()
+    s.book_shipment(
+        carrier="Maersk",
+        booking_reference="BK-12345",
+        pickup_date=_date(2026, 5, 1),
+    )
+    assert s.status is ShipmentStatus.BOOKED
+    assert s.carrier == "Maersk"
+    assert s.booking_reference == "BK-12345"
+    assert s.pickup_date == _date(2026, 5, 1)
+
+
+def test_book_shipment_strips_whitespace():
+    s = _ready_shipment()
+    s.book_shipment(
+        carrier="  DHL  ",
+        booking_reference="  BK-1  ",
+        pickup_date=_date(2026, 5, 1),
+    )
+    assert s.carrier == "DHL"
+    assert s.booking_reference == "BK-1"
+
+
+def test_book_shipment_rejects_empty_carrier():
+    s = _ready_shipment()
+    with pytest.raises(ValueError, match="carrier"):
+        s.book_shipment(carrier="   ", booking_reference="BK-1", pickup_date=_date(2026, 5, 1))
+
+
+def test_book_shipment_rejects_empty_booking_reference():
+    s = _ready_shipment()
+    with pytest.raises(ValueError, match="booking_reference"):
+        s.book_shipment(carrier="DHL", booking_reference="", pickup_date=_date(2026, 5, 1))
+
+
+def test_book_shipment_rejects_from_draft():
+    s = _make_shipment()
+    with pytest.raises(ValueError, match="READY_TO_SHIP"):
+        s.book_shipment(carrier="DHL", booking_reference="BK-1", pickup_date=_date(2026, 5, 1))
+
+
+def test_book_shipment_rejects_from_documents_pending():
+    s = _make_shipment()
+    s.submit_for_documents()
+    with pytest.raises(ValueError, match="READY_TO_SHIP"):
+        s.book_shipment(carrier="DHL", booking_reference="BK-1", pickup_date=_date(2026, 5, 1))
+
+
+def test_mark_shipped_transitions_booked_to_shipped():
+    s = _ready_shipment()
+    s.book_shipment(carrier="DHL", booking_reference="BK-1", pickup_date=_date(2026, 5, 1))
+    s.mark_shipped()
+    assert s.status is ShipmentStatus.SHIPPED
+    assert s.shipped_at is not None
+
+
+def test_mark_shipped_rejects_from_ready_to_ship():
+    s = _ready_shipment()
+    with pytest.raises(ValueError, match="BOOKED"):
+        s.mark_shipped()
+
+
+def test_mark_shipped_rejects_from_shipped():
+    s = _ready_shipment()
+    s.book_shipment(carrier="DHL", booking_reference="BK-1", pickup_date=_date(2026, 5, 1))
+    s.mark_shipped()
+    with pytest.raises(ValueError, match="BOOKED"):
+        s.mark_shipped()
+
+
 # --- validate_shipment_quantities ---
 
 def _po_items(
