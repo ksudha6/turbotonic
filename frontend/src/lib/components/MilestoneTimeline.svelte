@@ -12,7 +12,7 @@
 		{ value: 'RAW_MATERIALS', label: 'Raw Materials' },
 		{ value: 'PRODUCTION_STARTED', label: 'Production Started' },
 		{ value: 'QC_PASSED', label: 'QC Passed' },
-		{ value: 'READY_TO_SHIP', label: 'Ready to Ship' },
+		{ value: 'READY_FOR_SHIPMENT', label: 'Ready for Shipment' },
 		{ value: 'SHIPPED', label: 'Shipped' },
 	];
 

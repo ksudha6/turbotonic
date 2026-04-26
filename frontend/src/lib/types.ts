@@ -1,8 +1,8 @@
 // Iter 056/058: MODIFIED is the in-flight negotiation status. Legacy statuses kept as-is.
 export type POStatus = 'DRAFT' | 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'REVISED' | 'MODIFIED';
 
-// Iter 044: Shipment types
-export type ShipmentStatus = 'DRAFT' | 'DOCUMENTS_PENDING' | 'READY_TO_SHIP';
+// Iter 044/074: Shipment types. BOOKED + SHIPPED added in iter 074.
+export type ShipmentStatus = 'DRAFT' | 'DOCUMENTS_PENDING' | 'READY_TO_SHIP' | 'BOOKED' | 'SHIPPED';
 
 export interface ShipmentLineItem {
 	id: string;
@@ -363,7 +363,8 @@ export interface PaginatedInvoiceList {
 	page_size: number;
 }
 
-export type ProductionMilestone = 'RAW_MATERIALS' | 'PRODUCTION_STARTED' | 'QC_PASSED' | 'READY_TO_SHIP' | 'SHIPPED';
+// Iter 074: READY_TO_SHIP renamed to READY_FOR_SHIPMENT to disambiguate from ShipmentStatus.READY_TO_SHIP.
+export type ProductionMilestone = 'RAW_MATERIALS' | 'PRODUCTION_STARTED' | 'QC_PASSED' | 'READY_FOR_SHIPMENT' | 'SHIPPED';
 
 export interface MilestoneUpdate {
 	milestone: ProductionMilestone;
