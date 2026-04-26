@@ -28,6 +28,8 @@
 	const roleLabel = $derived(ROLE_LABEL[role]);
 
 	const isFullLayout = $derived(role === 'ADMIN' || role === 'SM');
+	const isFmLayout = $derived(role === 'FREIGHT_MANAGER');
+	const fetchesSummary = $derived(isFullLayout || isFmLayout);
 
 	const EVENT_LABELS: Record<string, string> = {
 		PO_CREATED: 'PO created',
@@ -68,7 +70,7 @@
 	let error = $state<string | null>(null);
 
 	onMount(async () => {
-		if (!isFullLayout) {
+		if (!fetchesSummary) {
 			loading = false;
 			return;
 		}
@@ -125,7 +127,7 @@
 		<UserMenu {name} {role} />
 	{/snippet}
 
-	{#if !isFullLayout}
+	{#if !fetchesSummary}
 		<div class="ui-dashboard-placeholder">
 			<PanelCard title="Dashboard" data-testid="panel-placeholder">
 				{#snippet children()}
@@ -139,7 +141,7 @@
 		<LoadingState label="Loading dashboard" />
 	{:else if error}
 		<ErrorState message={error} onRetry={() => { error = null; loading = true; fetchDashboardSummary().then(s => { summary = s; }).catch(e => { error = e instanceof Error ? e.message : 'Failed to load dashboard'; }).finally(() => { loading = false; }); }} />
-	{:else if summary}
+	{:else if summary && isFullLayout}
 		<div class="ui-dashboard">
 			<div class="ui-dashboard-kpis" data-testid="ui-dashboard-kpis">
 				<KpiCard
@@ -224,6 +226,116 @@
 					{/snippet}
 				</PanelCard>
 			</div>
+		</div>
+	{:else if summary && isFmLayout && summary.fm_kpis}
+		<div class="ui-dashboard">
+			<div class="ui-dashboard-kpis" data-testid="ui-dashboard-kpis">
+				<KpiCard
+					label="Ready batches"
+					value={String(summary.fm_kpis.ready_batches)}
+					data-testid="kpi-ready-batches"
+				/>
+				<KpiCard
+					label="Shipments in flight"
+					value={String(summary.fm_kpis.shipments_in_flight)}
+					data-testid="kpi-shipments-in-flight"
+				/>
+				<KpiCard
+					label="Pending invoices"
+					value={String(summary.fm_kpis.pending_invoices)}
+					delta={{ value: formatUsd(summary.fm_kpis.pending_invoices_value_usd), tone: 'neutral' }}
+					data-testid="kpi-pending-invoices"
+				/>
+				<KpiCard
+					label="Docs missing"
+					value={String(summary.fm_kpis.docs_missing)}
+					data-testid="kpi-docs-missing"
+				/>
+			</div>
+
+			<div class="ui-dashboard-panels">
+				<PanelCard title="Ready batches" data-testid="panel-ready-batches">
+					{#snippet children()}
+						{#if summary.fm_ready_batches.length === 0}
+							<EmptyState title="No batches ready for shipment" />
+						{:else}
+							<ul class="ui-dashboard-awaiting-list">
+								{#each summary.fm_ready_batches as batch (batch.po_id)}
+									<li>
+										<button
+											type="button"
+											class="ui-dashboard-awaiting-row"
+											onclick={() => goto(`/po/${batch.po_id}`)}
+										>
+											<span class="ui-dashboard-awaiting-po">{batch.po_number}</span>
+											<span class="ui-dashboard-awaiting-vendor">{batch.vendor_name}</span>
+											<span class="ui-dashboard-awaiting-value">
+												{batch.shipped_qty} / {batch.accepted_qty}
+											</span>
+										</button>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					{/snippet}
+				</PanelCard>
+
+				<PanelCard title="Pending invoices" data-testid="panel-pending-invoices">
+					{#snippet children()}
+						{#if summary.fm_pending_invoices.length === 0}
+							<EmptyState title="No pending OpEx or freight invoices" />
+						{:else}
+							<ul class="ui-dashboard-awaiting-list">
+								{#each summary.fm_pending_invoices as inv (inv.id)}
+									<li>
+										<button
+											type="button"
+											class="ui-dashboard-awaiting-row"
+											onclick={() => goto(`/invoice/${inv.id}`)}
+										>
+											<span class="ui-dashboard-awaiting-po">{inv.invoice_number}</span>
+											<span class="ui-dashboard-awaiting-vendor">{inv.vendor_name} · {inv.vendor_type}</span>
+											<span class="ui-dashboard-awaiting-value">{formatUsd(inv.subtotal_usd)}</span>
+										</button>
+									</li>
+								{/each}
+							</ul>
+						{/if}
+					{/snippet}
+				</PanelCard>
+			</div>
+
+			<PanelCard title="Recent activity" data-testid="panel-activity">
+				{#snippet children()}
+					{#if activityRows.length === 0}
+						<EmptyState title="No recent activity" />
+					{:else}
+						<ul class="ui-dashboard-activity-feed" data-testid="activity-feed">
+							{#each activityRows as row (row.id)}
+								<li>
+									{#if row.href}
+										<a class="ui-dashboard-activity-row" href={row.href} data-testid="activity-row-{row.id}">
+											<span class="ui-dashboard-activity-dot {row.tone}" aria-hidden="true"></span>
+											<span class="ui-dashboard-activity-text">
+												<span class="ui-dashboard-activity-primary">{row.primary}</span>
+												<span class="ui-dashboard-activity-secondary">{row.secondary}</span>
+											</span>
+										</a>
+									{:else}
+										<span class="ui-dashboard-activity-row ui-dashboard-activity-static" data-testid="activity-row-{row.id}">
+											<span class="ui-dashboard-activity-dot {row.tone}" aria-hidden="true"></span>
+											<span class="ui-dashboard-activity-text">
+												<span class="ui-dashboard-activity-primary">{row.primary}</span>
+												<span class="ui-dashboard-activity-secondary">{row.secondary}</span>
+											</span>
+										</span>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				{/snippet}
+			</PanelCard>
 		</div>
 	{/if}
 </AppShell>

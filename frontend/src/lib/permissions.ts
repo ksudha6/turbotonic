@@ -19,6 +19,9 @@ export const canManageProducts = (role: UserRole) => is(role, 'SM');
 export const canViewProducts = (role: UserRole) => is(role, 'SM', 'QUALITY_LAB', 'VENDOR', 'PROCUREMENT_MANAGER');
 export const canPostMilestone = (role: UserRole) => is(role, 'VENDOR');
 export const canViewInvoices = (role: UserRole) => is(role, 'SM', 'VENDOR', 'PROCUREMENT_MANAGER', 'FREIGHT_MANAGER');
-export const canViewPOs = (role: UserRole) => is(role, 'SM', 'VENDOR', 'PROCUREMENT_MANAGER');
+// FM sidebar excludes POs (iter 071 matrix), but FM needs PO detail read access
+// for iter 073 dashboard's ready-batch click-through. Nav visibility and page-level
+// read are decoupled (iter 067 design).
+export const canViewPOs = (role: UserRole) => is(role, 'SM', 'VENDOR', 'PROCUREMENT_MANAGER', 'FREIGHT_MANAGER');
 export const canMarkAdvancePaid = (role: UserRole) => is(role, 'SM');
 export const canModifyPostAccept = (role: UserRole) => is(role, 'SM');

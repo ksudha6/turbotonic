@@ -405,10 +405,56 @@ class DashboardActivityItem(BaseModel):
     created_at: datetime
 
 
+class FmKpis(BaseModel):
+    ready_batches: int
+    shipments_in_flight: int
+    pending_invoices: int
+    pending_invoices_value_usd: str
+    docs_missing: int
+
+
+class FmReadyBatch(BaseModel):
+    po_id: str
+    po_number: str
+    vendor_name: str
+    accepted_qty: int
+    shipped_qty: int
+
+
+class FmPendingInvoiceItem(BaseModel):
+    id: str
+    invoice_number: str
+    vendor_name: str
+    vendor_type: str  # 'OPEX' or 'FREIGHT'
+    subtotal_usd: str
+    submitted_at: datetime
+
+
 class DashboardSummaryResponse(BaseModel):
     kpis: DashboardKpis
     awaiting_acceptance: list[AwaitingAcceptanceItem]
     activity: list[DashboardActivityItem]
+    fm_kpis: FmKpis | None = None
+    fm_ready_batches: list[FmReadyBatch] = []
+    fm_pending_invoices: list[FmPendingInvoiceItem] = []
+
+
+_ZERO_KPIS = DashboardKpis(
+    pending_pos=0,
+    pending_pos_value_usd="0.00",
+    awaiting_acceptance=0,
+    awaiting_acceptance_value_usd="0.00",
+    in_production=0,
+    in_production_value_usd="0.00",
+    outstanding_ap_usd="0.00",
+)
+
+# Shipment statuses that are still "in flight" from FM's perspective.
+_SHIPMENT_IN_FLIGHT_STATUSES = (
+    "DRAFT",
+    "DOCUMENTS_PENDING",
+    "READY_TO_SHIP",
+)
 
 
 @router.get("/summary", response_model=DashboardSummaryResponse)
@@ -420,19 +466,17 @@ async def get_dashboard_summary(
     activity_repo: ActivityRepoDep,
     user: User = require_auth,
 ) -> DashboardSummaryResponse:
+    if user.role is UserRole.FREIGHT_MANAGER:
+        return await _fm_summary(repo, invoice_repo, milestone_repo, activity_repo)
+
     if user.role not in _ADMIN_OR_SM:
         return DashboardSummaryResponse(
-            kpis=DashboardKpis(
-                pending_pos=0,
-                pending_pos_value_usd="0.00",
-                awaiting_acceptance=0,
-                awaiting_acceptance_value_usd="0.00",
-                in_production=0,
-                in_production_value_usd="0.00",
-                outstanding_ap_usd="0.00",
-            ),
+            kpis=_ZERO_KPIS,
             awaiting_acceptance=[],
             activity=[],
+            fm_kpis=None,
+            fm_ready_batches=[],
+            fm_pending_invoices=[],
         )
 
     # SM scopes PO-derived KPIs to PROCUREMENT POs and invoice-derived KPIs to
@@ -629,4 +673,245 @@ async def get_dashboard_summary(
         ),
         awaiting_acceptance=awaiting_list,
         activity=activity_items,
+        fm_kpis=None,
+        fm_ready_batches=[],
+        fm_pending_invoices=[],
+    )
+
+
+async def _fm_summary(
+    repo: PurchaseOrderRepository,
+    invoice_repo: InvoiceRepository,
+    milestone_repo: MilestoneRepository,
+    activity_repo: ActivityLogRepository,
+) -> DashboardSummaryResponse:
+    """Compute the FREIGHT_MANAGER dashboard summary."""
+
+    shipment_in_flight_placeholders = ", ".join(
+        f"${i + 1}" for i in range(len(_SHIPMENT_IN_FLIGHT_STATUSES))
+    )
+
+    # --- FM KPI 1: ready_batches ---
+    # ACCEPTED PROCUREMENT POs whose latest milestone is READY_TO_SHIP and where
+    # accepted_qty > shipped_qty (i.e. still have unshipped goods).
+    ready_batch_rows = await milestone_repo._conn.fetch(
+        """
+        WITH latest_milestone AS (
+            SELECT mu.po_id, mu.milestone
+            FROM milestone_updates mu
+            INNER JOIN (
+                SELECT po_id, MAX(posted_at) AS max_posted_at
+                FROM milestone_updates
+                GROUP BY po_id
+            ) latest ON mu.po_id = latest.po_id AND mu.posted_at = latest.max_posted_at
+        ),
+        accepted_qty AS (
+            SELECT li.po_id, SUM(CAST(li.quantity AS INTEGER)) AS total_accepted
+            FROM line_items li
+            WHERE li.status = 'ACCEPTED'
+            GROUP BY li.po_id
+        ),
+        shipped_qty AS (
+            SELECT s.po_id, SUM(CAST(sli.quantity AS INTEGER)) AS total_shipped
+            FROM shipment_line_items sli
+            JOIN shipments s ON sli.shipment_id = s.id
+            GROUP BY s.po_id
+        )
+        SELECT p.id AS po_id, p.po_number, p.vendor_id, p.updated_at,
+               COALESCE(aq.total_accepted, 0) AS accepted_qty,
+               COALESCE(sq.total_shipped, 0) AS shipped_qty
+        FROM purchase_orders p
+        INNER JOIN latest_milestone lm ON lm.po_id = p.id
+        LEFT JOIN accepted_qty aq ON aq.po_id = p.id
+        LEFT JOIN shipped_qty sq ON sq.po_id = p.id
+        WHERE p.status = 'ACCEPTED'
+          AND p.po_type = 'PROCUREMENT'
+          AND lm.milestone = 'READY_TO_SHIP'
+          AND COALESCE(aq.total_accepted, 0) > COALESCE(sq.total_shipped, 0)
+        ORDER BY p.updated_at DESC
+        LIMIT 10
+        """
+    )
+
+    # Count is number of distinct POs (before limit, but limit is 10 which doubles as our count cap)
+    # For accurate KPI count we query separately without LIMIT.
+    ready_batches_count_row = await milestone_repo._conn.fetchval(
+        """
+        WITH latest_milestone AS (
+            SELECT mu.po_id, mu.milestone
+            FROM milestone_updates mu
+            INNER JOIN (
+                SELECT po_id, MAX(posted_at) AS max_posted_at
+                FROM milestone_updates
+                GROUP BY po_id
+            ) latest ON mu.po_id = latest.po_id AND mu.posted_at = latest.max_posted_at
+        ),
+        accepted_qty AS (
+            SELECT li.po_id, SUM(CAST(li.quantity AS INTEGER)) AS total_accepted
+            FROM line_items li
+            WHERE li.status = 'ACCEPTED'
+            GROUP BY li.po_id
+        ),
+        shipped_qty AS (
+            SELECT s.po_id, SUM(CAST(sli.quantity AS INTEGER)) AS total_shipped
+            FROM shipment_line_items sli
+            JOIN shipments s ON sli.shipment_id = s.id
+            GROUP BY s.po_id
+        )
+        SELECT COUNT(*) FROM purchase_orders p
+        INNER JOIN latest_milestone lm ON lm.po_id = p.id
+        LEFT JOIN accepted_qty aq ON aq.po_id = p.id
+        LEFT JOIN shipped_qty sq ON sq.po_id = p.id
+        WHERE p.status = 'ACCEPTED'
+          AND p.po_type = 'PROCUREMENT'
+          AND lm.milestone = 'READY_TO_SHIP'
+          AND COALESCE(aq.total_accepted, 0) > COALESCE(sq.total_shipped, 0)
+        """
+    )
+    ready_batches_count = int(ready_batches_count_row or 0)
+
+    # Build vendor name map for ready batch rows
+    all_vendors = await repo._conn.fetch("SELECT id, name FROM vendors")
+    vendor_map: dict[str, str] = {row["id"]: row["name"] for row in all_vendors}
+
+    fm_ready_batches: list[FmReadyBatch] = [
+        FmReadyBatch(
+            po_id=row["po_id"],
+            po_number=row["po_number"],
+            vendor_name=vendor_map.get(row["vendor_id"], ""),
+            accepted_qty=int(row["accepted_qty"]),
+            shipped_qty=int(row["shipped_qty"]),
+        )
+        for row in ready_batch_rows
+    ]
+
+    # --- FM KPI 2: shipments_in_flight ---
+    shipments_in_flight = int(
+        await repo._conn.fetchval(
+            f"SELECT COUNT(*) FROM shipments WHERE status IN ({shipment_in_flight_placeholders})",
+            *_SHIPMENT_IN_FLIGHT_STATUSES,
+        )
+        or 0
+    )
+
+    # --- FM KPI 3: pending_invoices + pending_invoices_value_usd ---
+    # Invoices with status='SUBMITTED' from OPEX or FREIGHT vendors, with list (capped at 10).
+    pending_invoice_rows = await invoice_repo._conn.fetch(
+        """
+        SELECT i.id, i.invoice_number, i.currency, i.created_at,
+               v.name AS vendor_name, v.vendor_type,
+               COALESCE(SUM(CAST(ili.quantity AS REAL) * CAST(ili.unit_price AS REAL)), 0) AS subtotal
+        FROM invoices i
+        JOIN purchase_orders po ON i.po_id = po.id
+        JOIN vendors v ON po.vendor_id = v.id
+        LEFT JOIN invoice_line_items ili ON ili.invoice_id = i.id
+        WHERE i.status = 'SUBMITTED'
+          AND v.vendor_type IN ('OPEX', 'FREIGHT')
+        GROUP BY i.id, i.invoice_number, i.currency, i.created_at, v.name, v.vendor_type
+        ORDER BY i.created_at DESC
+        LIMIT 10
+        """
+    )
+
+    pending_invoices_count_row = await invoice_repo._conn.fetchval(
+        """
+        SELECT COUNT(DISTINCT i.id)
+        FROM invoices i
+        JOIN purchase_orders po ON i.po_id = po.id
+        JOIN vendors v ON po.vendor_id = v.id
+        WHERE i.status = 'SUBMITTED'
+          AND v.vendor_type IN ('OPEX', 'FREIGHT')
+        """
+    )
+    pending_invoices_count = int(pending_invoices_count_row or 0)
+
+    pending_invoices_total = Decimal("0")
+    fm_pending_invoices: list[FmPendingInvoiceItem] = []
+    for row in pending_invoice_rows:
+        rate = RATE_TO_USD.get(row["currency"], Decimal("1"))
+        subtotal_usd = Decimal(str(row["subtotal"])) * rate
+        pending_invoices_total += subtotal_usd
+        created_raw: str = row["created_at"]
+        created_dt = datetime.fromisoformat(created_raw)
+        if created_dt.tzinfo is None:
+            created_dt = created_dt.replace(tzinfo=UTC)
+        fm_pending_invoices.append(
+            FmPendingInvoiceItem(
+                id=row["id"],
+                invoice_number=row["invoice_number"],
+                vendor_name=row["vendor_name"],
+                vendor_type=row["vendor_type"],
+                subtotal_usd=str(subtotal_usd.quantize(Decimal("0.01"))),
+                submitted_at=created_dt,
+            )
+        )
+
+    # Sum all SUBMITTED invoices for the KPI value (not just the list's 10).
+    pending_invoices_value_row = await invoice_repo._conn.fetch(
+        """
+        SELECT i.currency,
+               COALESCE(SUM(CAST(ili.quantity AS REAL) * CAST(ili.unit_price AS REAL)), 0) AS subtotal
+        FROM invoices i
+        JOIN purchase_orders po ON i.po_id = po.id
+        JOIN vendors v ON po.vendor_id = v.id
+        LEFT JOIN invoice_line_items ili ON ili.invoice_id = i.id
+        WHERE i.status = 'SUBMITTED'
+          AND v.vendor_type IN ('OPEX', 'FREIGHT')
+        GROUP BY i.currency
+        """
+    )
+    pending_invoices_value_usd = Decimal("0")
+    for row in pending_invoices_value_row:
+        rate = RATE_TO_USD.get(row["currency"], Decimal("1"))
+        pending_invoices_value_usd += Decimal(str(row["subtotal"])) * rate
+
+    # --- FM KPI 4: docs_missing ---
+    # Pending shipment document requirements scoped to in-flight shipments.
+    docs_missing = int(
+        await invoice_repo._conn.fetchval(
+            f"""
+            SELECT COUNT(*)
+            FROM shipment_document_requirements sdr
+            JOIN shipments s ON sdr.shipment_id = s.id
+            WHERE sdr.status = 'PENDING'
+              AND s.status IN ({shipment_in_flight_placeholders})
+            """,
+            *_SHIPMENT_IN_FLIGHT_STATUSES,
+        )
+        or 0
+    )
+
+    # --- Activity feed for FM ---
+    raw_activity = await activity_repo.list_recent(limit=40, target_role="FREIGHT_MANAGER")
+    activity_items: list[DashboardActivityItem] = []
+    for entry in raw_activity:
+        if entry.event.value in _DASHBOARD_EXCLUDED_EVENTS:
+            continue
+        activity_items.append(
+            DashboardActivityItem(
+                id=entry.id,
+                entity_type=entry.entity_type.value,
+                entity_id=entry.entity_id,
+                event=entry.event.value,
+                detail=entry.detail,
+                category=entry.category.value,
+                created_at=entry.created_at,
+            )
+        )
+        if len(activity_items) >= 20:
+            break
+
+    return DashboardSummaryResponse(
+        kpis=_ZERO_KPIS,
+        awaiting_acceptance=[],
+        activity=activity_items,
+        fm_kpis=FmKpis(
+            ready_batches=ready_batches_count,
+            shipments_in_flight=shipments_in_flight,
+            pending_invoices=pending_invoices_count,
+            pending_invoices_value_usd=str(pending_invoices_value_usd.quantize(Decimal("0.01"))),
+            docs_missing=docs_missing,
+        ),
+        fm_ready_batches=fm_ready_batches,
+        fm_pending_invoices=fm_pending_invoices,
     )

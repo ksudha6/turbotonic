@@ -31,6 +31,15 @@ const VENDOR_USER = {
 	vendor_id: 'vendor-1'
 };
 
+const FM_USER = {
+	id: 'user-fm',
+	username: 'fm',
+	display_name: 'Freight Manager',
+	role: 'FREIGHT_MANAGER',
+	status: 'ACTIVE',
+	vendor_id: null
+};
+
 const FULL_SUMMARY = {
 	kpis: {
 		pending_pos: 4,
@@ -74,6 +83,49 @@ const FULL_SUMMARY = {
 			category: 'LIVE',
 			created_at: new Date(Date.now() - 7200000).toISOString()
 		}
+	],
+	fm_kpis: null,
+	fm_ready_batches: [],
+	fm_pending_invoices: []
+};
+
+const FM_SUMMARY = {
+	kpis: {
+		pending_pos: 0,
+		pending_pos_value_usd: '0.00',
+		awaiting_acceptance: 0,
+		awaiting_acceptance_value_usd: '0.00',
+		in_production: 0,
+		in_production_value_usd: '0.00',
+		outstanding_ap_usd: '0.00'
+	},
+	awaiting_acceptance: [],
+	activity: [],
+	fm_kpis: {
+		ready_batches: 2,
+		shipments_in_flight: 5,
+		pending_invoices: 3,
+		pending_invoices_value_usd: '8400.00',
+		docs_missing: 7
+	},
+	fm_ready_batches: [
+		{
+			po_id: 'po-r1',
+			po_number: 'PO-2026-300',
+			vendor_name: 'Shenzhen Precision Works',
+			accepted_qty: 100,
+			shipped_qty: 0
+		}
+	],
+	fm_pending_invoices: [
+		{
+			id: 'inv-fm-1',
+			invoice_number: 'INV-2026-FM-001',
+			vendor_name: 'Hamburg Freight Lines',
+			vendor_type: 'FREIGHT',
+			subtotal_usd: '2500.00',
+			submitted_at: new Date(Date.now() - 3600000).toISOString()
+		}
 	]
 };
 
@@ -88,7 +140,10 @@ const EMPTY_SUMMARY = {
 		outstanding_ap_usd: '0.00'
 	},
 	awaiting_acceptance: [],
-	activity: []
+	activity: [],
+	fm_kpis: null,
+	fm_ready_batches: [],
+	fm_pending_invoices: []
 };
 
 // ---------------------------------------------------------------------------
@@ -117,7 +172,7 @@ function mockUnreadCount(page: import('@playwright/test').Page) {
 
 function mockDashboardSummary(
 	page: import('@playwright/test').Page,
-	summary: typeof FULL_SUMMARY | typeof EMPTY_SUMMARY
+	summary: typeof FULL_SUMMARY | typeof EMPTY_SUMMARY | typeof FM_SUMMARY
 ) {
 	return page.route('**/api/v1/dashboard/summary', (route) => {
 		route.fulfill({
@@ -252,4 +307,49 @@ test('Empty activity list renders EmptyState', async ({ page }) => {
 	await page.goto('/dashboard');
 	const activityPanel = page.getByTestId('panel-activity');
 	await expect(activityPanel).toContainText('No recent activity');
+});
+
+test('FREIGHT_MANAGER sees shipment + invoice KPIs', async ({ page }) => {
+	await mockApiCatchAll(page);
+	await mockUser(page, FM_USER);
+	await mockUnreadCount(page);
+	await mockDashboardSummary(page, FM_SUMMARY);
+
+	await page.goto('/dashboard');
+	await expect(page.getByTestId('ui-dashboard-kpis')).toBeVisible();
+
+	await expect(page.getByTestId('kpi-ready-batches')).toContainText('2');
+	await expect(page.getByTestId('kpi-shipments-in-flight')).toContainText('5');
+	await expect(page.getByTestId('kpi-pending-invoices')).toContainText('3');
+	await expect(page.getByTestId('kpi-pending-invoices')).toContainText('$8,400');
+	await expect(page.getByTestId('kpi-docs-missing')).toContainText('7');
+});
+
+test('FREIGHT_MANAGER ready batch click navigates to PO detail', async ({ page }) => {
+	await mockApiCatchAll(page);
+	await mockUser(page, FM_USER);
+	await mockUnreadCount(page);
+	await mockDashboardSummary(page, FM_SUMMARY);
+
+	await page.goto('/dashboard');
+	const readyPanel = page.getByTestId('panel-ready-batches');
+	await expect(readyPanel).toContainText('PO-2026-300');
+
+	await readyPanel.getByRole('button').first().click();
+	await expect(page).toHaveURL(/\/po\/po-r1/);
+});
+
+test('FREIGHT_MANAGER pending invoice click navigates to invoice detail', async ({ page }) => {
+	await mockApiCatchAll(page);
+	await mockUser(page, FM_USER);
+	await mockUnreadCount(page);
+	await mockDashboardSummary(page, FM_SUMMARY);
+
+	await page.goto('/dashboard');
+	const invPanel = page.getByTestId('panel-pending-invoices');
+	await expect(invPanel).toContainText('INV-2026-FM-001');
+	await expect(invPanel).toContainText('FREIGHT');
+
+	await invPanel.getByRole('button').first().click();
+	await expect(page).toHaveURL(/\/invoice\/inv-fm-1/);
 });

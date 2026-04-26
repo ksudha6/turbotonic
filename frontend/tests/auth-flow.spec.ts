@@ -48,7 +48,10 @@ async function mockDashboard(page: import('@playwright/test').Page) {
 					outstanding_ap_usd: '0.00'
 				},
 				awaiting_acceptance: [],
-				activity: []
+				activity: [],
+				fm_kpis: null,
+				fm_ready_batches: [],
+				fm_pending_invoices: []
 			})
 		});
 	});
