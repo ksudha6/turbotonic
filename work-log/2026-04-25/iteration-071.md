@@ -139,6 +139,8 @@ No new domain terms emerged. `KPI`, `awaiting acceptance`, and `outstanding A/P`
 ### Carry-forward backlog
 
 Logged in `work-log/iterations-summary.md` for later iters:
+- KPI cards should also surface the USD value of the POs alongside the count (e.g. "Pending POs: 4 · $52,000"). Backend `/summary` already computes USD-converted PO totals for the awaiting list — extend the KPI counts to return `{ count, total_usd }` and update KpiCard usage to show both. User feedback from iter 071 smoke test.
+- Recent activity panel needs a definition. Iter 071 ships the raw event stream (PO_SUBMITTED, INVOICE_APPROVED, MILESTONE_POSTED, etc.) with relative-time + tone, but the panel needs: (1) which events belong on the dashboard vs only on detail pages, (2) per-role filtering (target_role on the event already exists; ADMIN/SM scoping rules unclear), (3) what makes an event ACTION_REQUIRED vs LIVE in the dashboard context, (4) deep-link click-through behavior (currently no click handler — entries are read-only). Brainstorm before any further panel work.
 - TaskGroup fan-out for dashboard summary queries (deferred — iter-scoped to keep connection-pool semantics conservative; hit a transaction-related deadlock in this iter when an over-engineered test attempted shared-connection patching).
 - VENDOR / FREIGHT_MANAGER / QUALITY_LAB / PROCUREMENT_MANAGER full dashboards (placeholder shipped this iter; per-role panel sets in subsequent iters).
 - Quality flags KPI/panel for SM (line-level cert join — needs Certificate-status read paths integrated into the dashboard query; was discussed during brainstorm and explicitly deferred).
