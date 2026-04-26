@@ -104,7 +104,7 @@ _OVERDUE_THRESHOLDS: dict[str, int] = {
     ProductionMilestone.RAW_MATERIALS.value: 7,
     ProductionMilestone.PRODUCTION_STARTED.value: 7,
     ProductionMilestone.QC_PASSED.value: 3,
-    ProductionMilestone.READY_TO_SHIP.value: 3,
+    ProductionMilestone.READY_FOR_SHIPMENT.value: 3,
 }
 
 
@@ -360,7 +360,7 @@ _IN_PRODUCTION_MILESTONES = (
     ProductionMilestone.RAW_MATERIALS.value,
     ProductionMilestone.PRODUCTION_STARTED.value,
     ProductionMilestone.QC_PASSED.value,
-    ProductionMilestone.READY_TO_SHIP.value,
+    ProductionMilestone.READY_FOR_SHIPMENT.value,
 )
 
 # Activity events excluded from the dashboard feed. Line-level negotiation deltas, force
@@ -450,10 +450,13 @@ _ZERO_KPIS = DashboardKpis(
 )
 
 # Shipment statuses that are still "in flight" from FM's perspective.
+# Iter 074: BOOKED added — shipment has a carrier but has not been picked up yet.
+# SHIPPED is excluded (terminal — out of FM's daily worklist).
 _SHIPMENT_IN_FLIGHT_STATUSES = (
     "DRAFT",
     "DOCUMENTS_PENDING",
     "READY_TO_SHIP",
+    "BOOKED",
 )
 
 
@@ -692,7 +695,7 @@ async def _fm_summary(
     )
 
     # --- FM KPI 1: ready_batches ---
-    # ACCEPTED PROCUREMENT POs whose latest milestone is READY_TO_SHIP and where
+    # ACCEPTED PROCUREMENT POs whose latest milestone is READY_FOR_SHIPMENT and where
     # accepted_qty > shipped_qty (i.e. still have unshipped goods).
     ready_batch_rows = await milestone_repo._conn.fetch(
         """
@@ -726,7 +729,7 @@ async def _fm_summary(
         LEFT JOIN shipped_qty sq ON sq.po_id = p.id
         WHERE p.status = 'ACCEPTED'
           AND p.po_type = 'PROCUREMENT'
-          AND lm.milestone = 'READY_TO_SHIP'
+          AND lm.milestone = 'READY_FOR_SHIPMENT'
           AND COALESCE(aq.total_accepted, 0) > COALESCE(sq.total_shipped, 0)
         ORDER BY p.updated_at DESC
         LIMIT 10
@@ -764,7 +767,7 @@ async def _fm_summary(
         LEFT JOIN shipped_qty sq ON sq.po_id = p.id
         WHERE p.status = 'ACCEPTED'
           AND p.po_type = 'PROCUREMENT'
-          AND lm.milestone = 'READY_TO_SHIP'
+          AND lm.milestone = 'READY_FOR_SHIPMENT'
           AND COALESCE(aq.total_accepted, 0) > COALESCE(sq.total_shipped, 0)
         """
     )

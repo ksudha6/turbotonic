@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, field_validator
@@ -94,6 +94,23 @@ class ShipmentResponse(BaseModel):
     line_items: list[ShipmentLineItemResponse]
     created_at: datetime
     updated_at: datetime
+    carrier: str | None = None
+    booking_reference: str | None = None
+    pickup_date: date | None = None
+    shipped_at: datetime | None = None
+
+
+class ShipmentBookRequest(BaseModel):
+    carrier: str
+    booking_reference: str
+    pickup_date: date
+
+    @field_validator("carrier", "booking_reference")
+    @classmethod
+    def not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("must not be empty or whitespace-only")
+        return v.strip()
 
 
 class RemainingShipmentQuantity(BaseModel):
@@ -145,4 +162,8 @@ def shipment_to_response(
         line_items=items,
         created_at=shipment.created_at,
         updated_at=shipment.updated_at,
+        carrier=shipment.carrier,
+        booking_reference=shipment.booking_reference,
+        pickup_date=shipment.pickup_date,
+        shipped_at=shipment.shipped_at,
     )

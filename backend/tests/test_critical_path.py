@@ -85,7 +85,7 @@ async def test_full_po_lifecycle(authenticated_client: AsyncClient):
     assert submit_inv.json()["status"] == "SUBMITTED"
 
     # 7. Post milestones in sequence
-    milestones = ["RAW_MATERIALS", "PRODUCTION_STARTED", "QC_PASSED", "READY_TO_SHIP"]
+    milestones = ["RAW_MATERIALS", "PRODUCTION_STARTED", "QC_PASSED", "READY_FOR_SHIPMENT"]
     for ms in milestones:
         ms_resp = await client.post(f"/api/v1/po/{po_id}/milestones", json={"milestone": ms})
         assert ms_resp.status_code == 201, f"Failed to post milestone {ms}: {ms_resp.text}"

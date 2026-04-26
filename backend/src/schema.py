@@ -439,6 +439,26 @@ async def init_db(conn: asyncpg.Connection) -> None:
         "ALTER TABLE shipment_line_items ADD COLUMN IF NOT EXISTS country_of_origin TEXT"
     )
 
+    # Iter 074: shipment booking metadata. All nullable; populated on book_shipment transition.
+    await conn.execute(
+        "ALTER TABLE shipments ADD COLUMN IF NOT EXISTS carrier TEXT"
+    )
+    await conn.execute(
+        "ALTER TABLE shipments ADD COLUMN IF NOT EXISTS booking_reference TEXT"
+    )
+    await conn.execute(
+        "ALTER TABLE shipments ADD COLUMN IF NOT EXISTS pickup_date TEXT"
+    )
+    await conn.execute(
+        "ALTER TABLE shipments ADD COLUMN IF NOT EXISTS shipped_at TEXT"
+    )
+
+    # Iter 074: rename PO milestone READY_TO_SHIP -> READY_FOR_SHIPMENT.
+    # The existing literal must be migrated before any read code expects the new name.
+    await conn.execute(
+        "UPDATE milestone_updates SET milestone='READY_FOR_SHIPMENT' WHERE milestone='READY_TO_SHIP'"
+    )
+
     # Iter 046: document requirements checklist per shipment.
     await conn.execute(
         """

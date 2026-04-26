@@ -117,11 +117,11 @@
 
 | Term | Definition | Bounded Context |
 |------|-----------|-----------------|
-| Production Milestone | Ordered enum of manufacturing stages: RAW_MATERIALS, PRODUCTION_STARTED, QC_PASSED, READY_TO_SHIP, SHIPPED. Append-only, posted in sequence against ACCEPTED PROCUREMENT POs. | Production |
+| Production Milestone | Ordered enum of manufacturing stages: RAW_MATERIALS, PRODUCTION_STARTED, QC_PASSED, READY_FOR_SHIPMENT, SHIPPED. Append-only, posted in sequence against ACCEPTED PROCUREMENT POs. (READY_FOR_SHIPMENT renamed from READY_TO_SHIP in iter 074 to disambiguate from per-shipment status.) | Production |
 | Milestone Update | Value object recording a milestone post (milestone, posted_at). Append-only child of Purchase Order. | Production |
 | Milestone Order Enforcement | Validation that the proposed milestone is the next in the fixed sequence. Rejects out-of-order, duplicate, and beyond-terminal posts. | Production |
 | Current Milestone | The latest posted milestone for a PO. Null when no milestones exist. Exposed on the PO list as a read model field via subquery join. | Production |
-| Overdue Production | A PO whose latest milestone has exceeded its time threshold: 7 days for RAW_MATERIALS and PRODUCTION_STARTED, 3 days for QC_PASSED and READY_TO_SHIP. SHIPPED is never overdue. Surfaced on the dashboard. | Production |
+| Overdue Production | A PO whose latest milestone has exceeded its time threshold: 7 days for RAW_MATERIALS and PRODUCTION_STARTED, 3 days for QC_PASSED and READY_FOR_SHIPMENT. SHIPPED is never overdue. Surfaced on the dashboard. | Production |
 
 ## Activity and Notifications
 

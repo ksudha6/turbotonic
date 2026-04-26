@@ -309,7 +309,7 @@ async def _post_milestones_up_to(
     client: AsyncClient, po_id: str, target: str
 ) -> None:
     """Post milestones in sequence up to and including target."""
-    order = ["RAW_MATERIALS", "PRODUCTION_STARTED", "QC_PASSED", "READY_TO_SHIP", "SHIPPED"]
+    order = ["RAW_MATERIALS", "PRODUCTION_STARTED", "QC_PASSED", "READY_FOR_SHIPMENT", "SHIPPED"]
     for ms in order:
         resp = await client.post(
             f"/api/v1/po/{po_id}/milestones", json={"milestone": ms}

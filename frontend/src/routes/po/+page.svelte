@@ -13,7 +13,7 @@
 		RAW_MATERIALS: 'Raw Materials',
 		PRODUCTION_STARTED: 'Production Started',
 		QC_PASSED: 'QC Passed',
-		READY_TO_SHIP: 'Ready to Ship',
+		READY_FOR_SHIPMENT: 'Ready for Shipment',
 		SHIPPED: 'Shipped',
 	};
 

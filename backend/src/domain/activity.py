@@ -40,6 +40,9 @@ class ActivityEvent(Enum):
     EMAIL_SEND_FAILED = "EMAIL_SEND_FAILED"
     # Iter 046: document uploaded against a shipment document requirement.
     DOCUMENT_UPLOADED = "DOCUMENT_UPLOADED"
+    # Iter 074: shipment booking lifecycle. FM records carrier + booking; SM observes.
+    SHIPMENT_BOOKED = "SHIPMENT_BOOKED"
+    SHIPMENT_SHIPPED = "SHIPMENT_SHIPPED"
 
 
 class NotificationCategory(Enum):
@@ -119,4 +122,7 @@ EVENT_METADATA: dict[ActivityEvent, tuple[NotificationCategory, TargetRole | Non
     ActivityEvent.EMAIL_SEND_FAILED: (NotificationCategory.DELAYED, None),
     # Iter 046: document uploaded against shipment requirement; SM is notified.
     ActivityEvent.DOCUMENT_UPLOADED: (NotificationCategory.LIVE, TargetRole.SM),
+    # Iter 074: SM observes FM bookings and dispatches.
+    ActivityEvent.SHIPMENT_BOOKED: (NotificationCategory.LIVE, TargetRole.SM),
+    ActivityEvent.SHIPMENT_SHIPPED: (NotificationCategory.LIVE, TargetRole.SM),
 }

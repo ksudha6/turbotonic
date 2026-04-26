@@ -275,28 +275,47 @@ def _make_line_items(
 
 def _make_shipments(pos: list[dict[str, object]]) -> list[dict[str, object]]:
     # Pick six ACCEPTED POs; if fewer than six ACCEPTED, fall back to the first six.
+    # The first PO in the targets list is reserved for the "ready batch" case (no
+    # shipments at all so the FM ready-batches KPI counts it). The remaining five
+    # POs each get one or two shipments spanning all five statuses.
     accepted = [p for p in pos if p["status"] == POStatus.ACCEPTED.value]
     targets = (accepted + pos)[:6]
+    # Iter 074: span all five statuses so the FM dashboard shows variety.
     statuses = (
         ShipmentStatus.DRAFT,
         ShipmentStatus.DOCUMENTS_PENDING,
         ShipmentStatus.READY_TO_SHIP,
+        ShipmentStatus.BOOKED,
+        ShipmentStatus.SHIPPED,
     )
     rows: list[dict[str, object]] = []
-    for i, po in enumerate(targets):
+    # Skip targets[0] so it stays at READY_FOR_SHIPMENT milestone with no shipment;
+    # this drives the ready-batches KPI on the FM dashboard.
+    for i, po in enumerate(targets[1:]):
         ship_count = 1 + (i % 2)
         for s in range(ship_count):
-            rows.append(
-                {
-                    "id": str(uuid4()),
-                    "po_id": po["id"],
-                    "shipment_number": f"SHP-2026-{i:03d}-{s}",
-                    "marketplace": str(po["marketplace"]) if po["marketplace"] else VALID_MARKETPLACES[0],
-                    "status": statuses[(i + s) % len(statuses)].value,
-                    "created_at": _offset(-20 + i),
-                    "updated_at": _offset(-5 + i),
-                }
-            )
+            status = statuses[(i + s) % len(statuses)]
+            row: dict[str, object] = {
+                "id": str(uuid4()),
+                "po_id": po["id"],
+                "shipment_number": f"SHP-2026-{i:03d}-{s}",
+                "marketplace": str(po["marketplace"]) if po["marketplace"] else VALID_MARKETPLACES[0],
+                "status": status.value,
+                "created_at": _offset(-20 + i),
+                "updated_at": _offset(-5 + i),
+                "carrier": None,
+                "booking_reference": None,
+                "pickup_date": None,
+                "shipped_at": None,
+            }
+            # BOOKED and SHIPPED carry carrier metadata; SHIPPED also has shipped_at.
+            if status in (ShipmentStatus.BOOKED, ShipmentStatus.SHIPPED):
+                row["carrier"] = ("Maersk", "DHL", "FedEx", "ONE")[(i + s) % 4]
+                row["booking_reference"] = f"BK-{2026000 + i * 10 + s}"
+                row["pickup_date"] = (_NOW + timedelta(days=-3 + i)).date().isoformat()
+            if status is ShipmentStatus.SHIPPED:
+                row["shipped_at"] = _offset(-2 + i)
+            rows.append(row)
     return rows
 
 
@@ -387,11 +406,14 @@ def _make_invoice_line_items(
 
 def _make_milestone_updates(pos: list[dict[str, object]]) -> list[dict[str, object]]:
     # A handful of ACCEPTED POs get a prefix of the milestone sequence.
+    # Iter 074: index 0 gets READY_FOR_SHIPMENT (prefix length 4) so the FM
+    # ready-batches KPI counts it (this PO has no shipment per _make_shipments).
     accepted = [p for p in pos if p["status"] == POStatus.ACCEPTED.value]
     milestone_list = list(ProductionMilestone)
     rows: list[dict[str, object]] = []
+    counts = (4, 3, 4, 2)
     for i, po in enumerate(accepted[:4]):
-        count = 2 + (i % 3)
+        count = counts[i]
         for j, m in enumerate(milestone_list[:count]):
             rows.append(
                 {
@@ -612,11 +634,18 @@ async def seed(conn: asyncpg.Connection) -> None:
         await _insert(
             conn,
             """
-            INSERT INTO shipments (id, po_id, shipment_number, marketplace, status, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO shipments (
+                id, po_id, shipment_number, marketplace, status, created_at, updated_at,
+                carrier, booking_reference, pickup_date, shipped_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             """,
             shipments,
-            ("id", "po_id", "shipment_number", "marketplace", "status", "created_at", "updated_at"),
+            (
+                "id", "po_id", "shipment_number", "marketplace", "status",
+                "created_at", "updated_at",
+                "carrier", "booking_reference", "pickup_date", "shipped_at",
+            ),
         )
 
         await _insert(

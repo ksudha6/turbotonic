@@ -9,7 +9,9 @@ class ProductionMilestone(Enum):
     RAW_MATERIALS = "RAW_MATERIALS"
     PRODUCTION_STARTED = "PRODUCTION_STARTED"
     QC_PASSED = "QC_PASSED"
-    READY_TO_SHIP = "READY_TO_SHIP"
+    # Renamed from READY_TO_SHIP in iter 074 to disambiguate from ShipmentStatus.READY_TO_SHIP.
+    # READY_FOR_SHIPMENT is the FM hand-off signal: production + QC done, batch is packed.
+    READY_FOR_SHIPMENT = "READY_FOR_SHIPMENT"
     SHIPPED = "SHIPPED"
 
 
@@ -18,7 +20,7 @@ MILESTONE_ORDER: tuple[ProductionMilestone, ...] = (
     ProductionMilestone.RAW_MATERIALS,
     ProductionMilestone.PRODUCTION_STARTED,
     ProductionMilestone.QC_PASSED,
-    ProductionMilestone.READY_TO_SHIP,
+    ProductionMilestone.READY_FOR_SHIPMENT,
     ProductionMilestone.SHIPPED,
 )
 

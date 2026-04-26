@@ -30,6 +30,7 @@ from src.shipment_document_requirement_dto import (
 from src.shipment_dto import (
     RemainingShipmentQuantity,
     RemainingShipmentQuantityResponse,
+    ShipmentBookRequest,
     ShipmentCreate,
     ShipmentResponse,
     ShipmentUpdate,
@@ -281,6 +282,61 @@ async def mark_ready(
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await repo.save(shipment)
+    rows = await repo.get_line_item_rows(shipment_id)
+    return shipment_to_response(shipment, rows)
+
+
+@router.post("/{shipment_id}/book", response_model=ShipmentResponse)
+async def book_shipment(
+    shipment_id: str,
+    body: ShipmentBookRequest,
+    repo: ShipmentRepoDep,
+    activity_repo: ActivityRepoDep,
+    _user: User = require_role(UserRole.ADMIN, UserRole.SM, UserRole.FREIGHT_MANAGER),
+) -> ShipmentResponse:
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+    try:
+        shipment.book_shipment(
+            carrier=body.carrier,
+            booking_reference=body.booking_reference,
+            pickup_date=body.pickup_date,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await repo.save(shipment)
+    await activity_repo.append(
+        entity_type=EntityType.SHIPMENT,
+        entity_id=shipment.id,
+        event=ActivityEvent.SHIPMENT_BOOKED,
+        detail=f"{shipment.shipment_number} booked with {shipment.carrier} (ref {shipment.booking_reference})",
+    )
+    rows = await repo.get_line_item_rows(shipment_id)
+    return shipment_to_response(shipment, rows)
+
+
+@router.post("/{shipment_id}/ship", response_model=ShipmentResponse)
+async def mark_shipped(
+    shipment_id: str,
+    repo: ShipmentRepoDep,
+    activity_repo: ActivityRepoDep,
+    _user: User = require_role(UserRole.ADMIN, UserRole.SM, UserRole.FREIGHT_MANAGER),
+) -> ShipmentResponse:
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+    try:
+        shipment.mark_shipped()
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await repo.save(shipment)
+    await activity_repo.append(
+        entity_type=EntityType.SHIPMENT,
+        entity_id=shipment.id,
+        event=ActivityEvent.SHIPMENT_SHIPPED,
+        detail=f"{shipment.shipment_number} shipped",
+    )
     rows = await repo.get_line_item_rows(shipment_id)
     return shipment_to_response(shipment, rows)
 
