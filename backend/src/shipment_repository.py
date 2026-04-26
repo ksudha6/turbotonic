@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -22,6 +22,12 @@ def _parse_dt(value: str) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
     return dt
+
+
+def _parse_date(value: str | None) -> date | None:
+    if value is None:
+        return None
+    return date.fromisoformat(value)
 
 
 class ShipmentRepository:
@@ -72,11 +78,19 @@ class ShipmentRepository:
                     """
                     UPDATE shipments SET
                         status = $1,
-                        updated_at = $2
-                    WHERE id = $3
+                        updated_at = $2,
+                        carrier = $3,
+                        booking_reference = $4,
+                        pickup_date = $5,
+                        shipped_at = $6
+                    WHERE id = $7
                     """,
                     shipment.status.value,
                     _iso(shipment.updated_at),
+                    shipment.carrier,
+                    shipment.booking_reference,
+                    shipment.pickup_date.isoformat() if shipment.pickup_date else None,
+                    _iso(shipment.shipped_at) if shipment.shipped_at else None,
                     shipment.id,
                 )
                 # Iter 044: update weight/dimension fields on existing line items
@@ -285,6 +299,7 @@ def _reconstruct(
         )
         for r in item_rows
     ]
+    keys = row.keys()
     return Shipment(
         id=row["id"],
         po_id=row["po_id"],
@@ -294,4 +309,8 @@ def _reconstruct(
         line_items=line_items,
         created_at=_parse_dt(row["created_at"]),
         updated_at=_parse_dt(row["updated_at"]),
+        carrier=row["carrier"] if "carrier" in keys else None,
+        booking_reference=row["booking_reference"] if "booking_reference" in keys else None,
+        pickup_date=_parse_date(row["pickup_date"]) if "pickup_date" in keys else None,
+        shipped_at=_parse_dt(row["shipped_at"]) if ("shipped_at" in keys and row["shipped_at"]) else None,
     )

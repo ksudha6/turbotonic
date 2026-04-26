@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import secrets
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import Enum
 from uuid import uuid4
@@ -12,6 +12,10 @@ class ShipmentStatus(Enum):
     DRAFT = "DRAFT"
     DOCUMENTS_PENDING = "DOCUMENTS_PENDING"
     READY_TO_SHIP = "READY_TO_SHIP"
+    # Iter 074: FM has confirmed carrier + booking reference + pickup date.
+    BOOKED = "BOOKED"
+    # Iter 074: shipment has been picked up / dispatched.
+    SHIPPED = "SHIPPED"
 
 
 @dataclass
@@ -47,6 +51,10 @@ class Shipment:
         line_items: list[ShipmentLineItem],
         created_at: datetime,
         updated_at: datetime,
+        carrier: str | None = None,
+        booking_reference: str | None = None,
+        pickup_date: date | None = None,
+        shipped_at: datetime | None = None,
     ) -> None:
         self._id = id
         self.po_id = po_id
@@ -56,6 +64,10 @@ class Shipment:
         self.line_items = line_items
         self._created_at = created_at
         self.updated_at = updated_at
+        self.carrier = carrier
+        self.booking_reference = booking_reference
+        self.pickup_date = pickup_date
+        self.shipped_at = shipped_at
 
     @property
     def id(self) -> str:
@@ -112,9 +124,42 @@ class Shipment:
         self.status = ShipmentStatus.READY_TO_SHIP
         self.updated_at = datetime.now(UTC)
 
+    def book_shipment(
+        self,
+        *,
+        carrier: str,
+        booking_reference: str,
+        pickup_date: date,
+    ) -> None:
+        # FM records carrier + booking reference + pickup date. All three required.
+        if self.status is not ShipmentStatus.READY_TO_SHIP:
+            raise ValueError(
+                f"book_shipment requires READY_TO_SHIP status; current status is {self.status.value}"
+            )
+        if not carrier or not carrier.strip():
+            raise ValueError("carrier must not be empty or whitespace-only")
+        if not booking_reference or not booking_reference.strip():
+            raise ValueError("booking_reference must not be empty or whitespace-only")
+        self.carrier = carrier.strip()
+        self.booking_reference = booking_reference.strip()
+        self.pickup_date = pickup_date
+        self.status = ShipmentStatus.BOOKED
+        self.updated_at = datetime.now(UTC)
+
+    def mark_shipped(self) -> None:
+        # FM marks shipment dispatched after carrier picks up.
+        if self.status is not ShipmentStatus.BOOKED:
+            raise ValueError(
+                f"mark_shipped requires BOOKED status; current status is {self.status.value}"
+            )
+        now = datetime.now(UTC)
+        self.status = ShipmentStatus.SHIPPED
+        self.shipped_at = now
+        self.updated_at = now
+
     def update_line_items(self, updates: list[dict[str, object]]) -> None:
         # Only DRAFT and DOCUMENTS_PENDING shipments accept line item edits
-        if self.status is ShipmentStatus.READY_TO_SHIP:
+        if self.status is not ShipmentStatus.DRAFT and self.status is not ShipmentStatus.DOCUMENTS_PENDING:
             raise ValueError(
                 f"update_line_items is not allowed in {self.status.value} status"
             )
