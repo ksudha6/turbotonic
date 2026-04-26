@@ -33,7 +33,10 @@ const EMPTY_DASHBOARD_SUMMARY = {
 		outstanding_ap_usd: '0.00'
 	},
 	awaiting_acceptance: [],
-	activity: []
+	activity: [],
+	fm_kpis: null,
+	fm_ready_batches: [],
+	fm_pending_invoices: []
 };
 
 // Registers activity mocks with correct LIFO ordering:

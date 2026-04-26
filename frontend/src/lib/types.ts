@@ -490,10 +490,38 @@ export interface DashboardActivityItem {
 	created_at: string;
 }
 
+export interface FmKpis {
+	ready_batches: number;
+	shipments_in_flight: number;
+	pending_invoices: number;
+	pending_invoices_value_usd: string;
+	docs_missing: number;
+}
+
+export interface FmReadyBatch {
+	po_id: string;
+	po_number: string;
+	vendor_name: string;
+	accepted_qty: number;
+	shipped_qty: number;
+}
+
+export interface FmPendingInvoiceItem {
+	id: string;
+	invoice_number: string;
+	vendor_name: string;
+	vendor_type: string;
+	subtotal_usd: string;
+	submitted_at: string;
+}
+
 export interface DashboardSummary {
 	kpis: DashboardKpis;
 	awaiting_acceptance: AwaitingAcceptanceItem[];
 	activity: DashboardActivityItem[];
+	fm_kpis: FmKpis | null;
+	fm_ready_batches: FmReadyBatch[];
+	fm_pending_invoices: FmPendingInvoiceItem[];
 }
 
 export type UserRole = 'ADMIN' | 'PROCUREMENT_MANAGER' | 'SM' | 'VENDOR' | 'QUALITY_LAB' | 'FREIGHT_MANAGER';
