@@ -73,4 +73,9 @@
 			display: none;
 		}
 	}
+	@media (min-width: 769px) {
+		.toggle {
+			display: none;
+		}
+	}
 </style>

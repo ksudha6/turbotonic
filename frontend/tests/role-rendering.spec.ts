@@ -55,7 +55,15 @@ async function mockDashboardRoute(page: import('@playwright/test').Page) {
 			status: 200,
 			contentType: 'application/json',
 			body: JSON.stringify({
-				kpis: { pending_pos: 0, awaiting_acceptance: 0, in_production: 0, outstanding_ap_usd: '0.00' },
+				kpis: {
+					pending_pos: 0,
+					pending_pos_value_usd: '0.00',
+					awaiting_acceptance: 0,
+					awaiting_acceptance_value_usd: '0.00',
+					in_production: 0,
+					in_production_value_usd: '0.00',
+					outstanding_ap_usd: '0.00'
+				},
 				awaiting_acceptance: [],
 				activity: []
 			})

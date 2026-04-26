@@ -464,8 +464,11 @@ export interface POSubmitResponse {
 
 export interface DashboardKpis {
 	pending_pos: number;
+	pending_pos_value_usd: string;
 	awaiting_acceptance: number;
+	awaiting_acceptance_value_usd: string;
 	in_production: number;
+	in_production_value_usd: string;
 	outstanding_ap_usd: string;
 }
 
