@@ -18,6 +18,7 @@ Ship gates:
 Scope explicitly **NOT** in 073:
 - New `READY_FOR_SHIPMENT` production milestone (between `QC_PASSED` and `SHIPPED`). Backlog. Iter 073 uses the existing `READY_TO_SHIP` milestone as the closest equivalent.
 - Vendor → FM mapping. Today FM sees all OPEX/FREIGHT entities; later each FM is mapped to specific vendors. Backlog.
+- **Seed-data extension for shipments + shipment document requirements.** Today's `seed.py` creates zero shipments. Live `make up` will render zeros for FM's shipment-side KPIs (Ready batches, Shipments in flight, Docs missing) until a seed-extension iter ships shipment booking + the document requirement scaffold. Pending invoices KPI may show non-zero from existing OpEx + Freight invoices in seed. Backlog. Tests don't depend on seed (they create fixtures via API).
 - OpEx/Freight invoice approval routing. Today `canApproveInvoice` returns true only for SM (and ADMIN via inheritance). Per the iter 073 brainstorm, **SM owns procurement-only**; OpEx/Freight invoices should not be SM's approval surface. Defining the correct approver (likely FM, possibly varying per `po.po_type` / `vendor.vendor_type`) is its own iter. Iter 073 does not change `permissions.ts`.
 - VENDOR / QUALITY_LAB / PROCUREMENT_MANAGER full dashboards. Their placeholders stay until their respective iters.
 
