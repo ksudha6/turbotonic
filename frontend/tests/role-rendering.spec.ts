@@ -129,7 +129,7 @@ test('SM nav shows all links', async ({ page }) => {
 	await expect(page.getByRole('link', { name: 'Products' })).toBeVisible();
 });
 
-test('VENDOR nav shows Dashboard, POs, Invoices only', async ({ page }) => {
+test('VENDOR nav shows Dashboard, POs, Invoices, Products only', async ({ page }) => {
 	await mockApiCatchAll(page);
 	await mockUser(page, 'VENDOR', 'vendor-1');
 	await mockUnreadCount(page);
@@ -139,7 +139,7 @@ test('VENDOR nav shows Dashboard, POs, Invoices only', async ({ page }) => {
 	await expect(page.getByRole('link', { name: 'Purchase Orders' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Invoices' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Vendors' })).toBeHidden();
-	await expect(page.getByRole('link', { name: 'Products' })).toBeHidden();
+	await expect(page.getByRole('link', { name: 'Products' })).toBeVisible();
 });
 
 test('QUALITY_LAB nav shows Dashboard and Products only', async ({ page }) => {
@@ -155,15 +155,15 @@ test('QUALITY_LAB nav shows Dashboard and Products only', async ({ page }) => {
 	await expect(page.getByRole('link', { name: 'Vendors' })).toBeHidden();
 });
 
-test('FREIGHT_MANAGER nav shows Dashboard and POs only', async ({ page }) => {
+test('FREIGHT_MANAGER nav shows Dashboard and Invoices only', async ({ page }) => {
 	await mockApiCatchAll(page);
 	await mockUser(page, 'FREIGHT_MANAGER');
 	await mockUnreadCount(page);
 	await mockDashboardRoute(page);
 	await page.goto('/dashboard');
 	await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible();
-	await expect(page.getByRole('link', { name: 'Purchase Orders' })).toBeVisible();
-	await expect(page.getByRole('link', { name: 'Invoices' })).toBeHidden();
+	await expect(page.getByRole('link', { name: 'Purchase Orders' })).toBeHidden();
+	await expect(page.getByRole('link', { name: 'Invoices' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Vendors' })).toBeHidden();
 	await expect(page.getByRole('link', { name: 'Products' })).toBeHidden();
 });
@@ -181,17 +181,17 @@ test('ADMIN nav shows same links as SM', async ({ page }) => {
 	await expect(page.getByRole('link', { name: 'Products' })).toBeVisible();
 });
 
-test('PROCUREMENT_MANAGER nav shows Dashboard only', async ({ page }) => {
+test('PROCUREMENT_MANAGER nav shows Dashboard, POs, Invoices, Products', async ({ page }) => {
 	await mockApiCatchAll(page);
 	await mockUser(page, 'PROCUREMENT_MANAGER');
 	await mockUnreadCount(page);
 	await mockDashboardRoute(page);
 	await page.goto('/dashboard');
 	await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible();
-	await expect(page.getByRole('link', { name: 'Purchase Orders' })).toBeHidden();
-	await expect(page.getByRole('link', { name: 'Invoices' })).toBeHidden();
+	await expect(page.getByRole('link', { name: 'Purchase Orders' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Invoices' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Vendors' })).toBeHidden();
-	await expect(page.getByRole('link', { name: 'Products' })).toBeHidden();
+	await expect(page.getByRole('link', { name: 'Products' })).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------

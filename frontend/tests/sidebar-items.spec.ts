@@ -31,14 +31,14 @@ test('sidebar items for SM include all aggregates without Users', () => {
 	]);
 });
 
-test('sidebar items for VENDOR are Dashboard + POs + Invoices exactly', () => {
+test('sidebar items for VENDOR are Dashboard + POs + Invoices + Products exactly', () => {
 	const items = sidebarItemsFor('VENDOR').flatMap((s) => s.items).map((i) => i.label);
-	expect(items).toEqual(['Dashboard', 'Purchase Orders', 'Invoices']);
+	expect(items).toEqual(['Dashboard', 'Purchase Orders', 'Invoices', 'Products']);
 });
 
-test('sidebar items for FREIGHT_MANAGER now include Invoices', () => {
+test('sidebar items for FREIGHT_MANAGER are Dashboard + Invoices exactly', () => {
 	const items = sidebarItemsFor('FREIGHT_MANAGER').flatMap((s) => s.items).map((i) => i.label);
-	expect(items).toEqual(['Dashboard', 'Purchase Orders', 'Invoices']);
+	expect(items).toEqual(['Dashboard', 'Invoices']);
 });
 
 test('sidebar items for QUALITY_LAB are Dashboard + Products exactly', () => {
@@ -46,7 +46,7 @@ test('sidebar items for QUALITY_LAB are Dashboard + Products exactly', () => {
 	expect(items).toEqual(['Dashboard', 'Products']);
 });
 
-test('sidebar items for PROCUREMENT_MANAGER are Dashboard only', () => {
+test('sidebar items for PROCUREMENT_MANAGER are Dashboard + POs + Invoices + Products exactly', () => {
 	const items = sidebarItemsFor('PROCUREMENT_MANAGER').flatMap((s) => s.items).map((i) => i.label);
-	expect(items).toEqual(['Dashboard']);
+	expect(items).toEqual(['Dashboard', 'Purchase Orders', 'Invoices', 'Products']);
 });
