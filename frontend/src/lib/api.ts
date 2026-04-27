@@ -61,6 +61,7 @@ export interface POListParams {
 	vendor_id?: string;
 	currency?: string;
 	milestone?: string;
+	marketplace?: string;
 	sort_by?: string;
 	sort_dir?: string;
 	page?: number;

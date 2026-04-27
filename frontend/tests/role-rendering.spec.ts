@@ -239,7 +239,7 @@ test('SM on PO list sees Create PO button', async ({ page }) => {
 		});
 	});
 	await page.goto('/po');
-	await expect(page.getByRole('link', { name: /new po/i })).toBeVisible();
+	await expect(page.getByRole('button', { name: /new po/i })).toBeVisible();
 });
 
 test('VENDOR on PO list does not see Create PO button', async ({ page }) => {
@@ -261,7 +261,7 @@ test('VENDOR on PO list does not see Create PO button', async ({ page }) => {
 		});
 	});
 	await page.goto('/po');
-	await expect(page.getByRole('link', { name: /new po/i })).toBeHidden();
+	await expect(page.getByRole('button', { name: /new po/i })).toBeHidden();
 });
 
 // ---------------------------------------------------------------------------

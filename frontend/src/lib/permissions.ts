@@ -8,6 +8,8 @@ export const canCreatePO = (role: UserRole) => is(role, 'SM');
 export const canEditPO = (role: UserRole) => is(role, 'SM');
 export const canSubmitPO = (role: UserRole) => is(role, 'SM');
 export const canAcceptRejectPO = (role: UserRole) => is(role, 'VENDOR');
+// Bulk PO transitions: SM (submit/resubmit) + VENDOR (accept/reject). Read-only roles excluded.
+export const canBulkPO = (role: UserRole) => is(role, 'SM', 'VENDOR');
 export const canCreateInvoice = (role: UserRole) => is(role, 'VENDOR');
 export const canSubmitInvoice = (role: UserRole) => is(role, 'VENDOR');
 export const canApproveInvoice = (role: UserRole) => is(role, 'SM');

@@ -125,22 +125,22 @@ test('PO list renders Partial pill on ACCEPTED POs with removed lines', async ({
 	});
 
 	await page.goto('/po');
-	await page.waitForSelector('table');
+	await page.waitForSelector('[data-testid="po-table"]');
 
-	// Partial row: PN acceptance with at least one REMOVED line. Pill text must be "Partial".
+	// Partial row: PN acceptance with at least one REMOVED line. Primary pill is
+	// "Accepted"; a secondary "Partial" pill renders alongside it.
 	const partialRow = page.locator('tbody tr', { hasText: 'PO-20260401-0001' });
-	await expect(partialRow.locator('.badge')).toHaveText('Partial');
-	await expect(partialRow.locator('.badge')).toHaveClass(/badge-partial/);
+	await expect(partialRow).toContainText('Accepted');
+	await expect(partialRow.locator('[data-testid="po-status-partial"]')).toContainText('Partial');
 
-	// Plain ACCEPTED row: no REMOVED lines, so the pill reverts to "Accepted".
+	// Plain ACCEPTED row: no REMOVED lines, no Partial pill.
 	const acceptedRow = page.locator('tbody tr', { hasText: 'PO-20260401-0002' });
-	await expect(acceptedRow.locator('.badge')).toHaveText('Accepted');
-	await expect(acceptedRow.locator('.badge')).toHaveClass(/badge-accepted/);
+	await expect(acceptedRow).toContainText('Accepted');
+	await expect(acceptedRow.locator('[data-testid="po-status-partial"]')).toHaveCount(0);
 
 	// MODIFIED row: in-flight negotiation surfaces the "Modified" pill.
 	const modifiedRow = page.locator('tbody tr', { hasText: 'PO-20260401-0003' });
-	await expect(modifiedRow.locator('.badge')).toHaveText('Modified');
-	await expect(modifiedRow.locator('.badge')).toHaveClass(/badge-modified/);
+	await expect(modifiedRow).toContainText('Modified');
 });
 
 // ---------------------------------------------------------------------------

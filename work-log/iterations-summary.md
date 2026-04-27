@@ -237,6 +237,7 @@ The full design system + page redesign covering every existing page (~22 routes)
 - Recent activity redesign: club PO and invoice activity into a unified feed (currently separate activity streams). Needs discussion on grouping, filtering, and presentation.
 - Deep link preservation on register/bootstrap: deep link preservation on /login is done (iter 033). If an invited user opens a deep link (e.g. `/po/123`) and lands on `/register` or `/setup`, the original path is still lost. After registration/bootstrap they go to `/dashboard`, not the deep link. Low priority since registration is a one-time event.
 - Session cookie path/domain audit: verify the session cookie is set with `path=/` and appropriate domain/SameSite attributes for production deployment behind a reverse proxy. Currently works in dev via Vite proxy.
+- DataTable primitive extension: promote selection column + snippet cell support out of `PoListTable` into the shared `frontend/src/lib/ui/DataTable.svelte` primitive, so other list pages can adopt the same selection contract without copy-paste. Phase 4.x cleanup task.
 
 ### From the backlog (infrastructure)
 - File endpoint role guards: restrict upload/download/delete by role and entity ownership. Currently any authenticated user can access any file. Consumers now exist (certificates iter 038, packaging iter 042, shipment requirements iter 046), so the guard rules can be defined per entity_type and wired in.

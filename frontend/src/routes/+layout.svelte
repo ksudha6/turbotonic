@@ -17,7 +17,9 @@
 		page.url.pathname.startsWith('/ui-demo') ||
 			page.url.pathname.startsWith('/_smoke') ||
 			page.url.pathname === '/dashboard' ||
-			page.url.pathname.startsWith('/dashboard/')
+			page.url.pathname.startsWith('/dashboard/') ||
+			page.url.pathname === '/po' ||
+			page.url.pathname.startsWith('/po/')
 	);
 
 	async function handleLogout() {
