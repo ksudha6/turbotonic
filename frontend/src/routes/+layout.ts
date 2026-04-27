@@ -5,7 +5,7 @@ import { me } from '$lib/auth';
 export const prerender = false;
 export const ssr = false;
 
-const PUBLIC_ROUTES = ['/login', '/register', '/setup'];
+const PUBLIC_ROUTES = ['/login', '/register', '/setup', '/ui-demo'];
 
 export const load: LayoutLoad = async ({ url }) => {
 	const isPublic = PUBLIC_ROUTES.some((r) => url.pathname.startsWith(r));
