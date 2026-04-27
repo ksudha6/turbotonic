@@ -21,7 +21,7 @@ from src.repository import PurchaseOrderRepository
 from src.vendor_repository import VendorRepository
 
 # Roles that receive a populated dashboard/summary payload.
-_ADMIN_OR_SM = {UserRole.ADMIN, UserRole.SM}
+_DASHBOARD_FULL_LAYOUT_ROLES = {UserRole.ADMIN, UserRole.SM, UserRole.PROCUREMENT_MANAGER}
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
 
@@ -472,7 +472,7 @@ async def get_dashboard_summary(
     if user.role is UserRole.FREIGHT_MANAGER:
         return await _fm_summary(repo, invoice_repo, milestone_repo, activity_repo)
 
-    if user.role not in _ADMIN_OR_SM:
+    if user.role not in _DASHBOARD_FULL_LAYOUT_ROLES:
         return DashboardSummaryResponse(
             kpis=_ZERO_KPIS,
             awaiting_acceptance=[],
@@ -482,9 +482,9 @@ async def get_dashboard_summary(
             fm_pending_invoices=[],
         )
 
-    # SM scopes PO-derived KPIs to PROCUREMENT POs and invoice-derived KPIs to
-    # invoices whose PO's vendor has vendor_type='PROCUREMENT'.
-    procurement_only = user.role is UserRole.SM
+    # SM and PROCUREMENT_MANAGER scope PO-derived KPIs to PROCUREMENT POs and invoice-derived
+    # KPIs to invoices whose PO's vendor has vendor_type='PROCUREMENT'. ADMIN sees all.
+    procurement_only = user.role in {UserRole.SM, UserRole.PROCUREMENT_MANAGER}
     po_type_clause = "AND p.po_type = 'PROCUREMENT'" if procurement_only else ""
 
     def _sum_usd(rows: list) -> Decimal:
@@ -641,9 +641,13 @@ async def get_dashboard_summary(
         )
 
     # --- Activity feed (capped at 20) ---
-    # ADMIN sees all events (target_role=None); SM sees SM-targeted plus universal
-    # (target_role IS NULL) entries via list_recent's role filter.
-    activity_target_role = user.role.value if user.role is UserRole.SM else None
+    # ADMIN sees all events (target_role=None); SM and PROCUREMENT_MANAGER each see
+    # entries targeted to their role plus universal (target_role IS NULL) entries.
+    activity_target_role = (
+        user.role.value
+        if user.role in {UserRole.SM, UserRole.PROCUREMENT_MANAGER}
+        else None
+    )
     # Fetch a few extra so the dashboard exclusion filter still leaves us a useful feed.
     raw_activity = await activity_repo.list_recent(limit=40, target_role=activity_target_role)
     activity_items: list[DashboardActivityItem] = []

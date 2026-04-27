@@ -64,6 +64,7 @@ class TargetRole(Enum):
     VENDOR = "VENDOR"
     QUALITY_LAB = "QUALITY_LAB"
     FREIGHT_MANAGER = "FREIGHT_MANAGER"
+    PROCUREMENT_MANAGER = "PROCUREMENT_MANAGER"
 
 
 @dataclass(frozen=True)

@@ -27,7 +27,7 @@
 	};
 	const roleLabel = $derived(ROLE_LABEL[role]);
 
-	const isFullLayout = $derived(role === 'ADMIN' || role === 'SM');
+	const isFullLayout = $derived(role === 'ADMIN' || role === 'SM' || role === 'PROCUREMENT_MANAGER');
 	const isFmLayout = $derived(role === 'FREIGHT_MANAGER');
 	const fetchesSummary = $derived(isFullLayout || isFmLayout);
 

@@ -353,3 +353,36 @@ test('FREIGHT_MANAGER pending invoice click navigates to invoice detail', async 
 	await invPanel.getByRole('button').first().click();
 	await expect(page).toHaveURL(/\/invoice\/inv-fm-1/);
 });
+
+test('PROCUREMENT_MANAGER sees the full KPI grid', async ({ page }) => {
+	const PM_USER = {
+		id: 'user-pm',
+		username: 'pm',
+		display_name: 'Procurement Manager',
+		role: 'PROCUREMENT_MANAGER',
+		status: 'ACTIVE',
+		vendor_id: null
+	};
+
+	const pmSummary = {
+		...FULL_SUMMARY,
+		awaiting_acceptance: FULL_SUMMARY.awaiting_acceptance.map((item) => ({
+			...item,
+			submitted_at: new Date(Date.now() - 3600000).toISOString()
+		}))
+	};
+
+	await mockApiCatchAll(page);
+	await mockUser(page, PM_USER);
+	await mockUnreadCount(page);
+	await mockDashboardSummary(page, pmSummary);
+
+	await page.goto('/dashboard');
+
+	await expect(page.getByTestId('kpi-pending-pos')).toBeVisible();
+	await expect(page.getByTestId('kpi-awaiting')).toBeVisible();
+	await expect(page.getByTestId('kpi-in-production')).toBeVisible();
+	await expect(page.getByTestId('kpi-outstanding-ap')).toBeVisible();
+
+	await expect(page.getByTestId('panel-placeholder')).toHaveCount(0);
+});

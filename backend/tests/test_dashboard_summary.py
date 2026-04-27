@@ -494,6 +494,134 @@ async def test_unauthenticated_returns_401(client: AsyncClient) -> None:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# PROCUREMENT_MANAGER tests
+# ---------------------------------------------------------------------------
+
+
+async def test_pm_sees_procurement_scoped_summary() -> None:
+    async with _client_ctx(UserRole.PROCUREMENT_MANAGER) as (pm_ac, conn):
+        # Create an ADMIN user in the same transaction for seeding (PM lacks vendor-create
+        # permission; ADMIN does not). The admin client reuses the same overrides and conn.
+        admin_user = User.create(
+            username="test-admin-summary-pm-scoping",
+            display_name="Test Admin PM",
+            role=UserRole.ADMIN,
+        )
+        await UserRepository(conn).save(admin_user)
+        admin_cookie = create_session_cookie(admin_user.id)
+
+        @asynccontextmanager
+        async def _test_get_db() -> AsyncIterator[asyncpg.Connection]:
+            yield conn
+
+        transport = ASGITransport(app=app)
+        with patch("src.routers.purchase_order.get_db", _test_get_db), \
+             patch("src.routers.product.get_db", _test_get_db), \
+             patch("src.auth.middleware.get_db", _test_get_db):
+            async with AsyncClient(
+                transport=transport,
+                base_url="http://test",
+                cookies={COOKIE_NAME: admin_cookie},
+            ) as admin_ac:
+                # Seed vendors and POs via ADMIN (PM cannot create vendors).
+                proc_vendor = await _seed_vendor(admin_ac, "PMScopingProcVendor")
+                proc_vendor_id = proc_vendor["id"]
+                opex_vendor = await _seed_opex_vendor(admin_ac, "PMScopingOpexVendor")
+                opex_vendor_id = opex_vendor["id"]
+
+                # One PROCUREMENT PO and one OPEX PO, both in DRAFT state.
+                await _seed_procurement_po(admin_ac, proc_vendor_id)
+                await _seed_opex_po(admin_ac, opex_vendor_id)
+
+                admin_resp = await admin_ac.get(SUMMARY_URL)
+
+        assert admin_resp.status_code == 200
+        admin_data = admin_resp.json()
+        admin_kpis = admin_data["kpis"]
+
+        pm_resp = await pm_ac.get(SUMMARY_URL)
+        assert pm_resp.status_code == 200
+        pm_data = pm_resp.json()
+
+        # PM must not receive FM fields.
+        assert pm_data["fm_kpis"] is None
+        assert pm_data["fm_ready_batches"] == []
+        assert pm_data["fm_pending_invoices"] == []
+
+        pm_kpis = pm_data["kpis"]
+
+        # PM scopes to PROCUREMENT only: only the PROCUREMENT PO counts.
+        assert pm_kpis["pending_pos"] == 1
+
+        # OPEX PO value must NOT be included in PM's pending value.
+        # Total combined value = 100*10 + 200*5 = 2000; PM sees only 1000 (PROCUREMENT).
+        proc_po_value = Decimal("100.00") * 10   # unit_price * quantity from _seed_procurement_po
+        opex_po_value = Decimal("200.00") * 5    # unit_price * quantity from _seed_opex_po
+        pm_pending_value = Decimal(pm_kpis["pending_pos_value_usd"])
+        assert pm_pending_value < proc_po_value + opex_po_value, (
+            "OPEX PO value must not be included in PM's pending_pos_value_usd"
+        )
+
+        # ADMIN sees both POs; PM sees only the PROCUREMENT one.
+        assert admin_kpis["pending_pos"] > pm_kpis["pending_pos"]
+
+
+async def test_pm_activity_feed_scoped_by_target_role() -> None:
+    async with _client_ctx(UserRole.PROCUREMENT_MANAGER) as (pm_ac, conn):
+        activity_repo = ActivityLogRepository(conn)
+
+        # Use a stable entity_id; dashboard endpoint does not dereference activity rows.
+        entity_id = "test-entity-pm-activity"
+
+        # Three entries: one targeted at PROCUREMENT_MANAGER, one at SM, one universal.
+        from src.domain.activity import ActivityEvent, EntityType, TargetRole
+
+        await activity_repo.append(
+            EntityType.PO,
+            entity_id,
+            ActivityEvent.PO_CREATED,
+            detail="pm-targeted",
+            target_role=TargetRole.PROCUREMENT_MANAGER,
+        )
+        await activity_repo.append(
+            EntityType.PO,
+            entity_id,
+            ActivityEvent.PO_CREATED,
+            detail="sm-targeted",
+            target_role=TargetRole.SM,
+        )
+        await activity_repo.append(
+            EntityType.PO,
+            entity_id,
+            ActivityEvent.PO_CREATED,
+            detail="universal",
+            target_role=None,
+        )
+
+        # Fetch back the inserted rows to capture their IDs.
+        rows = await conn.fetch(
+            "SELECT id, detail FROM activity_log WHERE entity_id = $1 ORDER BY created_at ASC",
+            entity_id,
+        )
+        pm_targeted_id = next(r["id"] for r in rows if r["detail"] == "pm-targeted")
+        sm_targeted_id = next(r["id"] for r in rows if r["detail"] == "sm-targeted")
+        universal_id = next(r["id"] for r in rows if r["detail"] == "universal")
+
+        pm_resp = await pm_ac.get(SUMMARY_URL)
+        assert pm_resp.status_code == 200
+        activity = pm_resp.json()["activity"]
+
+        activity_ids = {item["id"] for item in activity}
+
+        # PM sees their own targeted entry and the universal entry.
+        assert pm_targeted_id in activity_ids, "PM-targeted entry must appear in PM's feed"
+        assert universal_id in activity_ids, "Universal entry must appear in PM's feed"
+
+        # PM must not see SM-targeted entries.
+        assert sm_targeted_id not in activity_ids, "SM-targeted entry must not appear in PM's feed"
+
+
 async def test_fm_sees_shipment_and_invoice_kpis() -> None:
     async with _client_ctx(UserRole.FREIGHT_MANAGER) as (ac, _conn):
         resp = await ac.get(SUMMARY_URL)
