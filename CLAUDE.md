@@ -54,6 +54,12 @@ When I say "let's start a new iteration":
 - **Permanent tests**: `make test-browser`
 - **Scratch tests**: `cd frontend && npx playwright test --config=playwright-scratch.config.ts 2>&1 | tee frontend/tests/scratch/iteration-NNN/logs/test-name.log`
 
+## Selector policy
+- New Playwright tests select elements only by `getByRole`, `getByLabel`, or `getByTestId`. Prefer `getByRole`/`getByLabel` first; fall back to `getByTestId` when role-based queries collide (e.g. multiple `combobox`es on the same page) or when a stable per-entity handle is needed (rows by id, regions used as scoping anchors, internal-state overlays).
+- Class selectors (`.btn`, `.filter-bar`), bare tag selectors (`tr`, `select`), and bare text selectors (`getByText('Reject')` when the same word can appear elsewhere) are not allowed in new tests. They couple tests to styling, DOM shape, and copy — all of which change during UI revamps for reasons unrelated to behaviour.
+- When a new test needs a handle on an unrevamped page, add the missing `data-testid` (and `aria-label` where appropriate) in the same PR. Do not work around a missing handle with a class or tag selector.
+- Pre-revamp tests (the ~99 specs targeting class/tag selectors) migrate page-by-page as their pages get revamped through Phase 4. Do not migrate them proactively outside a revamp iter.
+
 # Delegation model
 - Use Sonnet sub-agents extensively to prevent context rot
 - Use intent-based prompts over dictation prompts for sub agents: describe the problem, constraints, existing patterns, and acceptance criteria. Let Sonnet make implementation decisions. Do NOT dictate exact code.

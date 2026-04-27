@@ -41,5 +41,5 @@ None. Backend parity test + frontend KPI test cover the change end-to-end.
 
 ## Notes
 
-(populated at close)
+PM receives the SM payload verbatim — no PM-specific KPI variants this iter. Activity panel reads near-empty on a fresh seed because `EVENT_METADATA` defaults `target_role` to SM; per-event fan-out to PM is deferred to a future iter rather than swapping the default, so the seed stays representative of the SM-centric flow. The `TargetRole` enum extension was the load-bearing prerequisite — without it, any seeded row with `target_role='PROCUREMENT_MANAGER'` raises `ValueError` in `_row_to_entry` and the dashboard 500s. Renamed `_ADMIN_OR_SM` to `_DASHBOARD_FULL_LAYOUT_ROLES` so future role additions to the full layout don't fight the constant name.
 

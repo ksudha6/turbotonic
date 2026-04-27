@@ -53,4 +53,4 @@ None. The eight permanent tests cover decision verification end-to-end.
 
 ## Notes
 
-(populated at close)
+`/po` is the first list page to consume the Phase 4.2 component set end-to-end and the first non-dashboard route to live under `(nexus)`. The route move (out of root, into `(nexus)/po/`) plus the `isRevampRoute` extension mean the pre-revamp top nav now correctly hides on `/po` — same precedent the dashboard set in iter 071. JTBD wording was tightened mid-iter from "mobile-first" to "responsive (table at desktop, stacked cards at 390px)" to reflect that desktop and 390px are equally first-class viewports, not a priority order. The "Out of scope (follow-up)" subsection was removed from the doc; G-01..G-23 deferrals already live in the UX gaps research doc by gap ID, and the DataTable primitive extension moved to the backlog. Testid surface chosen for filter slots, per-row identity, and scoping anchors; New PO button and pills could equally have been role queries — that gap is what triggered the new selector policy in CLAUDE.md and the queued primitive `label`/`aria-label` retrofit (backlog). No new domain terms emerged; Marketplace was already in the vocab.
