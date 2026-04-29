@@ -26,10 +26,12 @@
 		submitResponse
 	} from '$lib/api';
 	import type { ModifyLineFields } from '$lib/api';
-	import StatusPill from '$lib/components/StatusPill.svelte';
 	import CreateInvoiceDialog from '$lib/components/CreateInvoiceDialog.svelte';
-	import ActivityTimeline from '$lib/components/ActivityTimeline.svelte';
 	import PoLineNegotiationTable from '$lib/po/PoLineNegotiationTable.svelte';
+	import PoMetadataPanels from '$lib/po/PoMetadataPanels.svelte';
+	import PoRejectionHistoryPanel from '$lib/po/PoRejectionHistoryPanel.svelte';
+	import PoInvoicesPanel from '$lib/po/PoInvoicesPanel.svelte';
+	import PoActivityPanel from '$lib/po/PoActivityPanel.svelte';
 	import PoLineAcceptedTable from '$lib/po/PoLineAcceptedTable.svelte';
 	import PoMilestoneTimelinePanel from '$lib/po/PoMilestoneTimelinePanel.svelte';
 	import PoAddLineDialog from '$lib/po/PoAddLineDialog.svelte';
@@ -460,95 +462,7 @@
 				{/if}
 			{/if}
 
-			<div class="section card">
-				<div class="info-grid">
-					<div class="info-item">
-						<span class="field-label">Currency</span>
-						<span class="value">{resolve('currencies', po.currency)}</span>
-					</div>
-					<div class="info-item">
-						<span class="field-label">Issued Date</span>
-						<span class="value">{formatDate(po.issued_date)}</span>
-					</div>
-					<div class="info-item">
-						<span class="field-label">Delivery Date</span>
-						<span class="value">{formatDate(po.required_delivery_date)}</span>
-					</div>
-					<div class="info-item">
-						<span class="field-label">Total Value</span>
-						<span class="value">{formatValue(po.total_value, po.currency)}</span>
-					</div>
-					<div class="info-item">
-						<span class="field-label">Payment Terms</span>
-						<span class="value">{resolve('payment_terms', po.payment_terms)}</span>
-					</div>
-					{#if po.marketplace}
-						<div class="info-item">
-							<span class="field-label">Marketplace</span>
-							<span class="value">{po.marketplace}</span>
-						</div>
-					{/if}
-				</div>
-			</div>
-
-			<div class="section card">
-				<h2>Buyer</h2>
-				<div class="info-grid">
-					<div class="info-item">
-						<span class="field-label">Name</span>
-						<span class="value">{po.buyer_name}</span>
-					</div>
-					<div class="info-item">
-						<span class="field-label">Country</span>
-						<span class="value">{resolve('countries', po.buyer_country)}</span>
-					</div>
-				</div>
-			</div>
-
-			<div class="section card">
-				<h2>Vendor</h2>
-				<div class="info-grid">
-					<div class="info-item">
-						<span class="field-label">Name</span>
-						<span class="value">{po.vendor_name}</span>
-					</div>
-					<div class="info-item">
-						<span class="field-label">Country</span>
-						<span class="value">{resolve('countries', po.vendor_country)}</span>
-					</div>
-				</div>
-			</div>
-
-			<div class="section card">
-				<h2>Trade Details</h2>
-				<div class="info-grid">
-					<div class="info-item">
-						<span class="field-label">Incoterm</span>
-						<span class="value">{resolve('incoterms', po.incoterm)}</span>
-					</div>
-					<div class="info-item">
-						<span class="field-label">Port of Loading</span>
-						<span class="value">{resolve('ports', po.port_of_loading)}</span>
-					</div>
-					<div class="info-item">
-						<span class="field-label">Port of Discharge</span>
-						<span class="value">{resolve('ports', po.port_of_discharge)}</span>
-					</div>
-					<div class="info-item">
-						<span class="field-label">Country of Origin</span>
-						<span class="value">{resolve('countries', po.country_of_origin)}</span>
-					</div>
-					<div class="info-item">
-						<span class="field-label">Country of Destination</span>
-						<span class="value">{resolve('countries', po.country_of_destination)}</span>
-					</div>
-				</div>
-			</div>
-
-			<div class="section card">
-				<h2>Terms &amp; Conditions</h2>
-				<p class="terms-text">{po.terms_and_conditions}</p>
-			</div>
+			<PoMetadataPanels {po} {resolve} {formatDate} {formatValue} />
 
 			<div class="section card">
 				<h2>Line Items</h2>
@@ -632,47 +546,12 @@
 			{/if}
 
 			{#if po.rejection_history.length > 0}
-				<div class="section card">
-					<h2>Rejection History</h2>
-					{#each [...po.rejection_history].reverse() as record}
-						<div class="rejection-record">
-							<p class="rejection-comment">{record.comment}</p>
-							<p class="rejection-date">{formatDate(record.rejected_at)}</p>
-						</div>
-					{/each}
-				</div>
+				<PoRejectionHistoryPanel records={po.rejection_history} {formatDate} />
 			{/if}
 
-			{#if invoices.length > 0}
-				<div class="section card">
-					<h2>Invoices</h2>
-					<table class="table">
-						<thead>
-							<tr>
-								<th>Invoice #</th>
-								<th>Status</th>
-								<th>Subtotal</th>
-								<th>Created</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each invoices as inv}
-								<tr>
-									<td><a href="/invoice/{inv.id}">{inv.invoice_number}</a></td>
-									<td><StatusPill status={inv.status} /></td>
-									<td>{formatValue(inv.subtotal, po.currency)}</td>
-									<td>{formatDate(inv.created_at)}</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-			{/if}
+			<PoInvoicesPanel {invoices} {po} {remainingMap} {formatDate} {formatValue} />
 
-			<div class="section card">
-				<h2>Activity</h2>
-				<ActivityTimeline entityType="PO" entityId={po.id} />
-			</div>
+			<PoActivityPanel poId={po.id} />
 
 			{#if opexError}
 				<p class="error-message">{opexError}</p>
@@ -723,55 +602,10 @@
 		gap: var(--space-4);
 	}
 
-	.info-grid {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: var(--space-4);
-	}
-
-	.info-item .field-label {
-		display: block;
-		font-size: var(--font-size-sm);
-		color: var(--gray-500);
-		margin-bottom: var(--space-1);
-	}
-
-	.info-item .value {
-		font-size: var(--font-size-base);
-		color: var(--gray-900);
-	}
-
-	.section h2 {
-		margin-bottom: var(--space-4);
-	}
-
-	.terms-text {
-		white-space: pre-wrap;
-	}
-
 	.error-message {
 		color: var(--red-600);
 		font-size: var(--font-size-sm);
 		margin-top: var(--space-2);
-	}
-
-	.rejection-record {
-		padding: var(--space-3) 0;
-		border-bottom: 1px solid var(--gray-100);
-	}
-
-	.rejection-record:last-child {
-		border-bottom: none;
-	}
-
-	.rejection-comment {
-		color: var(--gray-800);
-		margin-bottom: var(--space-1);
-	}
-
-	.rejection-date {
-		font-size: var(--font-size-sm);
-		color: var(--gray-500);
 	}
 
 	.post-accept-toolbar {

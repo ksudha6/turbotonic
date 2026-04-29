@@ -794,3 +794,342 @@ test('remove line server error renders inline below row', async ({ page }) => {
 	// Error scoped to the row that failed; the other row carries no error block.
 	await expect(page.getByTestId('po-accepted-error-PART-002')).toHaveCount(0);
 });
+
+// ---------------------------------------------------------------------------
+// Iter 083 — Tier 5: metadata panels, rejection history, invoices, activity
+// ---------------------------------------------------------------------------
+
+function mockPoActivity(page: Page, entries: object[]) {
+	return page.route('**/api/v1/activity/**', (route) => {
+		const url = route.request().url();
+		if (url.includes('unread-count')) {
+			route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ count: 0 }) });
+		} else {
+			route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(entries) });
+		}
+	});
+}
+
+function makeActivityEntry(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+	return {
+		id: 'act-1',
+		entity_type: 'PO',
+		entity_id: PO_ID,
+		event: 'PO_CREATED',
+		category: 'LIVE',
+		target_role: null,
+		detail: null,
+		read_at: null,
+		created_at: '2026-03-16T00:00:00+00:00',
+		...overrides
+	};
+}
+
+test('metadata trade summary panel renders six rows when marketplace set', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', marketplace: 'AMZ' });
+	await setupDetailPage(page, SM_USER, po);
+	await mockPoActivity(page, []);
+
+	await page.goto(`/po/${PO_ID}`);
+	await expect(page.getByTestId('po-detail-header')).toBeVisible();
+
+	const panel = page.getByTestId('po-metadata-trade-summary');
+	await expect(panel).toBeVisible();
+	// All six rows present: Currency, Issued Date, Delivery Date, Total Value, Payment Terms, Marketplace.
+	await expect(panel.getByRole('term').filter({ hasText: 'Currency' })).toBeVisible();
+	await expect(panel.getByRole('term').filter({ hasText: 'Issued Date' })).toBeVisible();
+	await expect(panel.getByRole('term').filter({ hasText: 'Delivery Date' })).toBeVisible();
+	await expect(panel.getByRole('term').filter({ hasText: 'Total Value' })).toBeVisible();
+	await expect(panel.getByRole('term').filter({ hasText: 'Payment Terms' })).toBeVisible();
+	await expect(panel.getByRole('term').filter({ hasText: 'Marketplace' })).toBeVisible();
+});
+
+test('metadata trade summary hides marketplace row when null', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', marketplace: null });
+	await setupDetailPage(page, SM_USER, po);
+	await mockPoActivity(page, []);
+
+	await page.goto(`/po/${PO_ID}`);
+	await expect(page.getByTestId('po-detail-header')).toBeVisible();
+
+	const panel = page.getByTestId('po-metadata-trade-summary');
+	await expect(panel).toBeVisible();
+	// Marketplace row absent when po.marketplace is null.
+	await expect(panel.getByRole('term').filter({ hasText: 'Marketplace' })).toHaveCount(0);
+});
+
+test('buyer panel renders name and country with resolved label', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', buyer_country: 'US', buyer_name: 'TurboTonic Ltd' });
+	await setupDetailPage(page, SM_USER, po);
+	await mockPoActivity(page, []);
+
+	await page.goto(`/po/${PO_ID}`);
+
+	const panel = page.getByTestId('po-metadata-buyer');
+	await expect(panel).toBeVisible();
+	// Country code resolved via reference data; REFERENCE_DATA has US → "United States".
+	await expect(panel).toContainText('United States');
+	await expect(panel).toContainText('TurboTonic Ltd');
+});
+
+test('trade details panel renders five rows', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED' });
+	await setupDetailPage(page, SM_USER, po);
+	await mockPoActivity(page, []);
+
+	await page.goto(`/po/${PO_ID}`);
+
+	const panel = page.getByTestId('po-metadata-trade-details');
+	await expect(panel).toBeVisible();
+	await expect(panel.getByRole('term').filter({ hasText: 'Incoterm' })).toBeVisible();
+	await expect(panel.getByRole('term').filter({ hasText: 'Port of Loading' })).toBeVisible();
+	await expect(panel.getByRole('term').filter({ hasText: 'Port of Discharge' })).toBeVisible();
+	await expect(panel.getByRole('term').filter({ hasText: 'Country of Origin' })).toBeVisible();
+	await expect(panel.getByRole('term').filter({ hasText: 'Country of Destination' })).toBeVisible();
+});
+
+test('terms panel renders free-text body', async ({ page }) => {
+	const termsText = 'Net 30 from invoice';
+	const po = makePO({ status: 'ACCEPTED', terms_and_conditions: termsText });
+	await setupDetailPage(page, SM_USER, po);
+	await mockPoActivity(page, []);
+
+	await page.goto(`/po/${PO_ID}`);
+
+	const panel = page.getByTestId('po-metadata-terms');
+	await expect(panel).toBeVisible();
+	await expect(panel).toContainText(termsText);
+});
+
+test('rejection history panel hides when no records', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', rejection_history: [] });
+	await setupDetailPage(page, SM_USER, po);
+	await mockPoActivity(page, []);
+
+	await page.goto(`/po/${PO_ID}`);
+	await expect(page.getByTestId('po-detail-header')).toBeVisible();
+
+	await expect(page.getByTestId('po-rejection-history-panel')).toHaveCount(0);
+});
+
+test('rejection history panel renders records latest-first', async ({ page }) => {
+	const olderComment = 'First rejection comment';
+	const newerComment = 'Second rejection comment';
+	const po = makePO({
+		status: 'REJECTED',
+		rejection_history: [
+			{ comment: olderComment, rejected_at: '2026-02-01T00:00:00+00:00' },
+			{ comment: newerComment, rejected_at: '2026-03-01T00:00:00+00:00' }
+		]
+	});
+	await setupDetailPage(page, SM_USER, po);
+	await mockPoActivity(page, []);
+
+	await page.goto(`/po/${PO_ID}`);
+
+	const panel = page.getByTestId('po-rejection-history-panel');
+	await expect(panel).toBeVisible();
+	// Latest-first: index 0 is the newer record.
+	await expect(page.getByTestId('po-rejection-record-0')).toContainText(newerComment);
+	await expect(page.getByTestId('po-rejection-record-1')).toContainText(olderComment);
+});
+
+test('invoices panel hides when no invoices and not OPEX', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT' });
+	await setupDetailPage(page, SM_USER, po);
+	await mockPoActivity(page, []);
+
+	await page.goto(`/po/${PO_ID}`);
+	await expect(page.getByTestId('po-detail-header')).toBeVisible();
+
+	await expect(page.getByTestId('po-invoices-panel')).toHaveCount(0);
+});
+
+test('invoices panel shows remaining subtitle for procurement', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT' });
+	await setupDetailPage(page, SM_USER, po);
+	await mockPoActivity(page, []);
+	// Override remaining quantities to total 50 units.
+	await page.route('**/api/v1/invoices/po/*/remaining', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({
+				po_id: PO_ID,
+				lines: [
+					{ part_number: 'PART-001', description: 'Steel bolt', ordered: 100, invoiced: 50, remaining: 50 }
+				]
+			})
+		});
+	});
+	await page.route('**/api/v1/po/*/invoices', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([{
+				id: 'inv-1',
+				invoice_number: 'INV-001',
+				status: 'APPROVED',
+				subtotal: '750.00',
+				created_at: '2026-03-16T00:00:00+00:00'
+			}])
+		});
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+
+	const panel = page.getByTestId('po-invoices-panel');
+	await expect(panel).toBeVisible();
+	await expect(panel).toContainText('50 units remaining to invoice');
+});
+
+test('invoices panel renders datatable rows', async ({ page }) => {
+	const inv1Id = 'inv-uuid-1';
+	const inv2Id = 'inv-uuid-2';
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT' });
+	await setupDetailPage(page, SM_USER, po);
+	await mockPoActivity(page, []);
+	await page.route('**/api/v1/po/*/invoices', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([
+				{ id: inv1Id, invoice_number: 'INV-001', status: 'APPROVED', subtotal: '750.00', created_at: '2026-03-10T00:00:00+00:00' },
+				{ id: inv2Id, invoice_number: 'INV-002', status: 'DRAFT', subtotal: '300.00', created_at: '2026-03-20T00:00:00+00:00' }
+			])
+		});
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+
+	const panel = page.getByTestId('po-invoices-panel');
+	await expect(panel).toBeVisible();
+	await expect(page.getByTestId(`po-invoices-row-${inv1Id}`)).toBeVisible();
+	await expect(page.getByTestId(`po-invoices-row-${inv2Id}`)).toBeVisible();
+	await expect(page.getByTestId(`po-invoices-row-${inv1Id}`)).toContainText('INV-001');
+	await expect(page.getByTestId(`po-invoices-row-${inv2Id}`)).toContainText('INV-002');
+});
+
+test('activity panel shows loading state then entries', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED' });
+	await setupDetailPage(page, SM_USER, po);
+
+	// Delay the activity response briefly so LoadingState is observable.
+	let resolveActivity!: (value: unknown) => void;
+	const activityBarrier = new Promise((resolve) => { resolveActivity = resolve; });
+	await page.route('**/api/v1/activity/**', async (route) => {
+		const url = route.request().url();
+		if (url.includes('unread-count')) {
+			route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ count: 0 }) });
+			return;
+		}
+		await activityBarrier;
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([
+				makeActivityEntry({ id: 'a1', event: 'PO_CREATED' }),
+				makeActivityEntry({ id: 'a2', event: 'PO_SUBMITTED' }),
+				makeActivityEntry({ id: 'a3', event: 'PO_ACCEPTED' })
+			])
+		});
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+
+	const panel = page.getByTestId('po-activity-panel');
+	// LoadingState renders role=status while loading.
+	await expect(panel.getByRole('status')).toBeVisible();
+
+	// Unblock the activity fetch.
+	resolveActivity(undefined);
+
+	// After loading: feed appears with 3 entries.
+	const feed = page.getByTestId('po-activity-feed');
+	await expect(feed).toBeVisible();
+	await expect(feed.locator('li')).toHaveCount(3);
+});
+
+test('activity panel renders empty state when no entries', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED' });
+	await setupDetailPage(page, SM_USER, po);
+	await mockPoActivity(page, []);
+
+	await page.goto(`/po/${PO_ID}`);
+
+	const panel = page.getByTestId('po-activity-panel');
+	await expect(panel).toBeVisible();
+	await expect(panel).toContainText('No activity yet.');
+	await expect(page.getByTestId('po-activity-feed')).toHaveCount(0);
+});
+
+test('activity show-more reveals next batch', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED' });
+	await setupDetailPage(page, SM_USER, po);
+	// 25 entries: initial render shows 10, Show more reveals 10 more.
+	const entries = Array.from({ length: 25 }, (_, i) =>
+		makeActivityEntry({ id: `act-${i}`, event: 'PO_CREATED', created_at: `2026-03-${String(i + 1).padStart(2, '0')}T00:00:00+00:00` })
+	);
+	await mockPoActivity(page, entries);
+
+	await page.goto(`/po/${PO_ID}`);
+
+	const feed = page.getByTestId('po-activity-feed');
+	await expect(feed.locator('li')).toHaveCount(10);
+
+	const showMoreBtn = page.getByTestId('po-activity-show-more-btn');
+	await expect(showMoreBtn).toBeVisible();
+	await showMoreBtn.click();
+
+	await expect(feed.locator('li')).toHaveCount(20);
+});
+
+test('activity show-more hides when all rows visible', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED' });
+	await setupDetailPage(page, SM_USER, po);
+	// 8 entries: less than initial visibleCount of 10, so Show more never appears.
+	const entries = Array.from({ length: 8 }, (_, i) =>
+		makeActivityEntry({ id: `act-${i}`, event: 'PO_CREATED' })
+	);
+	await mockPoActivity(page, entries);
+
+	await page.goto(`/po/${PO_ID}`);
+
+	const feed = page.getByTestId('po-activity-feed');
+	await expect(feed.locator('li')).toHaveCount(8);
+	await expect(page.getByTestId('po-activity-show-more-btn')).toHaveCount(0);
+});
+
+test('activity row primary uses event label dictionary', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED' });
+	await setupDetailPage(page, SM_USER, po);
+	await mockPoActivity(page, [makeActivityEntry({ event: 'PO_LINE_MODIFIED', category: 'LIVE' })]);
+
+	await page.goto(`/po/${PO_ID}`);
+
+	const feed = page.getByTestId('po-activity-feed');
+	await expect(feed.locator('.primary').first()).toContainText('Line modified');
+});
+
+test('activity row tone reflects category', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED' });
+	await setupDetailPage(page, SM_USER, po);
+	await mockPoActivity(page, [
+		makeActivityEntry({ id: 'live-1', event: 'PO_CREATED', category: 'LIVE', created_at: '2026-03-18T00:00:00+00:00' }),
+		makeActivityEntry({ id: 'action-1', event: 'PO_SUBMITTED', category: 'ACTION_REQUIRED', created_at: '2026-03-17T00:00:00+00:00' }),
+		makeActivityEntry({ id: 'delayed-1', event: 'MILESTONE_OVERDUE', category: 'DELAYED', created_at: '2026-03-16T00:00:00+00:00' })
+	]);
+
+	await page.goto(`/po/${PO_ID}`);
+
+	const panel = page.getByTestId('po-activity-panel');
+	const feed = page.getByTestId('po-activity-feed');
+	await expect(feed.locator('li')).toHaveCount(3);
+
+	// Dot tones: ActivityFeed renders <span class="dot {tone}">.
+	// LIVE → blue, ACTION_REQUIRED → orange, DELAYED → red.
+	const dots = panel.locator('.dot');
+	await expect(dots.nth(0)).toHaveClass(/blue/);
+	await expect(dots.nth(1)).toHaveClass(/orange/);
+	await expect(dots.nth(2)).toHaveClass(/red/);
+});

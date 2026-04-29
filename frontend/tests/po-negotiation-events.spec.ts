@@ -212,25 +212,23 @@ test('activity timeline renders every new negotiation event with its label and i
 	});
 
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('.timeline-entry');
+	// Migrated to PoActivityPanel (iter 083): ActivityFeed renders list items;
+	// icons are not carried through (PoActivityPanel omits icon glyphs).
+	const feed = page.getByTestId('po-activity-feed');
+	await expect(feed.locator('li')).toHaveCount(7);
 
-	const entries = page.locator('.timeline-entry');
-	await expect(entries).toHaveCount(7);
-
-	// Label + icon per event.
-	const expected: Array<[string, string]> = [
-		['Line modified', 'pencil'],
-		['Line accepted', 'check'],
-		['Line removed', 'x'],
-		['Override: line force-accepted', 'shield-check'],
-		['Override: line force-removed', 'shield-x'],
-		['Round submitted', 'arrow-right'],
-		['Negotiation converged', 'flag']
+	// Verify each event label appears in the feed.
+	const expectedLabels = [
+		'Line modified',
+		'Line accepted',
+		'Line removed',
+		'Override: line force-accepted',
+		'Override: line force-removed',
+		'Round submitted',
+		'Negotiation converged'
 	];
 
-	for (const [label, icon] of expected) {
-		const row = page.locator('.timeline-entry', { hasText: label });
-		await expect(row).toHaveCount(1);
-		await expect(row.locator(`.entry-icon[data-icon='${icon}']`)).toBeVisible();
+	for (const label of expectedLabels) {
+		await expect(feed.locator('.primary', { hasText: label })).toHaveCount(1);
 	}
 });

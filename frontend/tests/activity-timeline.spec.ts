@@ -125,10 +125,13 @@ test('PO detail page shows Activity section heading and timeline entries', async
 	await page.goto(`/po/${PO_ID}`);
 	await page.waitForSelector('h1');
 
-	await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible();
-	await expect(page.locator('.timeline-entry')).toHaveCount(1);
-	await expect(page.locator('.entry-label')).toContainText('PO created');
-	await expect(page.locator('.entry-detail')).toContainText('Order placed');
+	// Migrated to PoActivityPanel (iter 083): panel and ActivityFeed primitive.
+	const panel = page.getByTestId('po-activity-panel');
+	await expect(panel.getByRole('heading', { name: 'Activity' })).toBeVisible();
+	const feed = page.getByTestId('po-activity-feed');
+	await expect(feed.locator('li')).toHaveCount(1);
+	await expect(feed.locator('.primary').first()).toContainText('PO created');
+	await expect(feed.locator('.secondary').first()).toContainText('Order placed');
 });
 
 test('PO detail activity timeline shows category-colored dot', async ({ page }) => {
@@ -144,14 +147,12 @@ test('PO detail activity timeline shows category-colored dot', async ({ page }) 
 	await mockActivityRoutes(page, [PO_ACTIVITY_ENTRY]);
 
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('.timeline-entry');
-
-	// LIVE category maps to #3b82f6 (blue) per ActivityTimeline component.
-	// Browsers normalise inline hex to rgb() when reading back style.background.
-	const dot = page.locator('.timeline-dot').first();
-	await expect(dot).toBeVisible();
-	const bg = await dot.evaluate((el) => (el as HTMLElement).style.background);
-	expect(bg).toBe('rgb(59, 130, 246)');
+	// Migrated to PoActivityPanel (iter 083): LIVE category maps to 'blue' tone
+	// via categoryToTone; ActivityFeed renders <span class="dot blue">.
+	const feed = page.getByTestId('po-activity-feed');
+	await expect(feed.locator('li').first()).toBeVisible();
+	const dot = feed.locator('.dot').first();
+	await expect(dot).toHaveClass(/blue/);
 });
 
 test('PO detail activity timeline shows empty message when no entries', async ({ page }) => {
@@ -169,8 +170,10 @@ test('PO detail activity timeline shows empty message when no entries', async ({
 	await page.goto(`/po/${PO_ID}`);
 	await page.waitForSelector('h1');
 
-	await expect(page.locator('.timeline')).toContainText('No activity recorded.');
-	await expect(page.locator('.timeline-entry')).toHaveCount(0);
+	// Migrated to PoActivityPanel (iter 083): empty state uses EmptyState primitive.
+	const panel = page.getByTestId('po-activity-panel');
+	await expect(panel).toContainText('No activity yet.');
+	await expect(page.getByTestId('po-activity-feed')).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------------------
