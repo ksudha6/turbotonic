@@ -211,7 +211,7 @@ test('pending PO shows Accept button and per-line negotiation controls', async (
 	const rail = page.getByTestId('po-action-rail').first();
 	await expect(rail.getByTestId('po-action-accept')).toBeVisible();
 	// Reject is removed in iter 056/057. Per-line Modify and Remove take its place.
-	await expect(page.locator('[data-testid="modify-btn-PART-001"]')).toBeVisible();
+	await expect(page.locator('[data-testid="po-line-action-modify-PART-001"]')).toBeVisible();
 });
 
 test('accepted PO shows read-only view', async ({ page }) => {

@@ -301,8 +301,8 @@ test('VENDOR on PO detail (PENDING) sees Accept plus per-line negotiation contro
 	// Iter 077: Accept lives in the PoActionRail testid scope.
 	const rail = page.getByTestId('po-action-rail').first();
 	await expect(rail.getByTestId('po-action-accept')).toBeVisible();
-	await expect(page.locator('[data-testid="modify-btn-P-1"]')).toBeVisible();
-	await expect(page.locator('[data-testid="submit-response-bar"]')).toBeVisible();
+	await expect(page.locator('[data-testid="po-line-action-modify-P-1"]')).toBeVisible();
+	await expect(page.locator('[data-testid="po-submit-response-bar"]')).toBeVisible();
 });
 
 test('ADMIN on PO detail (DRAFT) has same buttons as SM', async ({ page }) => {

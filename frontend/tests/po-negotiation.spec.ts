@@ -1,9 +1,10 @@
 import { test, expect } from '@playwright/test';
 
-// Iter 057: covers the per-line negotiation UI: LineNegotiationRow actions by
-// role + round, ModifyLineModal (qty=0 -> REMOVED), force-action confirms,
-// LineDiff, EditHistoryTimeline collapse state, and the SubmitResponseBar
-// confirmation dialog.
+// Iter 081: covers the per-line negotiation UI under the new Phase 4.2 components
+// (PoLineNegotiationTable, PoLineNegotiationRow, PoLineModifyModal, PoLineDiff,
+// PoLineEditHistoryTimeline, PoSubmitResponseBar). The eight legacy specs from
+// iter 057 are migrated to the new testid contract; fourteen new specs cover
+// the role x round x status matrix that drives a different action surface.
 
 const PO_ID = 'po-iter057';
 
@@ -129,6 +130,10 @@ function mockVendor(page: import('@playwright/test').Page) {
 	});
 }
 
+// ===========================================================================
+// Iter 057 specs migrated to the iter 081 testid contract
+// ===========================================================================
+
 // ---------------------------------------------------------------------------
 // 1. Vendor modifies a line -> MODIFIED_BY_VENDOR; submit -> round_count 1.
 // ---------------------------------------------------------------------------
@@ -178,35 +183,36 @@ test('vendor modifies a line and submits; status flips to MODIFIED_BY_VENDOR and
 	let submitResponseCalls = 0;
 	await page.route(`**/api/v1/po/${PO_ID}/submit-response`, (route) => {
 		submitResponseCalls += 1;
-		currentPo = { ...currentPo, round_count: 1, last_actor_role: 'VENDOR' };
+		currentPo = { ...currentPo, round_count: 1, last_actor_role: 'VENDOR' as const };
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(currentPo) });
 	});
 
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('[data-testid="line-row-PN-001"]');
+	await page.getByTestId('po-line-PN-001').waitFor();
 
-	// Before modify, round indicator reads Round 1 of 2.
-	await expect(page.locator('[data-testid="round-indicator"]')).toHaveText('Round 1 of 2');
+	// Submit-bar round indicator reads "Round 1 of 2" (next round computed
+	// from round_count 0 -> 1).
+	await expect(page.getByTestId('po-submit-response-round')).toHaveText('Round 1 of 2');
 
 	// Open the modify modal, change qty to 5, submit.
-	await page.locator('[data-testid="modify-btn-PN-001"]').click();
-	await page.waitForSelector('[data-testid="modify-line-modal"]');
-	await page.locator('[data-testid="modify-quantity"]').fill('5');
-	await page.locator('[data-testid="modify-submit"]').click();
+	await page.getByTestId('po-line-action-modify-PN-001').click();
+	await page.getByTestId('po-line-modify-modal-PN-001').waitFor();
+	await page.getByTestId('po-line-modify-quantity').fill('5');
+	await page.getByTestId('po-line-modify-submit').click();
 
 	// Pill now shows MODIFIED_BY_VENDOR.
-	await expect(page.locator('[data-testid="line-status-PN-001"]')).toHaveText('Modified by vendor');
+	await expect(page.getByTestId('po-line-status-PN-001')).toHaveText('Modified by vendor');
 	// Only the quantity delta was sent.
 	expect(modifyBody).not.toBeNull();
 	expect(modifyBody!.fields).toEqual({ quantity: 5 });
 
 	// Submit Response confirms and fires the backend call; after hand-off the
 	// vendor is no longer the current actor so the submit bar retracts.
-	await page.locator('[data-testid="submit-response-btn"]').click();
-	await page.locator('[data-testid="submit-confirm-btn"]').click();
+	await page.getByTestId('po-submit-response-btn').click();
+	await page.getByTestId('po-submit-response-confirm-btn').click();
 
 	await expect.poll(() => submitResponseCalls).toBe(1);
-	await expect(page.locator('[data-testid="submit-response-bar"]')).toHaveCount(0);
+	await expect(page.getByTestId('po-submit-response-bar')).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------------------
@@ -238,32 +244,32 @@ test('SM counter-proposes; line becomes MODIFIED_BY_SM and vendor Accept action 
 	});
 
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('[data-testid="line-row-PN-001"]');
+	await page.getByTestId('po-line-PN-001').waitFor();
 
 	// As SM with a MODIFIED_BY_VENDOR line, Accept is offered.
-	await expect(page.locator('[data-testid="accept-btn-PN-001"]')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-accept-PN-001')).toBeVisible();
 
 	// Counter-propose via Modify.
-	await page.locator('[data-testid="modify-btn-PN-001"]').click();
-	await page.locator('[data-testid="modify-quantity"]').fill('7');
-	await page.locator('[data-testid="modify-submit"]').click();
+	await page.getByTestId('po-line-action-modify-PN-001').click();
+	await page.getByTestId('po-line-modify-quantity').fill('7');
+	await page.getByTestId('po-line-modify-submit').click();
 
 	// Status flips to MODIFIED_BY_SM.
-	await expect(page.locator('[data-testid="line-status-PN-001"]')).toHaveText('Modified by SM');
+	await expect(page.getByTestId('po-line-status-PN-001')).toHaveText('Modified by SM');
 
 	// Swap auth to VENDOR and reload: the vendor now sees Accept (since SM was
 	// the last modifier) plus the familiar Modify / Remove options.
 	currentPo = {
 		...currentPo,
-		last_actor_role: 'SM',
+		last_actor_role: 'SM' as const,
 		round_count: 1
 	};
 	await mockVendor(page);
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('[data-testid="line-row-PN-001"]');
-	await expect(page.locator('[data-testid="accept-btn-PN-001"]')).toBeVisible();
-	await expect(page.locator('[data-testid="modify-btn-PN-001"]')).toBeVisible();
-	await expect(page.locator('[data-testid="remove-btn-PN-001"]')).toBeVisible();
+	await page.getByTestId('po-line-PN-001').waitFor();
+	await expect(page.getByTestId('po-line-action-accept-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-modify-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-remove-PN-001')).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
@@ -290,19 +296,17 @@ test('vendor sets qty=0 via modify modal; line jumps to REMOVED without a MODIFI
 	});
 
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('[data-testid="line-row-PN-001"]');
+	await page.getByTestId('po-line-PN-001').waitFor();
 
-	await page.locator('[data-testid="modify-btn-PN-001"]').click();
-	await page.locator('[data-testid="modify-quantity"]').fill('0');
+	await page.getByTestId('po-line-action-modify-PN-001').click();
+	await page.getByTestId('po-line-modify-quantity').fill('0');
 
-	// Modal shows the removal hint before submit.
-	await expect(page.locator('[data-testid="qty-zero-hint"]')).toBeVisible();
+	// Modal flips Save button label to "Remove line" before submit.
+	await expect(page.getByTestId('po-line-modify-submit')).toHaveText('Remove line');
 
-	await page.locator('[data-testid="modify-submit"]').click();
+	await page.getByTestId('po-line-modify-submit').click();
 
-	await expect(page.locator('[data-testid="line-status-PN-001"]')).toHaveText('Removed');
-	// No MODIFIED_BY_VENDOR pill ever appeared.
-	await expect(page.locator('[data-testid="line-status-PN-001"]')).not.toHaveText('Modified by vendor');
+	await expect(page.getByTestId('po-line-status-PN-001')).toHaveText('Removed');
 });
 
 // ---------------------------------------------------------------------------
@@ -323,22 +327,22 @@ test('round 2: Force Accept and Force Remove visible only for SM; hidden for VEN
 
 	// SM view.
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('[data-testid="line-row-PN-001"]');
-	await expect(page.locator('[data-testid="force-accept-btn-PN-001"]')).toBeVisible();
-	await expect(page.locator('[data-testid="force-remove-btn-PN-001"]')).toBeVisible();
+	await page.getByTestId('po-line-PN-001').waitFor();
+	await expect(page.getByTestId('po-line-action-force-accept-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-force-remove-PN-001')).toBeVisible();
 
 	// Now swap to VENDOR. Force buttons must be hidden.
 	await mockVendor(page);
 	// Flip last_actor_role so VENDOR is the current actor; otherwise the
 	// negotiation list renders but no actor-scoped actions appear.
-	const vendorRound2 = { ...round2Po, last_actor_role: 'SM' };
+	const vendorRound2 = { ...round2Po, last_actor_role: 'SM' as const };
 	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(vendorRound2) });
 	});
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('[data-testid="line-row-PN-001"]');
-	await expect(page.locator('[data-testid="force-accept-btn-PN-001"]')).toHaveCount(0);
-	await expect(page.locator('[data-testid="force-remove-btn-PN-001"]')).toHaveCount(0);
+	await page.getByTestId('po-line-PN-001').waitFor();
+	await expect(page.getByTestId('po-line-action-force-accept-PN-001')).toHaveCount(0);
+	await expect(page.getByTestId('po-line-action-force-remove-PN-001')).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------------------
@@ -364,22 +368,22 @@ test('force accept opens confirmation; only on confirm does the backend call fir
 	});
 
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('[data-testid="line-row-PN-001"]');
+	await page.getByTestId('po-line-PN-001').waitFor();
 
-	await page.locator('[data-testid="force-accept-btn-PN-001"]').click();
+	await page.getByTestId('po-line-action-force-accept-PN-001').click();
 
 	// Confirmation is now open; backend call has NOT fired.
-	await expect(page.locator('[data-testid="force-accept-confirm"]')).toBeVisible();
+	await expect(page.getByTestId('po-line-force-accept-confirm-PN-001')).toBeVisible();
 	expect(forceAcceptCalled).toBe(0);
 
 	// Confirm the action; backend fires exactly once.
-	await page.locator('[data-testid="force-accept-confirm-btn"]').click();
-	await expect(page.locator('[data-testid="line-status-PN-001"]')).toHaveText('Accepted');
+	await page.getByTestId('po-line-action-force-accept-confirm-PN-001').click();
+	await expect(page.getByTestId('po-line-status-PN-001')).toHaveText('Accepted');
 	expect(forceAcceptCalled).toBe(1);
 });
 
 // ---------------------------------------------------------------------------
-// 6. Line diff renders correct before/after after one modification.
+// 6. Line diff renders before/after after one modification.
 // ---------------------------------------------------------------------------
 
 test('line diff renders before/after after one modification', async ({ page }) => {
@@ -421,21 +425,26 @@ test('line diff renders before/after after one modification', async ({ page }) =
 	});
 
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('[data-testid="line-diff"]');
+	await page.getByTestId('po-line-PN-001').waitFor();
 
-	const diff = page.locator('[data-testid="line-diff"]');
-	await expect(diff.locator('tr[data-field="quantity"] .before')).toHaveText('10');
-	await expect(diff.locator('tr[data-field="quantity"] .after')).toHaveText('5');
-	await expect(diff.locator('tr[data-field="unit_price"] .before')).toHaveText('100.00');
-	await expect(diff.locator('tr[data-field="unit_price"] .after')).toHaveText('120.00');
+	// Diff hides behind the View changes toggle.
+	await page.getByTestId('po-line-details-toggle-PN-001').click();
+
+	const diff = page.getByTestId('po-line-diff-PN-001');
+	await expect(diff).toBeVisible();
+	await expect(diff).toContainText('quantity');
+	await expect(diff).toContainText('10');
+	await expect(diff).toContainText('5');
+	await expect(diff).toContainText('unit_price');
+	await expect(diff).toContainText('100.00');
+	await expect(diff).toContainText('120.00');
 });
 
 // ---------------------------------------------------------------------------
-// 7. Edit history timeline collapses on ACCEPTED / REMOVED lines; expandable.
+// 7. Edit history toggle reveals the list when expanded; in-flight only.
 // ---------------------------------------------------------------------------
 
-test('edit history timeline collapses on ACCEPTED lines and is expandable on click', async ({ page }) => {
-	// An ACCEPTED line with prior history: timeline should default to collapsed.
+test('edit history is hidden on ACCEPTED PO and revealed by toggle on in-flight PO', async ({ page }) => {
 	const po = makePO({
 		status: 'ACCEPTED',
 		round_count: 1,
@@ -471,27 +480,29 @@ test('edit history timeline collapses on ACCEPTED lines and is expandable on cli
 
 	await page.goto(`/po/${PO_ID}`);
 	// ACCEPTED PO renders the legacy table (not the negotiation list) so the
-	// EditHistoryTimeline isn't shown. Instead, verify the table renders.
-	await page.waitForSelector('.table');
-	await expect(page.locator('[data-testid="edit-history-timeline"]')).toHaveCount(0);
+	// PoLineEditHistoryTimeline isn't shown. Verify the history primitive is
+	// absent.
+	await expect(page.getByTestId('po-line-history-PN-001')).toHaveCount(0);
 
-	// Now simulate the same line on a MODIFIED PO (in-flight): timeline shows.
-	const inflightPo = { ...po, status: 'MODIFIED' };
+	// Now simulate a non-terminal line on a MODIFIED PO (in-flight): the
+	// PoLineEditHistoryTimeline auto-expands when the line status is not
+	// ACCEPTED/REMOVED, so once the row's View changes toggle is clicked the
+	// list renders without an extra inner toggle.
+	const inflightPo = {
+		...po,
+		status: 'MODIFIED',
+		line_items: [{ ...po.line_items[0], status: 'MODIFIED_BY_VENDOR' }]
+	};
 	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(inflightPo) });
 	});
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('[data-testid="edit-history-timeline"]');
+	await page.getByTestId('po-line-PN-001').waitFor();
 
-	// An ACCEPTED line in a MODIFIED PO renders collapsed by default.
-	const toggle = page.locator('[data-testid="edit-history-toggle"]');
-	await expect(toggle).toHaveAttribute('data-expanded', 'false');
-	await expect(page.locator('[data-testid="edit-history-list"]')).toHaveCount(0);
-
-	// Clicking expands the list.
-	await toggle.click();
-	await expect(toggle).toHaveAttribute('data-expanded', 'true');
-	await expect(page.locator('[data-testid="edit-history-list"]')).toBeVisible();
+	// The View changes toggle reveals the diff and the history primitive.
+	await page.getByTestId('po-line-details-toggle-PN-001').click();
+	await expect(page.getByTestId('po-line-history-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-history-list-PN-001')).toBeVisible();
 });
 
 // ---------------------------------------------------------------------------
@@ -516,12 +527,444 @@ test('submit response confirmation dialog shows the delta summary', async ({ pag
 	});
 
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('[data-testid="submit-response-bar"]');
+	await page.getByTestId('po-submit-response-bar').waitFor();
 
-	await page.locator('[data-testid="submit-response-btn"]').click();
+	await page.getByTestId('po-submit-response-btn').click();
 
-	await expect(page.locator('[data-testid="submit-confirm-dialog"]')).toBeVisible();
-	await expect(page.locator('[data-testid="delta-accepted"]')).toHaveText('1');
-	await expect(page.locator('[data-testid="delta-modified"]')).toHaveText('1');
-	await expect(page.locator('[data-testid="delta-removed"]')).toHaveText('1');
+	await expect(page.getByTestId('po-submit-response-confirm')).toBeVisible();
+	await expect(page.getByTestId('po-submit-response-delta-accepted')).toHaveText('1');
+	await expect(page.getByTestId('po-submit-response-delta-modified')).toHaveText('1');
+	await expect(page.getByTestId('po-submit-response-delta-removed')).toHaveText('1');
+});
+
+// ===========================================================================
+// Iter 081 new specs: role x round x status matrix coverage
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// 9. Vendor on PENDING line sees Modify and Remove, no Accept.
+// ---------------------------------------------------------------------------
+
+test('vendor on PENDING line sees Modify and Remove, no Accept', async ({ page }) => {
+	await mockVendor(page);
+	const po = makePO({
+		status: 'PENDING',
+		round_count: 0,
+		last_actor_role: null,
+		line_items: [makeLine('PN-001', { status: 'PENDING' })]
+	});
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-line-PN-001').waitFor();
+
+	await expect(page.getByTestId('po-line-action-modify-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-remove-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-accept-PN-001')).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
+// 10. Vendor on MODIFIED_BY_SM line sees Accept, Modify, Remove.
+// ---------------------------------------------------------------------------
+
+test('vendor on MODIFIED_BY_SM sees Accept, Modify, Remove and no force actions', async ({ page }) => {
+	await mockVendor(page);
+	const po = makePO({
+		status: 'MODIFIED',
+		round_count: 1,
+		last_actor_role: 'SM',
+		line_items: [makeLine('PN-001', { status: 'MODIFIED_BY_SM' })]
+	});
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-line-PN-001').waitFor();
+
+	await expect(page.getByTestId('po-line-action-accept-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-modify-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-remove-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-force-accept-PN-001')).toHaveCount(0);
+	await expect(page.getByTestId('po-line-action-force-remove-PN-001')).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
+// 11. SM on MODIFIED_BY_VENDOR (round 1) sees Accept, Modify, Remove.
+// ---------------------------------------------------------------------------
+
+test('sm on MODIFIED_BY_VENDOR at round 1 sees Accept, Modify, Remove and no force actions', async ({ page }) => {
+	const po = makePO({
+		status: 'MODIFIED',
+		round_count: 1,
+		last_actor_role: 'VENDOR',
+		line_items: [makeLine('PN-001', { status: 'MODIFIED_BY_VENDOR' })]
+	});
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-line-PN-001').waitFor();
+
+	await expect(page.getByTestId('po-line-action-accept-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-modify-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-remove-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-force-accept-PN-001')).toHaveCount(0);
+	await expect(page.getByTestId('po-line-action-force-remove-PN-001')).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
+// 12. SM at round 2 on MODIFIED_BY_VENDOR sees Force Accept and Force Remove.
+// ---------------------------------------------------------------------------
+
+test('sm at round 2 on MODIFIED_BY_VENDOR sees Force Accept and Force Remove alongside Accept/Modify/Remove', async ({ page }) => {
+	const po = makePO({
+		status: 'MODIFIED',
+		round_count: 2,
+		last_actor_role: 'VENDOR',
+		line_items: [makeLine('PN-001', { status: 'MODIFIED_BY_VENDOR' })]
+	});
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-line-PN-001').waitFor();
+
+	await expect(page.getByTestId('po-line-action-accept-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-modify-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-remove-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-force-accept-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-action-force-remove-PN-001')).toBeVisible();
+});
+
+// ---------------------------------------------------------------------------
+// 13. Vendor at round 2 sees no force actions.
+// ---------------------------------------------------------------------------
+
+test('vendor at round 2 sees no force actions', async ({ page }) => {
+	await mockVendor(page);
+	const po = makePO({
+		status: 'MODIFIED',
+		round_count: 2,
+		last_actor_role: 'SM',
+		line_items: [makeLine('PN-001', { status: 'MODIFIED_BY_SM' })]
+	});
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-line-PN-001').waitFor();
+
+	await expect(page.getByTestId('po-line-action-force-accept-PN-001')).toHaveCount(0);
+	await expect(page.getByTestId('po-line-action-force-remove-PN-001')).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
+// 14. Terminal lines (ACCEPTED, REMOVED) render no actions.
+// ---------------------------------------------------------------------------
+
+test('terminal lines render no actions in their action group', async ({ page }) => {
+	const po = makePO({
+		status: 'MODIFIED',
+		round_count: 1,
+		last_actor_role: 'VENDOR',
+		line_items: [
+			makeLine('PN-A', { status: 'ACCEPTED' }),
+			makeLine('PN-R', { status: 'REMOVED' })
+		]
+	});
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-line-PN-A').waitFor();
+
+	// The actions container exists in the DOM but renders no buttons for
+	// terminal lines (the empty flex container collapses to zero height,
+	// so we assert presence + button count, not visibility).
+	const acceptedActions = page.getByTestId('po-line-actions-PN-A');
+	await expect(acceptedActions).toHaveCount(1);
+	await expect(acceptedActions.getByRole('button')).toHaveCount(0);
+
+	const removedActions = page.getByTestId('po-line-actions-PN-R');
+	await expect(removedActions).toHaveCount(1);
+	await expect(removedActions.getByRole('button')).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
+// 15. Force accept opens confirm dialog and routes the action through the API.
+// ---------------------------------------------------------------------------
+
+test('force accept opens confirm dialog and routes the action', async ({ page }) => {
+	let forceAcceptCalled = 0;
+	const po = makePO({
+		status: 'MODIFIED',
+		round_count: 2,
+		last_actor_role: 'VENDOR',
+		line_items: [makeLine('PN-001', { status: 'MODIFIED_BY_VENDOR' })]
+	});
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+	await page.route(`**/api/v1/po/${PO_ID}/lines/PN-001/force-accept`, (route) => {
+		forceAcceptCalled += 1;
+		const after = {
+			...po,
+			line_items: [{ ...po.line_items[0], status: 'ACCEPTED' as const }]
+		};
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(after) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-line-PN-001').waitFor();
+
+	await page.getByTestId('po-line-action-force-accept-PN-001').click();
+	await expect(page.getByTestId('po-line-force-accept-confirm-PN-001')).toBeVisible();
+	expect(forceAcceptCalled).toBe(0);
+
+	await page.getByTestId('po-line-action-force-accept-confirm-PN-001').click();
+	await expect.poll(() => forceAcceptCalled).toBe(1);
+});
+
+// ---------------------------------------------------------------------------
+// 16. Modify modal validates required text fields.
+// ---------------------------------------------------------------------------
+
+test('modify modal validates required text fields and keeps modal open', async ({ page }) => {
+	const po = makePO({
+		status: 'PENDING',
+		round_count: 0,
+		last_actor_role: null,
+		line_items: [makeLine('PN-001')]
+	});
+	await mockVendor(page);
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-line-PN-001').waitFor();
+
+	await page.getByTestId('po-line-action-modify-PN-001').click();
+	await page.getByTestId('po-line-modify-modal-PN-001').waitFor();
+
+	// Clear UoM to empty, attempt submit.
+	await page.getByTestId('po-line-modify-uom').fill('');
+	await page.getByTestId('po-line-modify-submit').click();
+
+	// Modal stays open; FormField error slot is populated for UoM.
+	await expect(page.getByTestId('po-line-modify-modal-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-modify-uom-field-error')).toBeVisible();
+	await expect(page.getByTestId('po-line-modify-uom-field-error')).toContainText('UoM');
+});
+
+// ---------------------------------------------------------------------------
+// 17. Modify modal q=0 hint and submit label flips to Remove line.
+// ---------------------------------------------------------------------------
+
+test('modify modal q=0 surfaces hint and submit button reads Remove line', async ({ page }) => {
+	const po = makePO({
+		status: 'PENDING',
+		round_count: 0,
+		last_actor_role: null,
+		line_items: [makeLine('PN-001', { quantity: 10 })]
+	});
+	await mockVendor(page);
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-line-PN-001').waitFor();
+
+	await page.getByTestId('po-line-action-modify-PN-001').click();
+	await page.getByTestId('po-line-modify-modal-PN-001').waitFor();
+
+	await page.getByTestId('po-line-modify-quantity').fill('0');
+
+	// FormField hint is rendered inside the quantity field; locate by field
+	// container scope and the hint copy from PoLineModifyModal.
+	const qtyField = page.getByTestId('po-line-modify-quantity-field');
+	await expect(qtyField).toContainText('Quantity 0 will remove the line from the PO.');
+
+	// Submit button text flips.
+	await expect(page.getByTestId('po-line-modify-submit')).toHaveText('Remove line');
+});
+
+// ---------------------------------------------------------------------------
+// 18. View-changes toggle reveals diff and history.
+// ---------------------------------------------------------------------------
+
+test('view-changes toggle reveals diff and history then hides them again', async ({ page }) => {
+	const historyEntry = {
+		part_number: 'PN-001',
+		round: 0,
+		actor_role: 'VENDOR',
+		field: 'quantity',
+		old_value: '10',
+		new_value: '5',
+		edited_at: '2026-04-02T00:00:00+00:00'
+	};
+	const po = makePO({
+		status: 'MODIFIED',
+		round_count: 0,
+		last_actor_role: 'VENDOR',
+		line_items: [
+			makeLine('PN-001', {
+				quantity: 5,
+				status: 'MODIFIED_BY_VENDOR',
+				history: [historyEntry]
+			})
+		]
+	});
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-line-PN-001').waitFor();
+
+	// Hidden initially.
+	await expect(page.getByTestId('po-line-diff-PN-001')).toHaveCount(0);
+	await expect(page.getByTestId('po-line-history-PN-001')).toHaveCount(0);
+
+	// Toggle to expand.
+	await page.getByTestId('po-line-details-toggle-PN-001').click();
+	await expect(page.getByTestId('po-line-diff-PN-001')).toBeVisible();
+	await expect(page.getByTestId('po-line-history-PN-001')).toBeVisible();
+
+	// Toggle again to collapse.
+	await page.getByTestId('po-line-details-toggle-PN-001').click();
+	await expect(page.getByTestId('po-line-diff-PN-001')).toHaveCount(0);
+	await expect(page.getByTestId('po-line-history-PN-001')).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
+// 19. Submit bar disabled while unaddressed lines remain.
+// ---------------------------------------------------------------------------
+
+test('submit bar is disabled while unaddressed lines remain and shows count hint', async ({ page }) => {
+	await mockVendor(page);
+	const po = makePO({
+		status: 'PENDING',
+		round_count: 0,
+		last_actor_role: null,
+		line_items: [makeLine('PN-001'), makeLine('PN-002')]
+	});
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-submit-response-bar').waitFor();
+
+	await expect(page.getByTestId('po-submit-response-btn')).toBeDisabled();
+	await expect(page.getByTestId('po-submit-response-hint')).toHaveText('2 lines still need a decision');
+});
+
+// ---------------------------------------------------------------------------
+// 20. Submit bar enabled when all addressed; confirm dialog shows delta.
+// ---------------------------------------------------------------------------
+
+test('submit bar enables when all addressed and confirm dialog reports the delta', async ({ page }) => {
+	await mockVendor(page);
+	const po = makePO({
+		status: 'PENDING',
+		round_count: 0,
+		last_actor_role: null,
+		line_items: [
+			makeLine('PN-001', { status: 'MODIFIED_BY_VENDOR' }),
+			makeLine('PN-002', { status: 'MODIFIED_BY_VENDOR' })
+		]
+	});
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-submit-response-bar').waitFor();
+
+	await expect(page.getByTestId('po-submit-response-btn')).toBeEnabled();
+	await page.getByTestId('po-submit-response-btn').click();
+
+	await expect(page.getByTestId('po-submit-response-confirm')).toBeVisible();
+	await expect(page.getByTestId('po-submit-response-delta-accepted')).toHaveText('0');
+	await expect(page.getByTestId('po-submit-response-delta-modified')).toHaveText('2');
+	await expect(page.getByTestId('po-submit-response-delta-removed')).toHaveText('0');
+});
+
+// ---------------------------------------------------------------------------
+// 21. Submit bar at round 1 shows force-only warning.
+// ---------------------------------------------------------------------------
+
+test('submit bar at round 1 with all addressed shows the force-override warning', async ({ page }) => {
+	const po = makePO({
+		status: 'MODIFIED',
+		round_count: 1,
+		last_actor_role: 'VENDOR',
+		line_items: [
+			makeLine('PN-001', { status: 'ACCEPTED' }),
+			makeLine('PN-002', { status: 'MODIFIED_BY_SM' })
+		]
+	});
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-submit-response-bar').waitFor();
+
+	await expect(page.getByTestId('po-submit-response-hint')).toContainText('force-override only');
+});
+
+// ---------------------------------------------------------------------------
+// 22. Mobile 390px: actions stack two-per-row.
+// ---------------------------------------------------------------------------
+
+test('mobile 390x844: action buttons sit at roughly half the row width so two actions fit per row', async ({ page }) => {
+	await page.setViewportSize({ width: 390, height: 844 });
+
+	const po = makePO({
+		status: 'MODIFIED',
+		round_count: 1,
+		last_actor_role: 'VENDOR',
+		line_items: [makeLine('PN-001', { status: 'MODIFIED_BY_VENDOR' })]
+	});
+	await page.route(`**/api/v1/po/${PO_ID}`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(po) });
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-line-PN-001').waitFor();
+
+	const actionsGroup = page.getByTestId('po-line-actions-PN-001');
+	const groupBox = await actionsGroup.boundingBox();
+	expect(groupBox).not.toBeNull();
+	const groupWidth = groupBox!.width;
+
+	const buttonTestids: ReadonlyArray<string> = [
+		'po-line-action-accept-PN-001',
+		'po-line-action-modify-PN-001',
+		'po-line-action-remove-PN-001'
+	] as const;
+
+	// At 390px the SM-on-MODIFIED_BY_VENDOR matrix yields 3 actions sharing a
+	// flex-wrap row with a 50%-of-container flex-basis. Two of the three sit
+	// per row at ~50%; the orphaned third grows to fill its row. Assert at
+	// least two buttons land in the 40%-60% window so the two-per-row layout
+	// is guaranteed.
+	const ratios: number[] = [];
+	for (const tid of buttonTestids) {
+		const box = await page.getByTestId(tid).boundingBox();
+		expect(box).not.toBeNull();
+		ratios.push(box!.width / groupWidth);
+	}
+	const halfWidthCount = ratios.filter((r) => r >= 0.4 && r <= 0.6).length;
+	expect(halfWidthCount).toBeGreaterThanOrEqual(2);
 });

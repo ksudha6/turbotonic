@@ -30,8 +30,8 @@
 	import CreateInvoiceDialog from '$lib/components/CreateInvoiceDialog.svelte';
 	import MilestoneTimeline from '$lib/components/MilestoneTimeline.svelte';
 	import ActivityTimeline from '$lib/components/ActivityTimeline.svelte';
-	import LineNegotiationRow from '$lib/components/LineNegotiationRow.svelte';
-	import SubmitResponseBar from '$lib/components/SubmitResponseBar.svelte';
+	import PoLineNegotiationTable from '$lib/po/PoLineNegotiationTable.svelte';
+	import PoSubmitResponseBar from '$lib/po/PoSubmitResponseBar.svelte';
 	import type {
 		PurchaseOrder,
 		InvoiceListItem,
@@ -567,25 +567,19 @@
 				{/if}
 
 				{#if po.status === 'PENDING' || po.status === 'MODIFIED'}
-					<!-- Iter 057: per-line negotiation list. Rows render their own actions
-						 based on role and round_count. -->
-					<div class="negotiation-list" data-testid="negotiation-list">
-						{#each po.line_items as item (item.part_number)}
-							<LineNegotiationRow
-								line={item}
-								role={role ? effectiveRole(role) : 'VENDOR'}
-								round_count={po.round_count ?? 0}
-								on_modify={(pn, fields) => handleModify(pn, fields)}
-								on_accept={(pn) => handleAcceptNegotiation(pn)}
-								on_remove={(pn) => handleRemoveNegotiation(pn)}
-								on_force_accept={(pn) => handleForceAccept(pn)}
-								on_force_remove={(pn) => handleForceRemove(pn)}
-							/>
-							{#if lineErrors.get(item.part_number)}
-								<p class="error-message" data-testid="line-error-{item.part_number}">{lineErrors.get(item.part_number)}</p>
-							{/if}
-						{/each}
-					</div>
+					<!-- Iter 081: PoLineNegotiationTable owns row layout, errors, and
+						 the View-changes diff/history toggle per line. -->
+					<PoLineNegotiationTable
+						lines={po.line_items}
+						role={role ? effectiveRole(role) : 'VENDOR'}
+						round_count={po.round_count ?? 0}
+						errors={lineErrors}
+						on_modify={(pn, fields) => handleModify(pn, fields)}
+						on_accept={(pn) => handleAcceptNegotiation(pn)}
+						on_remove={(pn) => handleRemoveNegotiation(pn)}
+						on_force_accept={(pn) => handleForceAccept(pn)}
+						on_force_remove={(pn) => handleForceRemove(pn)}
+					/>
 				{:else}
 					<table class="table">
 						<thead>
@@ -654,15 +648,13 @@
 				{/if}
 
 				{#if (po.status === 'PENDING' || po.status === 'MODIFIED') && role && canActOnNegotiation}
-					<SubmitResponseBar
+					<PoSubmitResponseBar
 						lines={po.line_items}
 						role={effectiveRole(role)}
 						round_count={po.round_count ?? 0}
+						error={submitResponseError}
 						on_submit={handleSubmitResponse}
 					/>
-					{#if submitResponseError}
-						<p class="error-message" data-testid="submit-response-error">{submitResponseError}</p>
-					{/if}
 				{/if}
 			</div>
 
