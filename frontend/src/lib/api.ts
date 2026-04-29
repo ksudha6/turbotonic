@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, CertWarning, DashboardData, DashboardSummary, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneUpdate, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentUpdate, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, CertWarning, DashboardData, DashboardSummary, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneResponse, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentUpdate, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -165,11 +165,37 @@ export interface PostAcceptLineInput {
 	product_id?: string | null;
 }
 
-export function addLinePostAccept(
+export async function addLinePostAccept(
 	id: string,
 	line: PostAcceptLineInput
 ): Promise<PurchaseOrder> {
-	return apiPost<PurchaseOrder>(`/api/v1/po/${id}/lines`, { line });
+	// Iter 082: surface the server's `detail` field so the Add Line dialog can
+	// render it inline. apiPost only carries the status text, which is too
+	// generic for "duplicate part number" / gate-closed messages.
+	const res = await fetch(`/api/v1/po/${id}/lines`, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ line }),
+		credentials: 'include'
+	});
+	if (res.ok) {
+		return (await res.json()) as PurchaseOrder;
+	}
+	if (res.status === 401) {
+		if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+			const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+			window.location.href = `/login?redirect=${redirect}`;
+		}
+		throw new Error('Not authenticated');
+	}
+	let detail = `${res.status} ${res.statusText}`;
+	try {
+		const body = await res.json();
+		if (body && typeof body.detail === 'string') detail = body.detail;
+	} catch {
+		// non-JSON body; keep status-text fallback.
+	}
+	throw new Error(detail);
 }
 
 export async function removeLinePostAccept(
@@ -332,12 +358,12 @@ export function resolveInvoice(id: string): Promise<Invoice> {
 	return apiPost<Invoice>(`/api/v1/invoices/${id}/resolve`);
 }
 
-export function listMilestones(poId: string): Promise<MilestoneUpdate[]> {
-	return apiGet<MilestoneUpdate[]>(`/api/v1/po/${poId}/milestones`);
+export function listMilestones(poId: string): Promise<MilestoneResponse[]> {
+	return apiGet<MilestoneResponse[]>(`/api/v1/po/${poId}/milestones`);
 }
 
-export function postMilestone(poId: string, milestone: string): Promise<MilestoneUpdate> {
-	return apiPost<MilestoneUpdate>(`/api/v1/po/${poId}/milestones`, { milestone });
+export function postMilestone(poId: string, milestone: string): Promise<MilestoneResponse> {
+	return apiPost<MilestoneResponse>(`/api/v1/po/${poId}/milestones`, { milestone });
 }
 
 export function fetchActivity(limit: number = 20, targetRole?: string): Promise<ActivityLogEntry[]> {

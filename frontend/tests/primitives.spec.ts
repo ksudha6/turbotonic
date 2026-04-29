@@ -190,6 +190,17 @@ test.describe('Timeline + ActivityFeed primitives', () => {
 		await expect(steps).toHaveCount(3);
 	});
 
+	// Iter 082: Timeline gained an 'overdue' state. The marker uses --dot-red and
+	// the surrounding <li> carries the overdue class for styling.
+	test('Timeline overdue state renders red marker on overdue step', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const overdueStep = page.getByTestId('ui-timeline-overdue').locator('li').first();
+		await expect(overdueStep).toHaveClass(/overdue/);
+		await expect(overdueStep).toContainText('Overdue 4d');
+	});
+
 	test('ActivityFeed renders entries with dot + primary + secondary lines', async ({ page }) => {
 		await mockApiCatchAll(page);
 		await mockUser(page);

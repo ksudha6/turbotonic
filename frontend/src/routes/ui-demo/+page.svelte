@@ -164,6 +164,17 @@
 </section>
 
 <section>
+	<h2>Timeline (overdue state)</h2>
+	<Timeline
+		steps={[
+			{ label: 'Raw materials', state: 'overdue', detail: 'Overdue 4d' }
+		]}
+		label="Overdue stage"
+		data-testid="ui-timeline-overdue"
+	/>
+</section>
+
+<section>
 	<h2>ActivityFeed</h2>
 	<ActivityFeed
 		entries={[

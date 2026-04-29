@@ -13,7 +13,11 @@ from src.domain.user import UserRole
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType
 from src.domain.user import User
-from src.domain.milestone import MILESTONE_ORDER, ProductionMilestone
+from src.domain.milestone import (
+    MILESTONE_ORDER,
+    MILESTONE_OVERDUE_THRESHOLDS,
+    ProductionMilestone,
+)
 from src.domain.reference_data import RATE_TO_USD
 from src.invoice_repository import InvoiceRepository
 from src.milestone_repository import MilestoneRepository
@@ -96,16 +100,6 @@ class OverduePO(BaseModel):
     vendor_name: str
     milestone: str
     days_since_update: int
-
-
-# Days before a PO at a given milestone is considered overdue.
-# SHIPPED is never overdue (terminal production milestone).
-_OVERDUE_THRESHOLDS: dict[str, int] = {
-    ProductionMilestone.RAW_MATERIALS.value: 7,
-    ProductionMilestone.PRODUCTION_STARTED.value: 7,
-    ProductionMilestone.QC_PASSED.value: 3,
-    ProductionMilestone.READY_FOR_SHIPMENT.value: 3,
-}
 
 
 class DashboardResponse(BaseModel):
@@ -312,7 +306,7 @@ async def get_dashboard(
     overdue_pos: list[OverduePO] = []
     for row in overdue_rows:
         milestone_val: str = row["milestone"]
-        threshold = _OVERDUE_THRESHOLDS.get(milestone_val)
+        threshold = MILESTONE_OVERDUE_THRESHOLDS.get(milestone_val)
         if threshold is None:
             # SHIPPED — never overdue
             continue

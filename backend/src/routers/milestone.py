@@ -14,6 +14,7 @@ from src.domain.activity import ActivityEvent, EntityType
 from src.domain.milestone import (
     MilestoneUpdate,
     ProductionMilestone,
+    compute_days_overdue,
     validate_next_milestone,
 )
 from src.domain.user import User, UserRole
@@ -79,6 +80,11 @@ class MilestonePostRequest(BaseModel):
 class MilestoneResponse(BaseModel):
     milestone: str
     posted_at: datetime
+    # Iter 082: per-row overdue indicators. Only the latest posted milestone
+    # may carry is_overdue=True; earlier rows have moved on so are always
+    # is_overdue=False, days_overdue=None.
+    is_overdue: bool = False
+    days_overdue: int | None = None
 
 
 @router.get("/{po_id}/milestones", response_model=list[MilestoneResponse])
@@ -94,10 +100,31 @@ async def list_milestones(
     check_vendor_access(user, po.vendor_id)
 
     updates = await milestone_repo.list_by_po(po_id)
-    return [
-        MilestoneResponse(milestone=u.milestone.value, posted_at=u.posted_at)
-        for u in updates
-    ]
+    if not updates:
+        return []
+
+    now_utc = datetime.now(UTC)
+    # The latest update is the "stuck" stage; earlier rows are not overdue
+    # because the PO has progressed past them.
+    latest_index = len(updates) - 1
+    response: list[MilestoneResponse] = []
+    for i, u in enumerate(updates):
+        is_overdue = False
+        days_overdue: int | None = None
+        if i == latest_index:
+            days = compute_days_overdue(u.milestone, u.posted_at, now_utc)
+            if days is not None and days > 0:
+                is_overdue = True
+                days_overdue = days
+        response.append(
+            MilestoneResponse(
+                milestone=u.milestone.value,
+                posted_at=u.posted_at,
+                is_overdue=is_overdue,
+                days_overdue=days_overdue,
+            )
+        )
+    return response
 
 
 @router.post("/{po_id}/milestones", response_model=MilestoneResponse, status_code=201)
@@ -160,4 +187,10 @@ async def post_milestone(
                 detail=detail,
             )
 
-    return MilestoneResponse(milestone=update.milestone.value, posted_at=update.posted_at)
+    # A freshly posted milestone is current, not overdue yet.
+    return MilestoneResponse(
+        milestone=update.milestone.value,
+        posted_at=update.posted_at,
+        is_overdue=False,
+        days_overdue=None,
+    )

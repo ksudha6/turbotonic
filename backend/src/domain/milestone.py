@@ -25,6 +25,37 @@ MILESTONE_ORDER: tuple[ProductionMilestone, ...] = (
 )
 
 
+# Days a PO may sit at a given milestone before it is considered overdue.
+# SHIPPED is intentionally absent — it is terminal and never overdue.
+# Iter 082: extracted from routers.dashboard so the milestone router can share
+# the same thresholds when computing per-row is_overdue / days_overdue.
+MILESTONE_OVERDUE_THRESHOLDS: dict[str, int] = {
+    ProductionMilestone.RAW_MATERIALS.value: 7,
+    ProductionMilestone.PRODUCTION_STARTED.value: 7,
+    ProductionMilestone.QC_PASSED.value: 3,
+    ProductionMilestone.READY_FOR_SHIPMENT.value: 3,
+}
+
+
+def compute_days_overdue(
+    milestone: ProductionMilestone,
+    posted_at: datetime,
+    now: datetime,
+) -> int | None:
+    """Days past the per-milestone threshold; None for SHIPPED (terminal).
+
+    Returns None when the milestone has no threshold (SHIPPED, or any future
+    milestone added without a threshold entry). Otherwise returns
+    ``(now - posted_at).days - threshold``: zero or negative when within
+    threshold, positive when overdue.
+    """
+    threshold = MILESTONE_OVERDUE_THRESHOLDS.get(milestone.value)
+    if threshold is None:
+        return None
+    days_since = (now - posted_at).days
+    return days_since - threshold
+
+
 @dataclass
 class MilestoneUpdate:
     milestone: ProductionMilestone

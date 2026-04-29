@@ -28,17 +28,21 @@
 	import type { ModifyLineFields } from '$lib/api';
 	import StatusPill from '$lib/components/StatusPill.svelte';
 	import CreateInvoiceDialog from '$lib/components/CreateInvoiceDialog.svelte';
-	import MilestoneTimeline from '$lib/components/MilestoneTimeline.svelte';
 	import ActivityTimeline from '$lib/components/ActivityTimeline.svelte';
 	import PoLineNegotiationTable from '$lib/po/PoLineNegotiationTable.svelte';
+	import PoLineAcceptedTable from '$lib/po/PoLineAcceptedTable.svelte';
+	import PoMilestoneTimelinePanel from '$lib/po/PoMilestoneTimelinePanel.svelte';
+	import PoAddLineDialog from '$lib/po/PoAddLineDialog.svelte';
 	import PoSubmitResponseBar from '$lib/po/PoSubmitResponseBar.svelte';
+	import Button from '$lib/ui/Button.svelte';
 	import type {
 		PurchaseOrder,
 		InvoiceListItem,
 		ReferenceData,
 		RemainingLine,
 		InvoiceLineItemCreate,
-		MilestoneUpdate,
+		MilestoneResponse,
+		ProductionMilestone,
 		UserRole,
 		CertWarning
 	} from '$lib/types';
@@ -76,7 +80,7 @@
 	let showInvoiceDialog: boolean = $state(false);
 	let remainingLines: RemainingLine[] = $state([]);
 	let opexError: string = $state('');
-	let milestones: MilestoneUpdate[] = $state([]);
+	let milestones: MilestoneResponse[] = $state([]);
 	let certRequired: Set<string> = $state(new Set());
 	// Iter 057 negotiation errors surface next to the action that failed.
 	let lineErrors: Map<string, string> = $state(new Map());
@@ -89,13 +93,6 @@
 	let showAddLineDialog: boolean = $state(false);
 	let addLineError: string = $state('');
 	let removeLineErrors: Map<string, string> = $state(new Map());
-	let newLinePart: string = $state('');
-	let newLineDescription: string = $state('');
-	let newLineQuantity: number = $state(1);
-	let newLineUom: string = $state('EA');
-	let newLineUnitPrice: string = $state('0.00');
-	let newLineHsCode: string = $state('8471.30');
-	let newLineCountry: string = $state('US');
 
 	const id: string = page.params.id ?? '';
 	const role = $derived<UserRole | undefined>(page.data.user?.role);
@@ -343,29 +340,30 @@
 	}
 
 	function openAddLineDialog() {
-		newLinePart = '';
-		newLineDescription = '';
-		newLineQuantity = 1;
-		newLineUom = 'EA';
-		newLineUnitPrice = '0.00';
-		newLineHsCode = '8471.30';
-		newLineCountry = 'US';
 		addLineError = '';
 		showAddLineDialog = true;
 	}
 
-	async function handleAddLineSubmit() {
+	function closeAddLineDialog() {
+		showAddLineDialog = false;
+		addLineError = '';
+	}
+
+	// Iter 082: PoAddLineDialog owns the form state and posts the validated
+	// payload back via on_submit. The page handles the API call + close on
+	// success / surfaces the server error string back into the dialog.
+	async function handleAddLineSubmit(fields: {
+		part_number: string;
+		description: string;
+		quantity: number;
+		uom: string;
+		unit_price: string;
+		hs_code: string;
+		country_of_origin: string;
+	}) {
 		addLineError = '';
 		try {
-			await addLinePostAccept(id, {
-				part_number: newLinePart,
-				description: newLineDescription,
-				quantity: newLineQuantity,
-				uom: newLineUom,
-				unit_price: newLineUnitPrice,
-				hs_code: newLineHsCode,
-				country_of_origin: newLineCountry
-			});
+			await addLinePostAccept(id, fields);
 			showAddLineDialog = false;
 			await fetchPO();
 		} catch (err: unknown) {
@@ -385,7 +383,7 @@
 		}
 	}
 
-	async function handlePostMilestone(milestone: string) {
+	async function handlePostMilestone(milestone: ProductionMilestone) {
 		await postMilestone(id, milestone);
 		milestones = await listMilestones(id);
 	}
@@ -556,14 +554,24 @@
 				<h2>Line Items</h2>
 				{#if po.status === 'ACCEPTED' && role && canModifyPostAccept(role)}
 					<div class="post-accept-toolbar">
-						<button
-							class="btn btn-secondary"
-							data-testid="add-line-btn"
-							disabled={postAcceptGateClosed()}
-							title={postAcceptGateClosed() ? 'Cannot add: advance paid or first milestone posted' : ''}
-							onclick={openAddLineDialog}
-						>Add Line</button>
+						{#if !postAcceptGateClosed()}
+							<Button
+								onclick={openAddLineDialog}
+								data-testid="add-line-btn"
+							>
+								Add Line
+							</Button>
+						{/if}
 					</div>
+					{#if postAcceptGateClosed()}
+						<p
+							class="post-accept-gate-note"
+							data-testid="po-post-accept-gate-closed-note"
+						>
+							Post-acceptance line edits closed: advance paid or first milestone
+							posted.
+						</p>
+					{/if}
 				{/if}
 
 				{#if po.status === 'PENDING' || po.status === 'MODIFIED'}
@@ -581,70 +589,27 @@
 						on_force_remove={(pn) => handleForceRemove(pn)}
 					/>
 				{:else}
-					<table class="table">
-						<thead>
-							<tr>
-								<th>Part Number</th>
-								<th>Description</th>
-								<th>Qty</th>
-								{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT'}
-									<th>Invoiced</th>
-									<th>Remaining</th>
-								{/if}
-								<th>UoM</th>
-								<th>Unit Price</th>
-								<th>HS Code</th>
-								<th>Origin</th>
-								<th>Cert</th>
-								<th>Status</th>
-								{#if po.status === 'ACCEPTED' && role && canModifyPostAccept(role)}
-									<th>Actions</th>
-								{/if}
-							</tr>
-						</thead>
-						<tbody>
-							{#each po.line_items as item (item.part_number)}
-								<tr>
-									<td>{item.part_number}</td>
-									<td>{item.description}</td>
-									<td>{item.quantity}</td>
-									{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT'}
-										{@const r = remainingMap.get(item.part_number)}
-										<td>{r ? r.invoiced : 0}</td>
-										<td>{r ? r.remaining : 0}</td>
-									{/if}
-									<td>{item.uom}</td>
-									<td>{parseFloat(item.unit_price).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-									<td>{item.hs_code}</td>
-									<td>{resolve('countries', item.country_of_origin)}</td>
-									<td>
-										{#if certRequired.has(item.part_number)}
-											<span class="badge badge-cert">Required</span>
-										{/if}
-									</td>
-									<td>
-										<span class="badge badge-line-status badge-{item.status.toLowerCase()}">{item.status}</span>
-									</td>
-									{#if po.status === 'ACCEPTED' && role && canModifyPostAccept(role)}
-										<td>
-											{#if item.status !== 'REMOVED'}
-												<button
-													class="btn-remove-line"
-													data-testid="remove-line-{item.part_number}"
-													disabled={postAcceptGateClosed()}
-													title={removeLineErrors.get(item.part_number) || (postAcceptGateClosed() ? 'Cannot remove: advance paid or first milestone posted' : '')}
-													onclick={() => handleRemoveLinePostAccept(item.part_number)}
-												>Remove</button>
-												{#if removeLineErrors.get(item.part_number)}
-													<p class="error-message">{removeLineErrors.get(item.part_number)}</p>
-												{/if}
-											{/if}
-										</td>
-									{/if}
-								</tr>
-							{/each}
-						</tbody>
-					</table>
+					<!-- Iter 082: PoLineAcceptedTable owns the ACCEPTED-PO row layout,
+						 cert badges, status pills, per-row Remove button, and per-row
+						 inline error rendering. -->
+					<PoLineAcceptedTable
+						lines={po.line_items}
+						role={role ?? null}
+						po_type={po.po_type}
+						cert_required={certRequired}
+						remaining_map={new Map(
+							[...remainingMap].map(([pn, r]) => [
+								pn,
+								{ invoiced: r.invoiced, remaining: r.remaining }
+							])
+						)}
+						gate_closed={postAcceptGateClosed()}
+						errors={removeLineErrors}
+						on_remove={role && canModifyPostAccept(role)
+							? handleRemoveLinePostAccept
+							: null}
+						resolve_country={(code) => resolve('countries', code)}
+					/>
 				{/if}
 
 				{#if (po.status === 'PENDING' || po.status === 'MODIFIED') && role && canActOnNegotiation}
@@ -659,13 +624,11 @@
 			</div>
 
 			{#if po.status === 'ACCEPTED' && po.po_type === 'PROCUREMENT'}
-				<div class="section card" data-testid="po-milestone-timeline">
-					<h2>Production Status</h2>
-					<MilestoneTimeline
-						{milestones}
-						onPost={role && canPostMilestone(role) ? handlePostMilestone : null}
-					/>
-				</div>
+				<PoMilestoneTimelinePanel
+					{milestones}
+					role={role ?? null}
+					onPost={role && canPostMilestone(role) ? handlePostMilestone : null}
+				/>
 			{/if}
 
 			{#if po.rejection_history.length > 0}
@@ -741,49 +704,13 @@
 				/>
 			{/if}
 
-			{#if showAddLineDialog}
-				<div class="dialog-backdrop" data-testid="add-line-dialog">
-					<div class="dialog-card">
-						<h3>Add Line</h3>
-						<div class="add-line-fields">
-							<label>
-								<span class="field-label">Part Number</span>
-								<input type="text" bind:value={newLinePart} />
-							</label>
-							<label>
-								<span class="field-label">Description</span>
-								<input type="text" bind:value={newLineDescription} />
-							</label>
-							<label>
-								<span class="field-label">Quantity</span>
-								<input type="number" min="1" bind:value={newLineQuantity} />
-							</label>
-							<label>
-								<span class="field-label">UoM</span>
-								<input type="text" bind:value={newLineUom} />
-							</label>
-							<label>
-								<span class="field-label">Unit Price</span>
-								<input type="text" bind:value={newLineUnitPrice} />
-							</label>
-							<label>
-								<span class="field-label">HS Code</span>
-								<input type="text" bind:value={newLineHsCode} />
-							</label>
-							<label>
-								<span class="field-label">Country of Origin</span>
-								<input type="text" bind:value={newLineCountry} />
-							</label>
-						</div>
-						{#if addLineError}
-							<p class="error-message">{addLineError}</p>
-						{/if}
-						<div class="dialog-actions">
-							<button class="btn btn-secondary" onclick={() => (showAddLineDialog = false)}>Cancel</button>
-							<button class="btn btn-primary" onclick={handleAddLineSubmit}>Add</button>
-						</div>
-					</div>
-				</div>
+			{#if showAddLineDialog && refData}
+				<PoAddLineDialog
+					reference_data={refData}
+					error={addLineError}
+					on_submit={handleAddLineSubmit}
+					on_close={closeAddLineDialog}
+				/>
 			{/if}
 		</div>
 	{/if}
@@ -847,9 +774,20 @@
 		color: var(--gray-500);
 	}
 
-	.badge-cert {
-		background-color: var(--amber-100);
-		color: var(--amber-800);
+	.post-accept-toolbar {
+		display: flex;
+		justify-content: flex-end;
+		margin-bottom: var(--space-3);
+	}
+
+	.post-accept-gate-note {
+		font-size: var(--font-size-sm);
+		color: var(--gray-700);
+		background: var(--gray-50);
+		border: 1px solid var(--gray-200);
+		border-radius: var(--radius-md);
+		padding: var(--space-2) var(--space-3);
+		margin: 0 0 var(--space-3);
 	}
 
 	/* Inline rail (>= 768px) lives inside the header; sticky rail pins to the

@@ -473,3 +473,324 @@ test('sticky bottom action rail at 390px viewport', async ({ page }) => {
 	await expect(menuUp.getByTestId('po-action-submit')).toBeVisible();
 	await expect(menuUp.getByTestId('po-action-download-pdf')).toBeVisible();
 });
+
+// ---------------------------------------------------------------------------
+// Iter 082 — Tier 4 ACCEPTED-PO surface revamp.
+// Covers the new PoMilestoneTimelinePanel, PoLineAcceptedTable, PoAddLineDialog,
+// the gate-closed hide behaviour, and per-line + global server-error rendering.
+// ---------------------------------------------------------------------------
+
+type MilestoneRow = {
+	milestone: string;
+	posted_at: string;
+	is_overdue: boolean;
+	days_overdue: number | null;
+};
+
+function mockMilestonesWith(page: Page, rows: MilestoneRow[]) {
+	return page.route('**/api/v1/po/*/milestones', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(rows)
+		});
+	});
+}
+
+function mockRemainingWithLines(
+	page: Page,
+	lines: Array<{ part_number: string; description: string; ordered: number; invoiced: number; remaining: number }>
+) {
+	return page.route('**/api/v1/invoices/po/*/remaining', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ po_id: PO_ID, lines })
+		});
+	});
+}
+
+const MILESTONE_FIXTURE_TWO_POSTED: MilestoneRow[] = [
+	{
+		milestone: 'RAW_MATERIALS',
+		posted_at: '2026-04-15T00:00:00+00:00',
+		is_overdue: false,
+		days_overdue: null
+	},
+	{
+		milestone: 'PRODUCTION_STARTED',
+		posted_at: '2026-04-22T00:00:00+00:00',
+		is_overdue: false,
+		days_overdue: null
+	}
+];
+
+const MILESTONE_FIXTURE_OVERDUE: MilestoneRow[] = [
+	{
+		milestone: 'RAW_MATERIALS',
+		posted_at: '2026-04-15T00:00:00+00:00',
+		is_overdue: true,
+		days_overdue: 4
+	}
+];
+
+const MILESTONE_FIXTURE_ALL_POSTED: MilestoneRow[] = [
+	{ milestone: 'RAW_MATERIALS', posted_at: '2026-03-10T00:00:00+00:00', is_overdue: false, days_overdue: null },
+	{ milestone: 'PRODUCTION_STARTED', posted_at: '2026-03-18T00:00:00+00:00', is_overdue: false, days_overdue: null },
+	{ milestone: 'QC_PASSED', posted_at: '2026-04-01T00:00:00+00:00', is_overdue: false, days_overdue: null },
+	{ milestone: 'READY_FOR_SHIPMENT', posted_at: '2026-04-10T00:00:00+00:00', is_overdue: false, days_overdue: null },
+	{ milestone: 'SHIPPED', posted_at: '2026-04-20T00:00:00+00:00', is_overdue: false, days_overdue: null }
+];
+
+const TWO_LINE_ITEMS = [
+	{
+		part_number: 'PART-001',
+		description: 'Steel bolt',
+		quantity: 100,
+		uom: 'pcs',
+		unit_price: '15',
+		hs_code: '7318.15',
+		country_of_origin: 'CN',
+		product_id: null,
+		status: 'ACCEPTED',
+		history: []
+	},
+	{
+		part_number: 'PART-002',
+		description: 'Brass washer',
+		quantity: 50,
+		uom: 'pcs',
+		unit_price: '3',
+		hs_code: '7318.21',
+		country_of_origin: 'CN',
+		product_id: null,
+		status: 'ACCEPTED',
+		history: []
+	}
+];
+
+test('milestone timeline renders posted milestones as done steps', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, VENDOR_USER, po);
+	await mockMilestonesWith(page, MILESTONE_FIXTURE_TWO_POSTED);
+
+	await page.goto(`/po/${PO_ID}`);
+	const panel = page.getByTestId('po-milestone-timeline');
+	await expect(panel).toBeVisible();
+
+	// Five steps: 2 done, 1 current (next-expected), 2 upcoming.
+	const steps = panel.locator('ol[aria-label="Production milestones"] li');
+	await expect(steps).toHaveCount(5);
+	await expect(steps.nth(0)).toHaveClass(/done/);
+	await expect(steps.nth(1)).toHaveClass(/done/);
+	await expect(steps.nth(2)).toHaveClass(/current/);
+	await expect(steps.nth(3)).toHaveClass(/upcoming/);
+	await expect(steps.nth(4)).toHaveClass(/upcoming/);
+
+	// Vendor sees the post-next-milestone Button.
+	await expect(panel.getByTestId('po-post-next-milestone-btn')).toBeVisible();
+});
+
+test('milestone timeline marks latest as overdue when is_overdue=true', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, VENDOR_USER, po);
+	await mockMilestonesWith(page, MILESTONE_FIXTURE_OVERDUE);
+
+	await page.goto(`/po/${PO_ID}`);
+	const panel = page.getByTestId('po-milestone-timeline');
+	await expect(panel).toBeVisible();
+
+	const steps = panel.locator('ol[aria-label="Production milestones"] li');
+	await expect(steps.nth(0)).toHaveClass(/overdue/);
+	await expect(steps.nth(0)).toContainText('Overdue 4d');
+});
+
+test('milestone timeline hides post button for SM', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, SM_USER, po);
+	await mockMilestonesWith(page, MILESTONE_FIXTURE_TWO_POSTED);
+
+	await page.goto(`/po/${PO_ID}`);
+	const panel = page.getByTestId('po-milestone-timeline');
+	await expect(panel).toBeVisible();
+	await expect(panel.getByTestId('po-post-next-milestone-btn')).toHaveCount(0);
+});
+
+test('milestone timeline hides post button at terminal SHIPPED', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, VENDOR_USER, po);
+	await mockMilestonesWith(page, MILESTONE_FIXTURE_ALL_POSTED);
+
+	await page.goto(`/po/${PO_ID}`);
+	const panel = page.getByTestId('po-milestone-timeline');
+	await expect(panel).toBeVisible();
+	await expect(panel.getByTestId('po-post-next-milestone-btn')).toHaveCount(0);
+});
+
+test('milestone section omitted for OPEX', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'OPEX', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, VENDOR_USER, po);
+
+	await page.goto(`/po/${PO_ID}`);
+	await expect(page.getByTestId('po-detail-header')).toBeVisible();
+	await expect(page.getByTestId('po-milestone-timeline')).toHaveCount(0);
+});
+
+test('accepted PO renders line items as cards via PoLineAcceptedTable', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, SM_USER, po);
+
+	await page.goto(`/po/${PO_ID}`);
+	await expect(page.getByTestId('po-accepted-line-PART-001')).toBeVisible();
+	await expect(page.getByTestId('po-accepted-line-PART-002')).toBeVisible();
+	await expect(page.getByTestId('po-accepted-status-PART-001')).toBeVisible();
+});
+
+test('accepted PO line cards show invoiced + remaining for procurement', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, SM_USER, po);
+	await mockRemainingWithLines(page, [
+		{ part_number: 'PART-001', description: 'Steel bolt', ordered: 100, invoiced: 30, remaining: 70 },
+		{ part_number: 'PART-002', description: 'Brass washer', ordered: 50, invoiced: 0, remaining: 50 }
+	]);
+
+	await page.goto(`/po/${PO_ID}`);
+	await expect(page.getByTestId('po-accepted-invoiced-PART-001')).toContainText('30');
+	await expect(page.getByTestId('po-accepted-remaining-PART-001')).toContainText('70');
+	await expect(page.getByTestId('po-accepted-invoiced-PART-002')).toContainText('0');
+	await expect(page.getByTestId('po-accepted-remaining-PART-002')).toContainText('50');
+});
+
+test('accepted PO line cards omit invoiced/remaining for opex', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'OPEX', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, SM_USER, po);
+
+	await page.goto(`/po/${PO_ID}`);
+	await expect(page.getByTestId('po-accepted-line-PART-001')).toBeVisible();
+	await expect(page.getByTestId('po-accepted-invoiced-PART-001')).toHaveCount(0);
+	await expect(page.getByTestId('po-accepted-remaining-PART-001')).toHaveCount(0);
+});
+
+test('add line dialog uses reference-data selects for Country', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, SM_USER, po);
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('add-line-btn').click();
+	const dialog = page.getByTestId('po-add-line-dialog');
+	await expect(dialog).toBeVisible();
+	await expect(dialog.getByRole('combobox', { name: /country of origin/i })).toBeVisible();
+	// UoM and HS code are free-form Inputs (no central reference list); confirm
+	// they render as accessible-named text controls inside the dialog.
+	await expect(dialog.getByRole('textbox', { name: /unit of measure/i })).toBeVisible();
+	await expect(dialog.getByRole('textbox', { name: /hs code/i })).toBeVisible();
+});
+
+test('add line dialog server error renders inline at top', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, SM_USER, po);
+	await page.route(`**/api/v1/po/${PO_ID}/lines`, (route) => {
+		if (route.request().method() === 'POST') {
+			route.fulfill({
+				status: 409,
+				contentType: 'application/json',
+				body: JSON.stringify({ detail: 'duplicate part number' })
+			});
+		} else {
+			route.continue();
+		}
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('add-line-btn').click();
+	const dialog = page.getByTestId('po-add-line-dialog');
+	await dialog.getByTestId('po-add-line-part').fill('NEW-1');
+	await dialog.getByTestId('po-add-line-description').fill('A new part');
+	await dialog.getByTestId('po-add-line-submit').click();
+
+	const error = page.getByTestId('po-add-line-error');
+	await expect(error).toBeVisible();
+	await expect(error).toContainText('duplicate part number');
+});
+
+test('add line button hidden when gate closed by advance', async ({ page }) => {
+	const po = makePO({
+		status: 'ACCEPTED',
+		po_type: 'PROCUREMENT',
+		line_items: TWO_LINE_ITEMS,
+		payment_terms: 'ADVANCE_30',
+		advance_paid_at: '2026-04-10T09:00:00+00:00'
+	});
+	await setupDetailPage(page, SM_USER, po);
+
+	await page.goto(`/po/${PO_ID}`);
+	await expect(page.getByTestId('po-detail-header')).toBeVisible();
+	await expect(page.getByTestId('add-line-btn')).toHaveCount(0);
+});
+
+test('add line button hidden when gate closed by milestone', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, SM_USER, po);
+	await mockMilestonesWith(page, MILESTONE_FIXTURE_TWO_POSTED);
+
+	await page.goto(`/po/${PO_ID}`);
+	await expect(page.getByTestId('po-detail-header')).toBeVisible();
+	await expect(page.getByTestId('add-line-btn')).toHaveCount(0);
+});
+
+test('remove line buttons hidden when gate closed', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, SM_USER, po);
+	await mockMilestonesWith(page, MILESTONE_FIXTURE_TWO_POSTED);
+
+	await page.goto(`/po/${PO_ID}`);
+	await expect(page.getByTestId('po-accepted-line-PART-001')).toBeVisible();
+	await expect(page.getByTestId('po-accepted-remove-PART-001')).toHaveCount(0);
+	await expect(page.getByTestId('po-accepted-remove-PART-002')).toHaveCount(0);
+});
+
+test('gate-closed note renders for SM', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, SM_USER, po);
+	await mockMilestonesWith(page, MILESTONE_FIXTURE_TWO_POSTED);
+
+	await page.goto(`/po/${PO_ID}`);
+	const note = page.getByTestId('po-post-accept-gate-closed-note');
+	await expect(note).toBeVisible();
+	await expect(note).toContainText('Post-acceptance line edits closed');
+});
+
+test('gate-closed note hidden for VENDOR', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, VENDOR_USER, po);
+	await mockMilestonesWith(page, MILESTONE_FIXTURE_TWO_POSTED);
+
+	await page.goto(`/po/${PO_ID}`);
+	await expect(page.getByTestId('po-detail-header')).toBeVisible();
+	await expect(page.getByTestId('po-post-accept-gate-closed-note')).toHaveCount(0);
+});
+
+test('remove line server error renders inline below row', async ({ page }) => {
+	const po = makePO({ status: 'ACCEPTED', po_type: 'PROCUREMENT', line_items: TWO_LINE_ITEMS });
+	await setupDetailPage(page, SM_USER, po);
+	await page.route(`**/api/v1/po/${PO_ID}/lines/PART-001`, (route) => {
+		if (route.request().method() === 'DELETE') {
+			route.fulfill({
+				status: 409,
+				contentType: 'application/json',
+				body: JSON.stringify({ detail: 'Cannot remove: invoice INV-1 references this line' })
+			});
+		} else {
+			route.continue();
+		}
+	});
+
+	await page.goto(`/po/${PO_ID}`);
+	await page.getByTestId('po-accepted-remove-PART-001').click();
+
+	const error = page.getByTestId('po-accepted-error-PART-001');
+	await expect(error).toBeVisible();
+	await expect(error).toContainText('Cannot remove: invoice INV-1 references this line');
+	// Error scoped to the row that failed; the other row carries no error block.
+	await expect(page.getByTestId('po-accepted-error-PART-002')).toHaveCount(0);
+});
