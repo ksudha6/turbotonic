@@ -306,8 +306,57 @@ async function setupEditPage(
 			route.continue();
 		}
 	});
-	await page.route(`**/api/v1/products/${productPayload.id}/packaging-specs`, (route) => {
-		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	// listPackagingSpecs hits /api/v1/packaging-specs/?product_id=... per api.ts:458.
+	await page.route('**/api/v1/packaging-specs/**', (route) => {
+		if (route.request().method() === 'GET') {
+			route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+		} else {
+			route.continue();
+		}
+	});
+}
+
+const SPEC_PENDING = {
+	id: 'spec-1',
+	product_id: 'prod-edit-1',
+	marketplace: 'AMAZON',
+	spec_name: 'FNSKU Label',
+	description: 'Apply FNSKU on each unit',
+	requirements_text: '2x1 inch label, white background',
+	status: 'PENDING',
+	created_at: '2026-04-01T00:00:00+00:00',
+	updated_at: '2026-04-01T00:00:00+00:00'
+};
+
+const SPEC_COLLECTED = {
+	id: 'spec-2',
+	product_id: 'prod-edit-1',
+	marketplace: 'WALMART',
+	spec_name: 'Outer Carton',
+	description: 'Carton dimensions',
+	requirements_text: 'Max 24in',
+	status: 'COLLECTED',
+	created_at: '2026-04-01T00:00:00+00:00',
+	updated_at: '2026-04-01T00:00:00+00:00'
+};
+
+async function setupEditPageWithSpecs(
+	page: import('@playwright/test').Page,
+	specsPayload: object[]
+) {
+	await setupEditPage(page);
+	// Override packaging-specs catch-all (registered last → highest LIFO priority).
+	await page.route('**/api/v1/packaging-specs/**', (route) => {
+		const method = route.request().method();
+		if (method === 'GET') {
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(specsPayload)
+			});
+		} else {
+			route.continue();
+		}
 	});
 }
 
@@ -453,6 +502,158 @@ test('remove qualification flow: Remove deletes row', async ({ page }) => {
 	await expect(panel.getByTestId('product-qualification-row-qt-iso')).toBeVisible();
 	await panel.getByTestId('product-qualification-remove-qt-iso').click();
 	await expect(panel.getByTestId('product-qualification-row-qt-iso')).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
+// Iter 093 — packaging specs panel on `/products/[id]/edit`
+// ---------------------------------------------------------------------------
+
+test('packaging panel mounts with empty state when no specs', async ({ page }) => {
+	await setupEditPage(page);
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	const panel = page.getByTestId('product-packaging-panel');
+	await expect(panel).toBeVisible();
+	await expect(panel).toContainText('No packaging specs defined yet.');
+});
+
+test('packaging panel groups specs by marketplace with status pills', async ({ page }) => {
+	await setupEditPageWithSpecs(page, [SPEC_PENDING, SPEC_COLLECTED]);
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	const panel = page.getByTestId('product-packaging-panel');
+	await expect(panel).toBeVisible();
+	await expect(panel).toContainText('AMAZON');
+	await expect(panel).toContainText('WALMART');
+	await expect(panel.getByTestId(`product-packaging-row-${SPEC_PENDING.id}`)).toContainText(
+		SPEC_PENDING.spec_name
+	);
+	await expect(panel.getByTestId(`product-packaging-row-status-${SPEC_PENDING.id}`)).toContainText(
+		'PENDING'
+	);
+	await expect(panel.getByTestId(`product-packaging-row-status-${SPEC_COLLECTED.id}`)).toContainText(
+		'COLLECTED'
+	);
+});
+
+test('packaging add flow inserts row and auto-closes form', async ({ page }) => {
+	await setupEditPage(page);
+	const NEW_SPEC = {
+		id: 'spec-new',
+		product_id: PRODUCT_WITH_QUAL.id,
+		marketplace: 'EBAY',
+		spec_name: 'Polybag',
+		description: '',
+		requirements_text: '',
+		status: 'PENDING',
+		created_at: '2026-04-29T00:00:00+00:00',
+		updated_at: '2026-04-29T00:00:00+00:00'
+	};
+	await page.route('**/api/v1/packaging-specs/**', (route) => {
+		const method = route.request().method();
+		if (method === 'POST') {
+			route.fulfill({
+				status: 201,
+				contentType: 'application/json',
+				body: JSON.stringify(NEW_SPEC)
+			});
+		} else if (method === 'GET') {
+			route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+		} else {
+			route.continue();
+		}
+	});
+
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	const panel = page.getByTestId('product-packaging-panel');
+	await panel.getByTestId('product-packaging-add-trigger').click();
+	await expect(panel.getByTestId('product-packaging-add-form')).toBeVisible();
+
+	await panel.getByTestId('product-packaging-add-marketplace').fill(NEW_SPEC.marketplace);
+	await panel.getByTestId('product-packaging-add-spec-name').fill(NEW_SPEC.spec_name);
+	await panel.getByTestId('product-packaging-add-submit').click();
+
+	await expect(panel.getByTestId(`product-packaging-row-${NEW_SPEC.id}`)).toBeVisible();
+	await expect(panel.getByTestId('product-packaging-add-form')).toHaveCount(0);
+});
+
+test('packaging add flow surfaces server error inline', async ({ page }) => {
+	await setupEditPage(page);
+	await page.route('**/api/v1/packaging-specs/**', (route) => {
+		const method = route.request().method();
+		if (method === 'POST') {
+			route.fulfill({
+				status: 500,
+				contentType: 'application/json',
+				body: JSON.stringify({ detail: 'boom' })
+			});
+		} else if (method === 'GET') {
+			route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+		} else {
+			route.continue();
+		}
+	});
+
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	const panel = page.getByTestId('product-packaging-panel');
+	await panel.getByTestId('product-packaging-add-trigger').click();
+	await panel.getByTestId('product-packaging-add-marketplace').fill('AMAZON');
+	await panel.getByTestId('product-packaging-add-spec-name').fill('FNSKU');
+	await panel.getByTestId('product-packaging-add-submit').click();
+
+	await expect(panel.getByTestId('product-packaging-add-error')).toBeVisible();
+	await expect(panel.getByTestId('product-packaging-add-form')).toBeVisible();
+});
+
+test('packaging delete flow removes row when confirm accepted', async ({ page }) => {
+	await setupEditPageWithSpecs(page, [SPEC_PENDING]);
+	await page.route(`**/api/v1/packaging-specs/${SPEC_PENDING.id}`, (route) => {
+		if (route.request().method() === 'DELETE') {
+			route.fulfill({ status: 204, contentType: 'application/json', body: '' });
+		} else {
+			route.continue();
+		}
+	});
+	page.on('dialog', (dialog) => dialog.accept());
+
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	const panel = page.getByTestId('product-packaging-panel');
+	await expect(panel.getByTestId(`product-packaging-row-${SPEC_PENDING.id}`)).toBeVisible();
+	await panel.getByTestId(`product-packaging-row-delete-${SPEC_PENDING.id}`).click();
+
+	await expect(panel.getByTestId(`product-packaging-row-${SPEC_PENDING.id}`)).toHaveCount(0);
+});
+
+test('packaging delete flow keeps row when confirm dismissed', async ({ page }) => {
+	await setupEditPageWithSpecs(page, [SPEC_PENDING]);
+	let deleteCalled = false;
+	await page.route(`**/api/v1/packaging-specs/${SPEC_PENDING.id}`, (route) => {
+		if (route.request().method() === 'DELETE') {
+			deleteCalled = true;
+			route.fulfill({ status: 204, contentType: 'application/json', body: '' });
+		} else {
+			route.continue();
+		}
+	});
+	page.on('dialog', (dialog) => dialog.dismiss());
+
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	const panel = page.getByTestId('product-packaging-panel');
+	await panel.getByTestId(`product-packaging-row-delete-${SPEC_PENDING.id}`).click();
+
+	await expect(panel.getByTestId(`product-packaging-row-${SPEC_PENDING.id}`)).toBeVisible();
+	expect(deleteCalled).toBe(false);
+});
+
+test('packaging delete button hidden on COLLECTED specs', async ({ page }) => {
+	await setupEditPageWithSpecs(page, [SPEC_COLLECTED]);
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	const panel = page.getByTestId('product-packaging-panel');
+	await expect(panel.getByTestId(`product-packaging-row-${SPEC_COLLECTED.id}`)).toBeVisible();
+	await expect(
+		panel.getByTestId(`product-packaging-row-delete-${SPEC_COLLECTED.id}`)
+	).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------------------
