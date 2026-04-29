@@ -121,7 +121,10 @@
 | Milestone Update | Value object recording a milestone post (milestone, posted_at). Append-only child of Purchase Order. | Production |
 | Milestone Order Enforcement | Validation that the proposed milestone is the next in the fixed sequence. Rejects out-of-order, duplicate, and beyond-terminal posts. | Production |
 | Current Milestone | The latest posted milestone for a PO. Null when no milestones exist. Exposed on the PO list as a read model field via subquery join. | Production |
-| Overdue Production | A PO whose latest milestone has exceeded its time threshold: 7 days for RAW_MATERIALS and PRODUCTION_STARTED, 3 days for QC_PASSED and READY_FOR_SHIPMENT. SHIPPED is never overdue. Surfaced on the dashboard. | Production |
+| Overdue Production | A PO whose latest milestone has exceeded its time threshold: 7 days for RAW_MATERIALS and PRODUCTION_STARTED, 3 days for QC_PASSED and READY_FOR_SHIPMENT. SHIPPED is never overdue. Surfaced on the dashboard and on the PO detail Production Status timeline. | Production |
+| Milestone Overdue Threshold | Per-milestone day count after which the latest posted milestone is considered overdue. Single-sourced in `backend/src/domain/milestone.py` as `MILESTONE_OVERDUE_THRESHOLDS`. Imported by dashboard and milestone routers. | Production |
+| Is Overdue | Boolean field on `MilestoneResponse`. True only for the latest posted milestone when `(now - posted_at).days > threshold`. Earlier milestones in the response always carry False. | Production |
+| Days Overdue | Integer field on `MilestoneResponse`. None for SHIPPED (terminal); negative when within threshold; positive when overdue. Returned alongside `is_overdue` per row. | Production |
 
 ## Activity and Notifications
 
