@@ -297,9 +297,10 @@ test('VENDOR on PO detail (PENDING) sees Accept plus per-line negotiation contro
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(REF_DATA) });
 	});
 	await page.goto('/po/po-1');
-	await page.waitForSelector('h1');
-	await expect(page.locator('.actions').getByRole('button', { name: 'Accept' })).toBeVisible();
-	await expect(page.locator('.actions').getByRole('button', { name: 'Reject' })).toHaveCount(0);
+	await page.getByTestId('po-detail-header').waitFor();
+	// Iter 077: Accept lives in the PoActionRail testid scope.
+	const rail = page.getByTestId('po-action-rail').first();
+	await expect(rail.getByTestId('po-action-accept')).toBeVisible();
 	await expect(page.locator('[data-testid="modify-btn-P-1"]')).toBeVisible();
 	await expect(page.locator('[data-testid="submit-response-bar"]')).toBeVisible();
 });
@@ -316,9 +317,11 @@ test('ADMIN on PO detail (DRAFT) has same buttons as SM', async ({ page }) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(REF_DATA) });
 	});
 	await page.goto('/po/po-1');
-	await page.waitForSelector('h1');
-	await expect(page.getByRole('link', { name: 'Edit' })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Submit' })).toBeVisible();
+	await page.getByTestId('po-detail-header').waitFor();
+	// Iter 077: Edit and Submit live on the PoActionRail; Edit is now a button.
+	const rail = page.getByTestId('po-action-rail').first();
+	await expect(rail.getByTestId('po-action-edit')).toBeVisible();
+	await expect(rail.getByTestId('po-action-submit')).toBeVisible();
 });
 
 test('VENDOR on PO detail (ACCEPTED) sees Create Invoice button', async ({ page }) => {

@@ -174,10 +174,14 @@ test('draft PO shows Edit and Submit buttons', async ({ page }) => {
 	});
 
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('h1');
+	await page.getByTestId('po-detail-header').waitFor();
 
-	await expect(page.locator('a[href*="/edit"]')).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Submit' })).toBeVisible();
+	// Iter 077: Edit and Submit live inside the action rail testids; the rail
+	// renders both inline (>=768px) and sticky-bottom (<768px) so .first() picks
+	// the one that's visible at the current viewport.
+	const rail = page.getByTestId('po-action-rail').first();
+	await expect(rail.getByTestId('po-action-edit')).toBeVisible();
+	await expect(rail.getByTestId('po-action-submit')).toBeVisible();
 });
 
 test('pending PO shows Accept button and per-line negotiation controls', async ({ page }) => {
@@ -201,11 +205,12 @@ test('pending PO shows Accept button and per-line negotiation controls', async (
 	});
 
 	await page.goto(`/po/${PO_ID}`);
-	await page.waitForSelector('h1');
+	await page.getByTestId('po-detail-header').waitFor();
 
-	await expect(page.locator('.actions').getByRole('button', { name: 'Accept' })).toBeVisible();
+	// Iter 077: Accept is the primary action on the rail for VENDOR + PENDING.
+	const rail = page.getByTestId('po-action-rail').first();
+	await expect(rail.getByTestId('po-action-accept')).toBeVisible();
 	// Reject is removed in iter 056/057. Per-line Modify and Remove take its place.
-	await expect(page.locator('.actions').getByRole('button', { name: 'Reject' })).toHaveCount(0);
 	await expect(page.locator('[data-testid="modify-btn-PART-001"]')).toBeVisible();
 });
 
@@ -332,7 +337,7 @@ test('create PO form rejects quantity <= 0', async ({ page }) => {
 // with line-level modify / accept / remove / submit-response and brings back lifecycle coverage.
 
 
-test('download PDF button is visible for every PO status', async ({ page }) => {
+test('download PDF button is reachable for every PO status', async ({ page }) => {
 	await page.route('**/api/v1/po/*/invoices', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
 	});
@@ -346,12 +351,22 @@ test('download PDF button is visible for every PO status', async ({ page }) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
 	});
 
+	// Iter 077: Download PDF lives on the action rail. When primary actions are
+	// present it sits in the overflow menu; for read-only roles it renders solo.
+	// SM is the beforeEach default -- DRAFT/REJECTED/REVISED expose primary
+	// actions, so we open the overflow first; ACCEPTED/PENDING render no SM
+	// primary so PDF is solo (or in PENDING's case the rail is empty for SM).
 	for (const status of ['DRAFT', 'PENDING', 'ACCEPTED', 'REJECTED', 'REVISED']) {
 		const po = makePO(status);
 		await mockDetail(page, po);
 		await page.goto(`/po/${PO_ID}`);
-		await page.waitForSelector('h1');
-		await expect(page.getByRole('button', { name: 'Download PDF' })).toBeVisible();
+		await page.getByTestId('po-detail-header').waitFor();
+		const rail = page.getByTestId('po-action-rail').first();
+		const overflow = rail.getByTestId('po-action-overflow');
+		if ((await overflow.count()) > 0) {
+			await overflow.click();
+		}
+		await expect(rail.getByTestId('po-action-download-pdf')).toBeVisible();
 	}
 });
 

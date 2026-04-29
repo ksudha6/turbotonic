@@ -21,6 +21,11 @@
 			page.url.pathname === '/po' ||
 			page.url.pathname.startsWith('/po/')
 	);
+	// Note: /po and /po/* (including pre-revamp /po/new and /po/[id]/edit) all
+	// hide the pre-revamp top nav. New PO and Edit PO live outside the (nexus)
+	// shell until Tier 5 revamps the create/edit flow; they own their own
+	// layout.
+
 
 	async function handleLogout() {
 		try {
