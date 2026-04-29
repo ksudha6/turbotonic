@@ -58,4 +58,4 @@ None. The new endpoints are simple gate + lookup; the eleven permanent tests cov
 
 ## Notes
 
-(populated at iteration close)
+The dev quick-login surface is gated by the `DEV_AUTH=1` env var; when unset, both endpoints raise `HTTPException(404, "Not found")` which is indistinguishable from a non-existent route, so production deployments that never set the flag expose nothing. The seeded users alice/bob/carol/dave/erin/frank are listed alphabetically by username for stable rendering. The login redirect respects the `?redirect=` query param so deep-link entry points survive the quick-login round trip. This is the surface that enabled the cross-role visual verification used in iter 077 close. Sonnet's first dispatch bundled the primitive label/aria-label retrofit into the same commit by mistake; that work was correct and tested but wrong scope, so it was split out into iter 080 at commit time with no work lost. Future Sonnet dispatches need an explicit scope-fence in the prompt to prevent backlog items from being silently absorbed into the active iter.

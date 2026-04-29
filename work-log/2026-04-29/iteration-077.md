@@ -60,4 +60,4 @@ None. The fifteen permanent tests cover the role × status matrix verified again
 
 ## Notes
 
-(populated at iteration close)
+The Tier 2 mock at `/ui-demo/po-detail` (committed at e2fe699 ahead of this iter) was the verification surface for the four reusable components; the production page at `(nexus)/po/[id]/+page.svelte` adopted them without further design rounds. The legacy line items, milestone timeline, invoices, rejection history, and activity sections stayed in their pre-revamp shape on purpose; they belong to Tier 3+ scope and would have ballooned the iter past its scope-fence. Iter 077 ran in parallel with iter 080 (primitive label/aria-label retrofit) with zero file overlap: this iter touched `routes/(nexus)/po/[id]/`, `routes/+layout.svelte`, and `frontend/tests/po-detail.spec.ts`; iter 080 touched `frontend/src/lib/ui/` and `primitives.spec.ts`. The dev quick-login from iter 079 enabled cross-role visual verification of the new action rail without re-registering passkeys per role.
