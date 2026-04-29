@@ -100,4 +100,21 @@ None. The 7 backend + 17 frontend permanent tests cover the role × gate × mile
 
 ## Notes
 
-[populated at close]
+Tier 4 closed two of the four remaining pre-revamp blocks on `(nexus)/po/[id]`: the ACCEPTED-PO line items table (G-18) and the production status timeline (G-19). The other two — invoices table and rejection history / activity timeline / metadata grid — are Tier 5.
+
+Three decisions worth pinning:
+
+1. **Hide-when-gate-closed beats disable-with-tooltip.** Add Line and per-line Remove are now omitted entirely when the post-acceptance gate is closed; SM/ADMIN see one panel-level note `"Post-acceptance line edits closed: advance paid or first milestone posted."` instead. Vendors never had the affordance and so never see the note. The legacy disabled-button-with-attribute-tooltip pattern lied about what was reachable; the new shape removes the falsehood.
+2. **HS code and UoM stayed as `Input`, not `Select`.** `ReferenceData` does not carry HS-code or UoM lists — the existing `POForm.svelte` validates HS codes via regex and accepts free-form UoM. The Add Line dialog matches that pattern. Country of origin uses the reference-data `Select` since `referenceData.countries` exists. If we ever introduce reference-data lists for UoM or HS code, the dialog gains the `Select` swap automatically.
+3. **`MILESTONE_OVERDUE_THRESHOLDS` is now single-sourced in `backend/src/domain/milestone.py`.** Dashboard router and milestone router both import the same dict, and `compute_days_overdue` is the only place the per-milestone threshold subtraction lives. The frontend mirrors `MILESTONE_ORDER` + labels in `frontend/src/lib/types.ts` for client-side step mapping; the threshold itself stays server-side and comes back attached to each `MilestoneResponse` as `is_overdue` / `days_overdue` fields. Earlier milestones in the response are always `is_overdue=False, days_overdue=None` — the "stuck" stage is always the most recent posted one.
+
+Tier 4 also retires `frontend/src/lib/components/MilestoneTimeline.svelte` (189 lines deleted) and consolidates the post-milestone affordance into `PoMilestoneTimelinePanel`, which now derives the next-expected milestone internally and passes it as the typed `ProductionMilestone` enum value to the page's `handlePostMilestone`. The page no longer owns any milestone-form state.
+
+Test growth: 619 → 629 backend pytest (+10), 206 → 223 Playwright (+17 plus +1 primitives Timeline overdue marker). Existing tests required no spec migrations — `is_overdue`/`days_overdue` are additive defaults, and no Playwright spec previously targeted the legacy `add-line-btn` / `remove-line-{pn}` / `MilestoneTimeline` selectors.
+
+Domain terms emerging from this iter (proposed additions to `docs/ddd-vocab.md` pending confirmation):
+- **Milestone Overdue Threshold** — per-milestone day count after which the latest posted milestone is considered overdue. Single-sourced in `backend/src/domain/milestone.py` as `MILESTONE_OVERDUE_THRESHOLDS`. Imported by dashboard and milestone routers.
+- **Is Overdue** — boolean on `MilestoneResponse`. True only for the latest posted milestone when `(now - posted_at).days > threshold`. Earlier milestones always carry False.
+- **Days Overdue** — integer days past threshold on `MilestoneResponse`. None for SHIPPED (terminal), negative when within threshold, positive when overdue. Returned alongside `is_overdue` per row.
+
+Backlog opens: button-group primitive (carried from iter 081 — Tier 4's Add Line dialog footer composes Buttons inline rather than reusing a primitive); `Dialog` primitive (also carried from iter 081 — Tier 4's `PoAddLineDialog` follows the iter-081 modal pattern, not a shared primitive). These remain backlog because neither blocks Tier 5.
