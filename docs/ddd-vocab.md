@@ -135,6 +135,7 @@
 | Target Role | The intended audience for a notification: SM (supply manager) or VENDOR. Nullable until auth is implemented. Stored per entry for future filtering. | Notifications |
 | Milestone Overdue | A DELAYED activity entry generated when a production milestone exceeds its time threshold. One entry per PO per milestone, idempotent. Generated on dashboard load using existing overdue thresholds. | Notifications |
 | Event Metadata | Static mapping from each ActivityEvent to its NotificationCategory and TargetRole. Determines how events are categorized and routed. | Notifications |
+| PO_DOCUMENT_UPLOADED | LIVE-category activity event recorded on every PO document attachment. EVENT_METADATA target_role is `None`; the router supplies a per-call override (SM for PROCUREMENT, FREIGHT_MANAGER for OPEX) per the iter 056 `_counterpart_target` pattern. No corresponding DELETED event. | Activity |
 
 ## Access Control
 
@@ -146,8 +147,11 @@
 
 | Term | Definition | Bounded Context |
 |------|-----------|-----------------|
-| FileMetadata | Metadata record for an uploaded file: entity association (type + id), file classification (file_type), storage path, original name, content type, size. Not the file itself. Aggregate root of the document storage module. | Documents |
+| FileMetadata | Metadata record for an uploaded file: entity association (type + id), file classification (file_type), storage path, original name, content type, size, uploaded_by (since iter 084). Not the file itself. Aggregate root of the document storage module. | Documents |
 | Entity Attachment | The pattern of associating a file to a domain entity via (entity_type, entity_id). Free-text entity_type avoids schema changes as new attachment targets are added. | Documents |
+| POAttachmentType | Enum partitioning the `file_type` vocabulary by PO type. PROCUREMENT POs accept `SIGNED_PO`, `COUNTERSIGNED_PO`, `AMENDMENT`, `ADDENDUM`; OPEX POs accept `SIGNED_AGREEMENT`, `AMENDMENT`, `ADDENDUM`. `validate_attachment_type` is the single source of truth. | Documents |
+| PO Attachment | A FileMetadata row with `entity_type='PO'`. Subject to PO-specific role + ownership + PO-type checks layered above the iter 035 generic file storage via the `/api/v1/po/{po_id}/documents/...` scoped endpoints. | Procurement |
+| Attachment Vocabulary Partition | Pattern of constraining the allowed `file_type` set per parent-entity classification (here, PO type). Domain layer carries the partition (`PROCUREMENT_ATTACHMENT_TYPES` / `OPEX_ATTACHMENT_TYPES` frozensets); router rejects mismatches with 422. | Documents |
 | Marketplace | Target sales channel for a PO: AMZ, 3PL_1, 3PL_2, 3PL_3. Validated against reference data. Optional (nullable). Determines packaging and certification requirements downstream. | Procurement |
 | Manufacturing Address | Physical location where a product is manufactured. Stored on Product. Used by certificates of origin and compliance documents. | Procurement |
 | Vendor Account Details | Bank/payment information for a vendor. Free-text. Used by shipping and export documents. | Procurement |

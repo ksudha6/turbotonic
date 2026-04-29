@@ -147,4 +147,20 @@ When I (any role) view a PO that has documents attached, I want the attachment l
 
 ## Notes
 
-(populated at iteration close)
+Cross-vendor VENDOR returns 404, not 403. The permission helpers (`can_view_po_attachments` / `can_manage_po_attachments`) return False for cross-vendor and would naturally produce 403, which is the right shape for the frontend mirror. To preserve the iter 032 invariant (don't leak PO existence to vendor B), the router calls `check_vendor_access(user, po.vendor_id)` between PO fetch and the permission helper — that helper raises 404 for VENDOR mismatches and is a no-op for everyone else. Two-stage gate: 404 hides the PO from cross-vendor VENDOR; 403 denies role-deny within the vendor's own scope.
+
+The backend `files.uploaded_by` column is nullable and added via idempotent `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` per the iter 044/060 pattern. Existing certificate / packaging / shipment uploads pre-dating this iter have `uploaded_by = NULL`, so the PO list endpoint's username denormalization tolerates a None value (`uploaded_by_username = None`). The generic `/api/v1/files` DTOs do NOT expose the new field — only the new PO-scoped DTOs do, so the four other entity-type consumers (CERTIFICATE / PACKAGING / SHIPMENT) keep their existing response shape and no test churn.
+
+The list endpoint denormalizes `uploaded_by_username` via a single batch query (`WHERE id = ANY($1)` keyed on the distinct uploader ids in the result set). No N+1. Iter 083's PoActivityPanel paginates client-side over a single fetch; the same pattern applies here, with the same revisit-when-rows-exceed-100 caveat.
+
+`PO_DOCUMENT_UPLOADED` is registered with `EVENT_METADATA = (LIVE, None)`. The None target_role lets the router pass a per-call override (SM for PROCUREMENT, FREIGHT_MANAGER for OPEX) per the `_counterpart_target` precedent from iter 056 and the `target_role=` kwarg pattern in [activity_repository.py](backend/src/activity_repository.py). No new email template; `NotificationDispatcher` is not invoked.
+
+`PoDocumentsPanel` gained a `mockFiles?: POFileListItem[] | null` bypass prop matching iter 083's `PoActivityPanel.mockEntries` precedent. The `/ui-demo/po-documents` route uses it so the panel renders offline without intercepting `window.fetch`. The route still page-scopes a `globalThis.fetch` patch for the upload + delete demo flows, since those are imperative actions the panel triggers — that patch is restored on cleanup. A cleaner shared mock-fetch helper for the ui-demo gallery would reduce that one-off; logged to backlog.
+
+Frontend permission helpers `canViewPOAttachments` / `canManagePOAttachments` take `(user, po)` rather than the existing `(role)` shape used by every prior helper in [permissions.ts](frontend/src/lib/permissions.ts). The OPEX-vs-PROCUREMENT branch needs `po.po_type` and the VENDOR scope check needs `po.vendor_id`, so `role` alone is insufficient. Helper naming stays in the existing `canX` family.
+
+DataTable hand-rolled `<table>` again. Same precedent as iter 076 `PoListTable` and iter 083 `PoInvoicesPanel`: DataTable's `render` returns `string | number` and the Delete column needs a Button. Promoting snippet cells to the shared primitive stays on backlog.
+
+Seed PDFs are generated in-process via ReportLab (Path A, ≤5KB each) rather than committed as binary fixtures. The first ACCEPTED PROCUREMENT PO gets a SIGNED_PO; the first OPEX PO gets a SIGNED_AGREEMENT; both `uploaded_by = users[0].id` (the seed admin).
+
+Test count grew by more than estimated. The endpoint permission matrix collapsed cleanly into 28 parametrized rows (4 endpoints × 7 roles × 2 PO types — minus redundancies), and the spec naturally expanded the file-type vocabulary tests to one per allowed/forbidden cell. Final: 67 new pytest (629 → 696) and 18 new Playwright (239 → 257) — well beyond the iter's "~16" / "~10" estimates but the spec called the exercise "table-driven" so the parametrize arithmetic was always going to dominate.
