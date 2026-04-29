@@ -26,7 +26,7 @@
 		submitResponse
 	} from '$lib/api';
 	import type { ModifyLineFields } from '$lib/api';
-	import CreateInvoiceDialog from '$lib/components/CreateInvoiceDialog.svelte';
+	import InvoiceCreateModal from '$lib/invoice/InvoiceCreateModal.svelte';
 	import PoLineNegotiationTable from '$lib/po/PoLineNegotiationTable.svelte';
 	import PoMetadataPanels from '$lib/po/PoMetadataPanels.svelte';
 	import PoRejectionHistoryPanel from '$lib/po/PoRejectionHistoryPanel.svelte';
@@ -581,7 +581,7 @@
 			{/if}
 
 			{#if showInvoiceDialog}
-				<CreateInvoiceDialog
+				<InvoiceCreateModal
 					lines={remainingLines}
 					onConfirm={handleInvoiceConfirm}
 					onCancel={() => (showInvoiceDialog = false)}
