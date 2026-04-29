@@ -21,7 +21,9 @@
 			page.url.pathname === '/po' ||
 			page.url.pathname.startsWith('/po/') ||
 			page.url.pathname === '/invoices' ||
-			page.url.pathname.startsWith('/invoice/')
+			page.url.pathname.startsWith('/invoice/') ||
+			page.url.pathname === '/vendors' ||
+			page.url.pathname.startsWith('/vendors/')
 	);
 
 
