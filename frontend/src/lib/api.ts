@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, CertWarning, DashboardData, DashboardSummary, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneResponse, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentUpdate, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, Certificate, CertificateCreateInput, CertificateListItem, CertWarning, DashboardData, DashboardSummary, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneResponse, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentUpdate, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -501,6 +501,39 @@ export async function deletePackagingSpec(id: string): Promise<void> {
 		const body = await res.json().catch(() => ({}));
 		throw new Error(body.detail ?? `DELETE /api/v1/packaging-specs/${id} failed: ${res.status}`);
 	}
+}
+
+// Iter 094: Certificates (backend iter 038)
+export function listCertificates(productId: string, targetMarket?: string): Promise<CertificateListItem[]> {
+	const query = new URLSearchParams({ product_id: productId });
+	if (targetMarket) query.set('target_market', targetMarket);
+	return apiGet<CertificateListItem[]>(`/api/v1/certificates/?${query.toString()}`);
+}
+
+export function createCertificate(data: CertificateCreateInput): Promise<Certificate> {
+	return apiPost<Certificate>('/api/v1/certificates/', data);
+}
+
+export async function uploadCertificateDocument(certId: string, file: File): Promise<Certificate> {
+	const form = new FormData();
+	form.append('file', file);
+	const res = await fetch(`/api/v1/certificates/${certId}/document`, {
+		method: 'POST',
+		body: form,
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail ?? `POST /api/v1/certificates/${certId}/document failed: ${res.status}`);
+	}
+	return res.json() as Promise<Certificate>;
 }
 
 // Iter 044: Shipment API

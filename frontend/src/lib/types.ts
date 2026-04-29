@@ -475,6 +475,51 @@ export interface PackagingSpecUpdate {
 	requirements_text?: string;
 }
 
+// Iter 094: certificates (backend iter 038).
+// Status is a string union — EXPIRED is computed server-side when expiry_date < now.
+export type CertificateStatus = 'PENDING' | 'VALID' | 'EXPIRED';
+
+export interface CertificateListItem {
+	id: string;
+	product_id: string;
+	qualification_type_id: string;
+	cert_number: string;
+	issuer: string;
+	target_market: string;
+	status: CertificateStatus;
+	expiry_date: string | null;
+	document_id: string | null;
+}
+
+export interface Certificate {
+	id: string;
+	product_id: string;
+	qualification_type_id: string;
+	cert_number: string;
+	issuer: string;
+	testing_lab: string;
+	test_date: string | null;
+	issue_date: string;
+	expiry_date: string | null;
+	target_market: string;
+	document_id: string | null;
+	status: CertificateStatus;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface CertificateCreateInput {
+	product_id: string;
+	qualification_type_id: string;
+	cert_number: string;
+	issuer: string;
+	testing_lab?: string;
+	test_date?: string | null;
+	issue_date: string;
+	expiry_date?: string | null;
+	target_market: string;
+}
+
 // Iter 039: quality gate advisory warnings returned on PO submit/resubmit.
 export type CertWarningReason = 'MISSING' | 'EXPIRED';
 

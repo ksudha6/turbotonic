@@ -11,7 +11,10 @@
 		removeQualification,
 		listPackagingSpecs,
 		createPackagingSpec,
-		deletePackagingSpec
+		deletePackagingSpec,
+		listCertificates,
+		createCertificate,
+		uploadCertificateDocument
 	} from '$lib/api';
 	import { canManageProducts } from '$lib/permissions';
 	import type {
@@ -19,6 +22,7 @@
 		VendorListItem,
 		QualificationTypeListItem,
 		PackagingSpec,
+		CertificateListItem,
 		UserRole
 	} from '$lib/types';
 	import AppShell from '$lib/ui/AppShell.svelte';
@@ -30,6 +34,9 @@
 	import ProductPackagingSpecsPanel, {
 		type PackagingSpecAddFields
 	} from '$lib/product/ProductPackagingSpecsPanel.svelte';
+	import ProductCertificatesPanel, {
+		type CertificateAddFields
+	} from '$lib/product/ProductCertificatesPanel.svelte';
 
 	const ROLE_LABEL: Record<UserRole, string> = {
 		ADMIN: 'Administrator',
@@ -57,6 +64,11 @@
 	let addSpecError: string = $state('');
 	let addingSpec: boolean = $state(false);
 
+	let certs: CertificateListItem[] = $state([]);
+	let certsError: string = $state('');
+	let addCertError: string = $state('');
+	let addingCert: boolean = $state(false);
+
 	const user = $derived(appPage.data.user);
 	const role = $derived<UserRole>((user?.role as UserRole | undefined) ?? 'ADMIN');
 	const userName = $derived(user?.display_name ?? user?.username ?? 'Guest');
@@ -81,7 +93,7 @@
 			description = fetched.description;
 			manufacturingAddress = fetched.manufacturing_address;
 			currentQualifications = fetched.qualifications ?? [];
-			await loadSpecs(id);
+			await Promise.all([loadSpecs(id), loadCerts(id)]);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load product';
 		} finally {
@@ -94,6 +106,14 @@
 			specs = await listPackagingSpecs(productId);
 		} catch (err) {
 			specsError = err instanceof Error ? err.message : 'Failed to load packaging specs';
+		}
+	}
+
+	async function loadCerts(productId: string) {
+		try {
+			certs = await listCertificates(productId);
+		} catch (err) {
+			certsError = err instanceof Error ? err.message : 'Failed to load certificates';
 		}
 	}
 
@@ -168,6 +188,67 @@
 			specsError = err instanceof Error ? err.message : 'Failed to delete spec.';
 		}
 	}
+
+	async function handleAddCert(fields: CertificateAddFields) {
+		if (!product) return;
+		addCertError = '';
+		addingCert = true;
+		try {
+			const created = await createCertificate({
+				product_id: product.id,
+				qualification_type_id: fields.qualification_type_id,
+				cert_number: fields.cert_number,
+				issuer: fields.issuer,
+				testing_lab: fields.testing_lab,
+				issue_date: fields.issue_date,
+				expiry_date: fields.expiry_date,
+				test_date: fields.test_date,
+				target_market: fields.target_market
+			});
+			certs = [
+				...certs,
+				{
+					id: created.id,
+					product_id: created.product_id,
+					qualification_type_id: created.qualification_type_id,
+					cert_number: created.cert_number,
+					issuer: created.issuer,
+					target_market: created.target_market,
+					status: created.status,
+					expiry_date: created.expiry_date,
+					document_id: created.document_id
+				}
+			];
+		} catch (err) {
+			addCertError = err instanceof Error ? err.message : 'Failed to add certificate.';
+		} finally {
+			addingCert = false;
+		}
+	}
+
+	async function handleUploadCertDoc(certId: string, file: File) {
+		certsError = '';
+		try {
+			const updated = await uploadCertificateDocument(certId, file);
+			certs = certs.map((c) =>
+				c.id === certId
+					? {
+						id: updated.id,
+						product_id: updated.product_id,
+						qualification_type_id: updated.qualification_type_id,
+						cert_number: updated.cert_number,
+						issuer: updated.issuer,
+						target_market: updated.target_market,
+						status: updated.status,
+						expiry_date: updated.expiry_date,
+						document_id: updated.document_id
+					}
+					: c
+			);
+		} catch (err) {
+			throw err instanceof Error ? err : new Error('Failed to upload certificate document.');
+		}
+	}
 </script>
 
 <svelte:head>
@@ -214,6 +295,17 @@
 				adding={addingSpec}
 				on_add_spec={handleAddSpec}
 				on_delete_spec={handleDeleteSpec}
+			/>
+
+			<ProductCertificatesPanel
+				{certs}
+				qualifications={currentQualifications}
+				{canManage}
+				error={certsError}
+				addError={addCertError}
+				adding={addingCert}
+				on_add_cert={handleAddCert}
+				on_upload_doc={handleUploadCertDoc}
 			/>
 		</div>
 	{/if}

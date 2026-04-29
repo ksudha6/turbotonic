@@ -92,6 +92,7 @@ class CertificateListItem(BaseModel):
     target_market: str
     status: str
     expiry_date: datetime | None
+    document_id: str | None
 
 
 def certificate_to_response(cert: Certificate) -> CertificateResponse:
@@ -123,4 +124,5 @@ def certificate_to_list_item(cert: Certificate) -> CertificateListItem:
         target_market=cert.target_market,
         status=cert.display_status(),
         expiry_date=cert.expiry_date,
+        document_id=cert.document_id,
     )

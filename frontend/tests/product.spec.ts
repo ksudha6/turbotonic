@@ -54,6 +54,9 @@ test.beforeEach(async ({ page }) => {
 	await page.route('**/api/v1/packaging-specs**', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
 	});
+	await page.route('**/api/v1/certificates**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
 });
 
 // ---------------------------------------------------------------------------
@@ -308,6 +311,14 @@ async function setupEditPage(
 	});
 	// listPackagingSpecs hits /api/v1/packaging-specs/?product_id=... per api.ts:458.
 	await page.route('**/api/v1/packaging-specs/**', (route) => {
+		if (route.request().method() === 'GET') {
+			route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+		} else {
+			route.continue();
+		}
+	});
+	// listCertificates hits /api/v1/certificates/?product_id=... (iter 094).
+	await page.route('**/api/v1/certificates/**', (route) => {
 		if (route.request().method() === 'GET') {
 			route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
 		} else {
@@ -654,6 +665,245 @@ test('packaging delete button hidden on COLLECTED specs', async ({ page }) => {
 	await expect(
 		panel.getByTestId(`product-packaging-row-delete-${SPEC_COLLECTED.id}`)
 	).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
+// Iter 094 — certificates panel on `/products/[id]/edit`
+// ---------------------------------------------------------------------------
+
+const PRODUCT_WITH_QUAL_FOR_CERTS = {
+	...PRODUCT_WITH_QUAL,
+	qualifications: [
+		{ id: 'qt-iso', name: 'ISO 9001', target_market: 'AMZ', applies_to_category: 'GENERAL' }
+	]
+};
+
+const CERT_PENDING = {
+	id: 'cert-1',
+	product_id: PRODUCT_WITH_QUAL.id,
+	qualification_type_id: 'qt-iso',
+	cert_number: 'ISO-001',
+	issuer: 'BSI',
+	target_market: 'AMZ',
+	status: 'PENDING',
+	expiry_date: '2027-01-01T00:00:00+00:00',
+	document_id: null
+};
+
+const CERT_VALID = {
+	id: 'cert-2',
+	product_id: PRODUCT_WITH_QUAL.id,
+	qualification_type_id: 'qt-iso',
+	cert_number: 'ISO-002',
+	issuer: 'TUV',
+	target_market: 'AMZ',
+	status: 'VALID',
+	expiry_date: '2027-06-01T00:00:00+00:00',
+	document_id: 'file-cert-2'
+};
+
+const CERT_EXPIRED = {
+	id: 'cert-3',
+	product_id: PRODUCT_WITH_QUAL.id,
+	qualification_type_id: 'qt-iso',
+	cert_number: 'ISO-OLD',
+	issuer: 'BSI',
+	target_market: 'AMZ',
+	status: 'EXPIRED',
+	expiry_date: '2024-01-01T00:00:00+00:00',
+	document_id: 'file-cert-3'
+};
+
+async function setupEditPageWithCerts(
+	page: import('@playwright/test').Page,
+	certsPayload: object[],
+	productOverride: object = PRODUCT_WITH_QUAL_FOR_CERTS
+) {
+	await setupEditPage(page, productOverride);
+	// Override certificates catch-all with the supplied payload (LIFO last-write-wins).
+	await page.route('**/api/v1/certificates/**', (route) => {
+		const method = route.request().method();
+		if (method === 'GET') {
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(certsPayload)
+			});
+		} else {
+			route.continue();
+		}
+	});
+}
+
+test('certificates panel mounts with empty state when no certs', async ({ page }) => {
+	await setupEditPage(page, PRODUCT_WITH_QUAL_FOR_CERTS);
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	const panel = page.getByTestId('product-certificates-panel');
+	await expect(panel).toBeVisible();
+	await expect(panel).toContainText('No certificates uploaded yet.');
+});
+
+test('certificates panel groups certs by qualification with status pills', async ({ page }) => {
+	await setupEditPageWithCerts(page, [CERT_PENDING, CERT_VALID, CERT_EXPIRED]);
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	const panel = page.getByTestId('product-certificates-panel');
+	await expect(panel).toBeVisible();
+	await expect(panel).toContainText('ISO 9001');
+	await expect(panel.getByTestId(`product-certificates-row-${CERT_PENDING.id}`)).toContainText(
+		CERT_PENDING.cert_number
+	);
+	await expect(
+		panel.getByTestId(`product-certificates-row-status-${CERT_PENDING.id}`)
+	).toContainText('PENDING');
+	await expect(
+		panel.getByTestId(`product-certificates-row-status-${CERT_VALID.id}`)
+	).toContainText('VALID');
+	await expect(
+		panel.getByTestId(`product-certificates-row-status-${CERT_EXPIRED.id}`)
+	).toContainText('EXPIRED');
+});
+
+test('certificates add flow: trigger reveals form', async ({ page }) => {
+	await setupEditPage(page, PRODUCT_WITH_QUAL_FOR_CERTS);
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	const panel = page.getByTestId('product-certificates-panel');
+	await expect(panel.getByTestId('product-certificates-add-form')).toHaveCount(0);
+	await panel.getByTestId('product-certificates-add-trigger').click();
+	await expect(panel.getByTestId('product-certificates-add-form')).toBeVisible();
+	await expect(panel.getByTestId('product-certificates-add-qualification')).toBeVisible();
+	await expect(panel.getByTestId('product-certificates-add-cert-number')).toBeVisible();
+});
+
+test('certificates add flow: submit inserts row and auto-closes form', async ({ page }) => {
+	await setupEditPage(page, PRODUCT_WITH_QUAL_FOR_CERTS);
+	const NEW_CERT = {
+		id: 'cert-new',
+		product_id: PRODUCT_WITH_QUAL.id,
+		qualification_type_id: 'qt-iso',
+		cert_number: 'ISO-NEW-1',
+		issuer: 'BSI',
+		testing_lab: '',
+		test_date: null,
+		issue_date: '2026-04-01T00:00:00+00:00',
+		expiry_date: null,
+		target_market: 'AMZ',
+		document_id: null,
+		status: 'PENDING',
+		created_at: '2026-04-29T00:00:00+00:00',
+		updated_at: '2026-04-29T00:00:00+00:00'
+	};
+	await page.route('**/api/v1/certificates/', (route) => {
+		if (route.request().method() === 'POST') {
+			route.fulfill({
+				status: 201,
+				contentType: 'application/json',
+				body: JSON.stringify(NEW_CERT)
+			});
+		} else {
+			route.continue();
+		}
+	});
+
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	const panel = page.getByTestId('product-certificates-panel');
+	await panel.getByTestId('product-certificates-add-trigger').click();
+	await panel.getByTestId('product-certificates-add-qualification').selectOption('qt-iso');
+	await panel.getByTestId('product-certificates-add-cert-number').fill(NEW_CERT.cert_number);
+	await panel.getByTestId('product-certificates-add-issuer').fill(NEW_CERT.issuer);
+	await panel.getByTestId('product-certificates-add-issue-date').fill('2026-04-01');
+	await panel.getByTestId('product-certificates-add-submit').click();
+
+	await expect(panel.getByTestId(`product-certificates-row-${NEW_CERT.id}`)).toBeVisible();
+	await expect(panel.getByTestId('product-certificates-add-form')).toHaveCount(0);
+});
+
+test('certificates add flow: server error renders inline', async ({ page }) => {
+	await setupEditPage(page, PRODUCT_WITH_QUAL_FOR_CERTS);
+	await page.route('**/api/v1/certificates/', (route) => {
+		if (route.request().method() === 'POST') {
+			route.fulfill({
+				status: 500,
+				contentType: 'application/json',
+				body: JSON.stringify({ detail: 'boom' })
+			});
+		} else {
+			route.continue();
+		}
+	});
+
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	const panel = page.getByTestId('product-certificates-panel');
+	await panel.getByTestId('product-certificates-add-trigger').click();
+	await panel.getByTestId('product-certificates-add-qualification').selectOption('qt-iso');
+	await panel.getByTestId('product-certificates-add-cert-number').fill('X-001');
+	await panel.getByTestId('product-certificates-add-issuer').fill('BSI');
+	await panel.getByTestId('product-certificates-add-issue-date').fill('2026-04-01');
+	await panel.getByTestId('product-certificates-add-submit').click();
+
+	await expect(panel.getByTestId('product-certificates-add-error')).toBeVisible();
+	await expect(panel.getByTestId('product-certificates-add-form')).toBeVisible();
+});
+
+test('certificates add flow: blocks submit when required fields empty', async ({ page }) => {
+	await setupEditPage(page, PRODUCT_WITH_QUAL_FOR_CERTS);
+	let postCalled = false;
+	await page.route('**/api/v1/certificates/', (route) => {
+		if (route.request().method() === 'POST') {
+			postCalled = true;
+			route.fulfill({ status: 201, contentType: 'application/json', body: '{}' });
+		} else {
+			route.continue();
+		}
+	});
+
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	const panel = page.getByTestId('product-certificates-panel');
+	await panel.getByTestId('product-certificates-add-trigger').click();
+	await panel.getByTestId('product-certificates-add-submit').click();
+
+	await expect(panel).toContainText('Qualification is required.');
+	await expect(panel).toContainText('Cert number is required.');
+	await expect(panel).toContainText('Issuer is required.');
+	await expect(panel).toContainText('Issue date is required.');
+	expect(postCalled).toBe(false);
+});
+
+test('certificates upload PDF visible only when document_id is null', async ({ page }) => {
+	await setupEditPageWithCerts(page, [CERT_PENDING, CERT_VALID]);
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	const panel = page.getByTestId('product-certificates-panel');
+	await expect(panel.getByTestId(`product-certificates-row-upload-${CERT_PENDING.id}`)).toBeVisible();
+	await expect(
+		panel.getByTestId(`product-certificates-row-upload-${CERT_VALID.id}`)
+	).toHaveCount(0);
+});
+
+test('certificates upload PDF rejects oversize file client-side', async ({ page }) => {
+	await setupEditPageWithCerts(page, [CERT_PENDING]);
+	let postCalled = false;
+	await page.route(`**/api/v1/certificates/${CERT_PENDING.id}/document`, (route) => {
+		postCalled = true;
+		route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+	});
+
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	const panel = page.getByTestId('product-certificates-panel');
+
+	const oversize = Buffer.alloc(11 * 1024 * 1024, 0x25);
+	await panel.getByTestId(`product-certificates-row-upload-input-${CERT_PENDING.id}`).setInputFiles({
+		name: 'big.pdf',
+		mimeType: 'application/pdf',
+		buffer: oversize
+	});
+
+	await expect(
+		panel.getByTestId(`product-certificates-row-upload-error-${CERT_PENDING.id}`)
+	).toContainText('10MB');
+	expect(postCalled).toBe(false);
 });
 
 // ---------------------------------------------------------------------------
