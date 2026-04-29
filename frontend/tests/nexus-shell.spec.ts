@@ -48,6 +48,12 @@ test('nexus shell hides Vendors for VENDOR role', async ({ page }) => {
 });
 
 test('nexus shell redirects unauthenticated requests to /login', async ({ page }) => {
+	// Iter 079: /login fetches /api/v1/auth/dev-users on mount; mock the
+	// disabled state so the quick-login row stays hidden during this redirect
+	// assertion.
+	await page.route('**/api/v1/auth/dev-users', (route) =>
+		route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ detail: 'Not Found' }) })
+	);
 	await page.route('**/api/v1/auth/me', (route) =>
 		route.fulfill({ status: 401, contentType: 'application/json', body: '{}' })
 	);

@@ -84,6 +84,34 @@ export async function logout(): Promise<void> {
 	await throwOnError(res);
 }
 
+export type DevUser = {
+	username: string;
+	display_name: string;
+	role: string;
+};
+
+export async function getDevUsers(): Promise<DevUser[] | null> {
+	// 404 means the dev surface is disabled (DEV_AUTH not set on the backend).
+	// We return null so the login page can render the passkey form unchanged
+	// without logging or surfacing an error.
+	const res = await authFetch('/api/v1/auth/dev-users');
+	if (res.status === 404) {
+		return null;
+	}
+	await throwOnError(res);
+	return (await res.json()) as DevUser[];
+}
+
+export async function devLogin(username: string): Promise<{ user: User }> {
+	const res = await authFetch('/api/v1/auth/dev-login', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ username })
+	});
+	await throwOnError(res);
+	return res.json();
+}
+
 export async function me(): Promise<User | null> {
 	const res = await authFetch('/api/v1/auth/me');
 	if (res.status === 401) {

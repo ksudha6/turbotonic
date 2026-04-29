@@ -72,6 +72,21 @@ class UserRepository:
             UserRole.ADMIN.value, UserStatus.ACTIVE.value,
         )
 
+    async def list_active_users(self) -> list[User]:
+        # Returns every ACTIVE user ordered by username ascending. The dev
+        # quick-login endpoint (gated by DEV_AUTH) calls this to render one
+        # button per seeded user; deterministic ordering keeps the UI stable
+        # across runs.
+        rows = await self._conn.fetch(
+            """
+            SELECT * FROM users
+            WHERE status = $1
+            ORDER BY username
+            """,
+            UserStatus.ACTIVE.value,
+        )
+        return [_reconstruct(row) for row in rows]
+
     async def list_active_emails_by_roles(self, roles: tuple[str, ...]) -> list[str]:
         # Returns the non-null, non-empty emails of every ACTIVE user whose role is
         # in `roles`. The caller is the notification dispatcher resolving SM-targeted

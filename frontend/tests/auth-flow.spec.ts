@@ -18,6 +18,16 @@ const EMPTY_DASHBOARD = {
 	overdue_pos: []
 };
 
+// Iter 079: the /login page calls /api/v1/auth/dev-users on mount. In tests
+// where DEV_AUTH is not set on the backend the surface is off; we mock the
+// 404 so the quick-login row stays hidden and the page renders the existing
+// passkey form unchanged.
+async function mockDevUsersDisabled(page: import('@playwright/test').Page) {
+	await page.route('**/api/v1/auth/dev-users', (route) =>
+		route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ detail: 'Not Found' }) })
+	);
+}
+
 // Registers the activity routes needed for authenticated pages that render the nav.
 // Catch-all first (lower LIFO priority) so unread-count takes priority.
 async function mockActivityRoutes(page: import('@playwright/test').Page) {
@@ -62,6 +72,7 @@ async function mockDashboard(page: import('@playwright/test').Page) {
 // ---------------------------------------------------------------------------
 
 test('visiting /dashboard without session redirects to /login', async ({ page }) => {
+	await mockDevUsersDisabled(page);
 	await page.route('**/api/v1/auth/me', (route) => {
 		route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ detail: 'Not authenticated' }) });
 	});
@@ -70,6 +81,7 @@ test('visiting /dashboard without session redirects to /login', async ({ page })
 });
 
 test('visiting /po without session redirects to /login', async ({ page }) => {
+	await mockDevUsersDisabled(page);
 	await page.route('**/api/v1/auth/me', (route) => {
 		route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ detail: 'Not authenticated' }) });
 	});
@@ -82,6 +94,7 @@ test('visiting /po without session redirects to /login', async ({ page }) => {
 // ---------------------------------------------------------------------------
 
 test('visiting /login does not redirect when unauthenticated', async ({ page }) => {
+	await mockDevUsersDisabled(page);
 	await page.route('**/api/v1/auth/me', (route) => {
 		route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ detail: 'Not authenticated' }) });
 	});
@@ -139,6 +152,7 @@ test('visiting /setup while authenticated and PENDING shows pending message', as
 // ---------------------------------------------------------------------------
 
 test('unauthenticated access to /po/123 redirects to /login with redirect param', async ({ page }) => {
+	await mockDevUsersDisabled(page);
 	await page.route('**/api/v1/auth/me', (route) => {
 		route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ detail: 'Not authenticated' }) });
 	});
@@ -154,6 +168,7 @@ test('unauthenticated access to /po/123 redirects to /login with redirect param'
 // ---------------------------------------------------------------------------
 
 test('logout button redirects to /login', async ({ page }) => {
+	await mockDevUsersDisabled(page);
 	// auth/me returns authenticated until logout fires, then 401.
 	let loggedOut = false;
 	await page.route('**/api/v1/auth/me', (route) => {
