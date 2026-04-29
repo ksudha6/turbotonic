@@ -3,14 +3,16 @@
 
 	let {
 		steps,
+		label = 'Timeline',
 		'data-testid': testid
 	}: {
 		steps: Array<{ label: string; state: StepState; detail?: string }>;
+		label?: string;
 		'data-testid'?: string;
 	} = $props();
 </script>
 
-<ol class="ui-timeline" data-testid={testid}>
+<ol class="ui-timeline" aria-label={label} data-testid={testid}>
 	{#each steps as step (step.label)}
 		<li class={step.state}>
 			<span class="marker" aria-hidden="true"></span>

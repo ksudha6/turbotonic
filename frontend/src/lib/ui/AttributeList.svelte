@@ -1,14 +1,16 @@
 <script lang="ts">
 	let {
 		items,
+		label,
 		'data-testid': testid
 	}: {
 		items: Array<{ label: string; value: string }>;
+		label?: string;
 		'data-testid'?: string;
 	} = $props();
 </script>
 
-<dl class="ui-attr-list" data-testid={testid}>
+<dl class="ui-attr-list" aria-label={label || undefined} data-testid={testid}>
 	{#each items as item (item.label)}
 		<div class="row">
 			<dt>{item.label}</dt>

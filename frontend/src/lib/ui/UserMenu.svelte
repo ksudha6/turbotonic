@@ -6,10 +6,12 @@
 	let {
 		name,
 		role,
+		ariaLabel = 'Open user menu',
 		'data-testid': testid
 	}: {
 		name: string;
 		role: UserRole;
+		ariaLabel?: string;
 		'data-testid'?: string;
 	} = $props();
 
@@ -45,6 +47,7 @@
 		onclick={toggle}
 		aria-haspopup="menu"
 		aria-expanded={open}
+		aria-label={ariaLabel}
 		data-testid={testid}
 	>
 		<span class="avatar" aria-hidden="true">{initials(name)}</span>
@@ -55,7 +58,7 @@
 		<span class="chevron" aria-hidden="true">▾</span>
 	</button>
 	{#if open}
-		<div class="menu" role="menu">
+		<div class="menu" role="menu" aria-label="Account actions">
 			{#if import.meta.env.DEV}
 				<button
 					type="button"

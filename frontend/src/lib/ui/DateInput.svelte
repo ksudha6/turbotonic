@@ -3,16 +3,18 @@
 		value = $bindable(''),
 		disabled = false,
 		invalid = false,
+		ariaLabel,
 		'data-testid': testid
 	}: {
 		value?: string;
 		disabled?: boolean;
 		invalid?: boolean;
+		ariaLabel?: string;
 		'data-testid'?: string;
 	} = $props();
 </script>
 
-<input class="ui-date" type="date" bind:value {disabled} data-testid={testid} class:invalid />
+<input class="ui-date" type="date" bind:value {disabled} aria-label={ariaLabel || undefined} data-testid={testid} class:invalid />
 
 <style>
 	.ui-date {

@@ -4,17 +4,19 @@
 		options,
 		disabled = false,
 		invalid = false,
+		ariaLabel,
 		'data-testid': testid
 	}: {
 		value?: string;
 		options: Array<{ value: string; label: string }>;
 		disabled?: boolean;
 		invalid?: boolean;
+		ariaLabel?: string;
 		'data-testid'?: string;
 	} = $props();
 </script>
 
-<select class="ui-select" bind:value {disabled} data-testid={testid} class:invalid>
+<select class="ui-select" bind:value {disabled} aria-label={ariaLabel || undefined} data-testid={testid} class:invalid>
 	{#each options as opt (opt.value)}
 		<option value={opt.value}>{opt.label}</option>
 	{/each}

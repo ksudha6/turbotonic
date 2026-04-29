@@ -10,11 +10,13 @@
 		action?: import('svelte').Snippet;
 		'data-testid'?: string;
 	} = $props();
+
+	const titleId = crypto.randomUUID();
 </script>
 
-<header class="ui-pageheader" data-testid={testid}>
+<header class="ui-pageheader" role="banner" aria-labelledby={titleId} data-testid={testid}>
 	<div>
-		<h1>{title}</h1>
+		<h1 id={titleId}>{title}</h1>
 		{#if subtitle}<p>{subtitle}</p>{/if}
 	</div>
 	{#if action}<div class="action">{@render action()}</div>{/if}

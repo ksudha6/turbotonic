@@ -12,6 +12,7 @@
 		rows,
 		pagination,
 		onRowClick,
+		label,
 		'data-testid': testid
 	}: {
 		columns: Column<T>[];
@@ -23,6 +24,7 @@
 			onPageChange: (page: number) => void;
 		};
 		onRowClick?: (row: T) => void;
+		label?: string;
 		'data-testid'?: string;
 	} = $props();
 
@@ -32,7 +34,7 @@
 </script>
 
 <div class="ui-table" data-testid={testid}>
-	<table>
+	<table aria-label={label || undefined}>
 		<thead>
 			<tr>
 				{#each columns as col (col.key)}

@@ -8,11 +8,12 @@
 
 	let {
 		entries,
+		label = 'Activity',
 		'data-testid': testid
-	}: { entries: Entry[]; 'data-testid'?: string } = $props();
+	}: { entries: Entry[]; label?: string; 'data-testid'?: string } = $props();
 </script>
 
-<ul class="ui-feed" data-testid={testid}>
+<ul class="ui-feed" aria-label={label} data-testid={testid}>
 	{#each entries as e (e.id)}
 		<li>
 			<span class="dot {e.tone}" aria-hidden="true"></span>

@@ -20,6 +20,9 @@
 	const sections = $derived(sidebarItemsFor(role));
 	const pathname = $derived(page.url.pathname);
 	const displayRole = $derived(roleLabel ?? role);
+
+	// Stable per-section ids for aria-labelledby; generated once at component init.
+	const sectionIds = $derived(sections.map(() => crypto.randomUUID()));
 </script>
 
 <aside class="ui-sidebar" data-testid={testid} aria-label="Primary navigation">
@@ -31,10 +34,10 @@
 		</span>
 	</div>
 	<nav>
-		{#each sections as section (section.label)}
+		{#each sections as section, i (section.label)}
 			<div class="section">
-				<span class="section-label">{section.label}</span>
-				<ul>
+				<span class="section-label" id={sectionIds[i]}>{section.label}</span>
+				<ul aria-labelledby={sectionIds[i]}>
 					{#each section.items as item (item.href)}
 						{@const isActive = item.match(pathname)}
 						<li>

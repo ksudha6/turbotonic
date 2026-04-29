@@ -5,6 +5,7 @@
 		placeholder,
 		disabled = false,
 		invalid = false,
+		ariaLabel,
 		'data-testid': testid
 	}: {
 		value?: string;
@@ -12,6 +13,7 @@
 		placeholder?: string;
 		disabled?: boolean;
 		invalid?: boolean;
+		ariaLabel?: string;
 		'data-testid'?: string;
 	} = $props();
 </script>
@@ -22,6 +24,7 @@
 	{placeholder}
 	{disabled}
 	aria-invalid={invalid || undefined}
+	aria-label={ariaLabel || undefined}
 	bind:value
 	data-testid={testid}
 	class:invalid

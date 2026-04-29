@@ -14,13 +14,15 @@
 		statusPill?: import('svelte').Snippet;
 		'data-testid'?: string;
 	} = $props();
+
+	const titleId = crypto.randomUUID();
 </script>
 
-<header class="ui-detailheader" data-testid={testid}>
+<header class="ui-detailheader" role="banner" aria-labelledby={titleId} data-testid={testid}>
 	<a href={backHref} class="back">← {backLabel}</a>
 	<div class="row">
 		<div>
-			<h1>{title}</h1>
+			<h1 id={titleId}>{title}</h1>
 			{#if subtitle}<p>{subtitle}</p>{/if}
 		</div>
 		{#if statusPill}<div class="pill">{@render statusPill()}</div>{/if}

@@ -14,11 +14,13 @@
 		icon?: import('svelte').Snippet;
 		'data-testid'?: string;
 	} = $props();
+
+	const labelId = crypto.randomUUID();
 </script>
 
-<div class="ui-kpi" data-testid={testid}>
+<div class="ui-kpi" role="group" aria-labelledby={labelId} data-testid={testid}>
 	<div class="header">
-		<span class="label">{label}</span>
+		<span class="label" id={labelId}>{label}</span>
 		{#if icon}<span class="icon">{@render icon()}</span>{/if}
 	</div>
 	<span class="value">{value}</span>

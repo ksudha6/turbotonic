@@ -22,15 +22,17 @@
 		'data-testid'?: string;
 	} = $props();
 
+	const titleId = crypto.randomUUID();
+
 	function handleSubmit(e: SubmitEvent) {
 		e.preventDefault();
 		onSubmit();
 	}
 </script>
 
-<form class="ui-form-card" onsubmit={handleSubmit} data-testid={testid}>
+<form class="ui-form-card" aria-labelledby={titleId} onsubmit={handleSubmit} data-testid={testid}>
 	<header>
-		<h3>{title}</h3>
+		<h3 id={titleId}>{title}</h3>
 		{#if subtitle}<p class="subtitle">{subtitle}</p>{/if}
 	</header>
 	<div class="body">{@render children()}</div>

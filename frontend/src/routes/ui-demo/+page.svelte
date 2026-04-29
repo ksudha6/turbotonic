@@ -77,6 +77,13 @@
 		</label>
 		<label>Due <DateInput data-testid="ui-date-due" /></label>
 		<Toggle label="Notifications" data-testid="ui-toggle" />
+		<Input ariaLabel="Search" data-testid="ui-input-search" />
+		<Select
+			ariaLabel="Status"
+			options={[{ value: '', label: 'Select...' }, { value: 'active', label: 'Active' }]}
+			data-testid="ui-select-status"
+		/>
+		<DateInput ariaLabel="Delivery date" data-testid="ui-date-delivery" />
 	</div>
 </section>
 
@@ -92,6 +99,11 @@
 			<Input data-testid="ui-field-input" invalid={invalid} />
 		{/snippet}
 	</FormField>
+	<FormField label="Email" data-testid="ui-field-email">
+		{#snippet children({ invalid })}
+			<Input data-testid="ui-field-email-input" invalid={invalid} />
+		{/snippet}
+	</FormField>
 </section>
 
 <section>
@@ -105,12 +117,22 @@
 			data-testid="ui-attr-list"
 		/>
 	</PanelCard>
+	<PanelCard title="Line items" data-testid="ui-panel-lineitems">
+		<AttributeList
+			label="PO summary"
+			items={[{ label: 'Total', value: '$100' }]}
+			data-testid="ui-attr-list-labeled"
+		/>
+	</PanelCard>
 </section>
 
 <section>
 	<h2>FormCard</h2>
 	<FormCard title="New thing" onSubmit={() => console.log('submit')} onCancel={() => console.log('cancel')} data-testid="ui-formcard">
 		<label>Thing name <Input data-testid="ui-formcard-input" /></label>
+	</FormCard>
+	<FormCard title="Edit vendor" onSubmit={() => console.log('submit')} data-testid="ui-formcard-editvendor">
+		<label>Name <Input data-testid="ui-formcard-editvendor-input" /></label>
 	</FormCard>
 </section>
 
@@ -126,6 +148,7 @@
 			<span data-testid="ui-kpi-icon">📄</span>
 		{/snippet}
 	</KpiCard>
+	<KpiCard label="Pending POs" value="7" data-testid="ui-kpi-pending" />
 </section>
 
 <section>
@@ -175,6 +198,12 @@
 		data-testid="ui-table"
 	/>
 	<p data-testid="ui-table-click">{lastClicked}</p>
+	<DataTable
+		label="Users"
+		columns={tableColumns}
+		rows={tableRows}
+		data-testid="ui-table-labeled"
+	/>
 </section>
 
 <section>
@@ -184,6 +213,7 @@
 			<Button data-testid="ui-pageheader-action">+ New invoice</Button>
 		{/snippet}
 	</PageHeader>
+	<PageHeader title="Purchase Orders" data-testid="ui-pageheader-po" />
 	<DetailHeader
 		backHref="/ui-demo"
 		backLabel="All invoices"
@@ -195,6 +225,12 @@
 			<StatusPill tone="blue" label="Submitted" />
 		{/snippet}
 	</DetailHeader>
+	<DetailHeader
+		backHref="/ui-demo"
+		backLabel="All POs"
+		title="PO-001"
+		data-testid="ui-detailheader-po"
+	/>
 </section>
 
 <section>

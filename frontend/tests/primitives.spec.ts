@@ -396,6 +396,121 @@ test.describe('UserMenu primitive', () => {
 	});
 });
 
+test.describe('iter-078 label / aria-label retrofit', () => {
+	test('Input wired through FormField is found by getByLabel', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const input = page.getByLabel('Email');
+		await expect(input).toBeVisible();
+		await expect(input).toHaveAttribute('type', 'text');
+	});
+
+	test('Input with ariaLabel and no FormField is found by getByLabel', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByLabel('Search')).toBeVisible();
+	});
+
+	test('Select with ariaLabel is found by getByRole + name', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByRole('combobox', { name: 'Status' })).toBeVisible();
+	});
+
+	test('DateInput with ariaLabel is found by getByLabel', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByLabel('Delivery date')).toBeVisible();
+	});
+
+	test('ActivityFeed default label "Activity" is set on outer ul', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByRole('list', { name: 'Activity' })).toBeVisible();
+	});
+
+	test('Timeline default label "Timeline" is set on outer ol', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByRole('list', { name: 'Timeline' })).toBeVisible();
+	});
+
+	test('AttributeList with label is found', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const dl = page.getByTestId('ui-attr-list-labeled');
+		await expect(dl).toHaveAttribute('aria-label', 'PO summary');
+	});
+
+	test('DataTable with label is found by getByRole table + name', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByRole('table', { name: 'Users' })).toBeVisible();
+	});
+
+	test('PanelCard title becomes the region accessible name via aria-labelledby', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByRole('region', { name: 'Line items' })).toBeVisible();
+	});
+
+	test('KpiCard label becomes the group accessible name', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByRole('group', { name: 'Pending POs' })).toBeVisible();
+	});
+
+	test('FormCard title labels the form', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByRole('form', { name: 'Edit vendor' })).toBeVisible();
+	});
+
+	test('DetailHeader title labels the header banner', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByRole('banner', { name: 'PO-001' })).toBeVisible();
+	});
+
+	test('PageHeader title labels the header banner', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		await expect(page.getByRole('banner', { name: 'Purchase Orders' })).toBeVisible();
+	});
+
+	test('Sidebar section ul is labeled by its section header', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.goto('/ui-demo');
+		const sidebar = page.getByTestId('ui-sidebar');
+		await expect(sidebar.getByRole('list', { name: 'Workspace' })).toBeVisible();
+	});
+
+	test('UserMenu trigger has default aria-label "Open user menu"', async ({ page }) => {
+		await mockApiCatchAll(page);
+		await mockUser(page);
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/ui-demo/shell');
+		const trigger = page.getByRole('button', { name: 'Open user menu' });
+		await expect(trigger).toBeVisible();
+		await trigger.click();
+		await expect(page.getByRole('menu', { name: 'Account actions' })).toBeVisible();
+	});
+});
+
 import AxeBuilder from '@axe-core/playwright';
 
 test.describe('Phase 4.0 accessibility scan', () => {

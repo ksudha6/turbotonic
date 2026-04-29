@@ -1,3 +1,4 @@
+<!-- Status text is the implicit accessible name; query via getByText. -->
 <script lang="ts">
 	type Tone = 'green' | 'blue' | 'orange' | 'red' | 'gray';
 	let {

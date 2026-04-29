@@ -60,6 +60,14 @@ When I say "let's start a new iteration":
 - When a new test needs a handle on an unrevamped page, add the missing `data-testid` (and `aria-label` where appropriate) in the same PR. Do not work around a missing handle with a class or tag selector.
 - Pre-revamp tests (the ~99 specs targeting class/tag selectors) migrate page-by-page as their pages get revamped through Phase 4. Do not migrate them proactively outside a revamp iter.
 
+## Primitive accessible-name convention
+Every primitive in `frontend/src/lib/ui/` exposes an accessible name to assistive tech and to Playwright role/label queries. Pick one pattern based on shape:
+- **Controls** (Input, Select, DateInput, etc.): an `ariaLabel?: string` prop forwarded to `aria-label` on the rendered control.
+- **List / table containers** (DataTable, ActivityFeed, Timeline, AttributeList): a `label?: string` prop forwarded to `aria-label` on the root element. Default copy is fine when the container's purpose is obvious (e.g. ActivityFeed → "Activity feed").
+- **Titled containers** (PanelCard, KpiCard, FormCard, DetailHeader, PageHeader, Sidebar sections): generate a `crypto.randomUUID()` id at component init, set it on the visible heading element, and wire `aria-labelledby` to that id on the container root. Visible title is the source of truth — no extra prop.
+
+New primitives follow this from day one. Retrofitting later (as in iter 080) is a smell, not a normal flow. Components with implicit accessible names (Button text, FormField wrapping `<label>`, Toggle's existing `label` prop) need no extra plumbing.
+
 # Delegation model
 - Use Sonnet sub-agents extensively to prevent context rot
 - Use intent-based prompts over dictation prompts for sub agents: describe the problem, constraints, existing patterns, and acceptance criteria. Let Sonnet make implementation decisions. Do NOT dictate exact code.
