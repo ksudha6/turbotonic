@@ -248,9 +248,211 @@ test('product edit form shows existing manufacturing_address', async ({ page }) 
 	});
 
 	await page.goto('/products/prod-1/edit');
-	await page.waitForSelector('form');
+	await expect(page.getByTestId('product-edit-form')).toBeVisible();
 
-	await expect(page.locator('#manufacturing_address')).toHaveValue(EXISTING_MANUFACTURING_ADDRESS);
+	await expect(page.getByTestId('product-edit-manufacturing-address')).toHaveValue(EXISTING_MANUFACTURING_ADDRESS);
+});
+
+// ---------------------------------------------------------------------------
+// Iter 092 — `/products/[id]/edit` under (nexus): details + qualifications
+// ---------------------------------------------------------------------------
+
+const PRODUCT_WITH_QUAL = {
+	...PRODUCT,
+	id: 'prod-edit-1',
+	qualifications: [
+		{
+			id: 'qt-iso',
+			name: 'ISO 9001',
+			target_market: 'AMZ',
+			applies_to_category: 'GENERAL'
+		}
+	]
+};
+
+const QT_OPTIONS = [
+	{ id: 'qt-iso', name: 'ISO 9001', target_market: 'AMZ', applies_to_category: 'GENERAL' },
+	{ id: 'qt-fda', name: 'FDA Approval', target_market: 'AMZ', applies_to_category: 'FOOD' }
+];
+
+async function setupEditPage(
+	page: import('@playwright/test').Page,
+	productOverride: object = {}
+) {
+	const productPayload = { ...PRODUCT_WITH_QUAL, ...productOverride };
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([VENDOR_ACTIVE])
+		});
+	});
+	await page.route('**/api/v1/qualification-types', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(QT_OPTIONS)
+		});
+	});
+	await page.route(`**/api/v1/products/${productPayload.id}`, (route) => {
+		const path = new URL(route.request().url()).pathname;
+		if (path === `/api/v1/products/${productPayload.id}`) {
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(productPayload)
+			});
+		} else {
+			route.continue();
+		}
+	});
+	await page.route(`**/api/v1/products/${productPayload.id}/packaging-specs`, (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+}
+
+test('product edit page mounts under (nexus) AppShell', async ({ page }) => {
+	await setupEditPage(page);
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	await expect(page.getByTestId('ui-appshell-sidebar')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Edit Product', level: 1 })).toBeVisible();
+	await expect(page.getByTestId('product-edit-form')).toBeVisible();
+});
+
+test('product edit page shows vendor + part_number as readonly values', async ({ page }) => {
+	await setupEditPage(page);
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	await expect(page.getByTestId('product-edit-vendor')).toHaveText(VENDOR_ACTIVE.name);
+	await expect(page.getByTestId('product-edit-part-number')).toHaveText(PRODUCT_WITH_QUAL.part_number);
+});
+
+test('product edit save posts description + manufacturing_address and redirects', async ({ page }) => {
+	let captured: Record<string, unknown> = {};
+	await setupEditPage(page);
+	await page.route(`**/api/v1/products/${PRODUCT_WITH_QUAL.id}`, (route) => {
+		const method = route.request().method();
+		const path = new URL(route.request().url()).pathname;
+		if (method === 'PATCH' || method === 'PUT') {
+			captured = JSON.parse(route.request().postData() ?? '{}');
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ ...PRODUCT_WITH_QUAL, description: 'updated' })
+			});
+		} else if (path === `/api/v1/products/${PRODUCT_WITH_QUAL.id}`) {
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(PRODUCT_WITH_QUAL)
+			});
+		} else {
+			route.continue();
+		}
+	});
+
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	await expect(page.getByTestId('product-edit-form')).toBeVisible();
+
+	await page.getByTestId('product-edit-description').fill('updated');
+	await page.getByTestId('product-edit-save').click();
+	await page.waitForURL('**/products');
+
+	expect(captured['description']).toBe('updated');
+});
+
+test('product edit Cancel returns to /products without saving', async ({ page }) => {
+	let postCalled = false;
+	await setupEditPage(page);
+	await page.route(`**/api/v1/products/${PRODUCT_WITH_QUAL.id}`, (route) => {
+		const method = route.request().method();
+		const path = new URL(route.request().url()).pathname;
+		if (method === 'PATCH' || method === 'PUT') {
+			postCalled = true;
+			route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+		} else if (path === `/api/v1/products/${PRODUCT_WITH_QUAL.id}`) {
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(PRODUCT_WITH_QUAL)
+			});
+		} else {
+			route.continue();
+		}
+	});
+
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	await expect(page.getByTestId('product-edit-form')).toBeVisible();
+
+	await page.getByTestId('product-edit-cancel').click();
+	await page.waitForURL('**/products');
+	expect(postCalled).toBe(false);
+	expect(page.url()).toContain('/products');
+	expect(page.url()).not.toContain('/edit');
+});
+
+test('qualifications panel lists assigned qual with target_market pill', async ({ page }) => {
+	await setupEditPage(page);
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	const panel = page.getByTestId('product-qualifications-panel');
+	await expect(panel).toBeVisible();
+	await expect(panel.getByTestId('product-qualification-row-qt-iso')).toBeVisible();
+	await expect(panel).toContainText('ISO 9001');
+	await expect(panel).toContainText('AMZ');
+});
+
+test('qualifications panel empty state', async ({ page }) => {
+	await setupEditPage(page, { qualifications: [] });
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	const panel = page.getByTestId('product-qualifications-panel');
+	await expect(panel).toContainText('No qualifications assigned.');
+});
+
+test('add qualification flow: select + Add inserts row', async ({ page }) => {
+	await setupEditPage(page);
+	// assignQualification POSTs to /api/v1/products/{id}/qualifications with body
+	// { qualification_type_id: ... } per api.ts line 434.
+	await page.route(`**/api/v1/products/${PRODUCT_WITH_QUAL.id}/qualifications`, (route) => {
+		if (route.request().method() === 'POST') {
+			const body = JSON.parse(route.request().postData() ?? '{}');
+			route.fulfill({
+				status: 201,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					product_id: PRODUCT_WITH_QUAL.id,
+					qualification_type_id: body.qualification_type_id
+				})
+			});
+		} else {
+			route.continue();
+		}
+	});
+
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	const panel = page.getByTestId('product-qualifications-panel');
+	await panel.getByTestId('product-qualification-add-select').selectOption('qt-fda');
+	await panel.getByTestId('product-qualification-add-button').click();
+
+	await expect(panel.getByTestId('product-qualification-row-qt-fda')).toBeVisible();
+});
+
+test('remove qualification flow: Remove deletes row', async ({ page }) => {
+	await setupEditPage(page);
+	await page.route(`**/api/v1/products/${PRODUCT_WITH_QUAL.id}/qualifications/qt-iso`, (route) => {
+		if (route.request().method() === 'DELETE') {
+			route.fulfill({ status: 204, contentType: 'application/json', body: '' });
+		} else {
+			route.continue();
+		}
+	});
+
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	const panel = page.getByTestId('product-qualifications-panel');
+	await expect(panel.getByTestId('product-qualification-row-qt-iso')).toBeVisible();
+	await panel.getByTestId('product-qualification-remove-qt-iso').click();
+	await expect(panel.getByTestId('product-qualification-row-qt-iso')).toHaveCount(0);
 });
 
 // ---------------------------------------------------------------------------
