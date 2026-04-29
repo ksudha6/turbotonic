@@ -114,3 +114,36 @@ async def test_seed_users_variety(seeded_conn: asyncpg.Connection) -> None:
     present = {r["username"] for r in rows}
     missing = known_usernames - present
     assert not missing, f"lost fixture usernames: {missing}"
+
+
+@pytest.mark.asyncio
+async def test_seed_po_attachments(seeded_conn: asyncpg.Connection) -> None:
+    # At least one SIGNED_PO file must be attached to a PROCUREMENT PO.
+    procurement_pos_with_signed_pdf = await seeded_conn.fetchval(
+        """
+        SELECT COUNT(*)
+        FROM files f
+        JOIN purchase_orders p ON p.id = f.entity_id
+        WHERE f.entity_type = 'PO'
+          AND f.file_type = 'SIGNED_PO'
+          AND p.po_type = 'PROCUREMENT'
+        """
+    )
+    assert procurement_pos_with_signed_pdf >= 1, (
+        f"expected >=1 SIGNED_PO file on a PROCUREMENT PO, got {procurement_pos_with_signed_pdf}"
+    )
+
+    # At least one SIGNED_AGREEMENT file must be attached to an OPEX PO.
+    opex_pos_with_signed_agreement_pdf = await seeded_conn.fetchval(
+        """
+        SELECT COUNT(*)
+        FROM files f
+        JOIN purchase_orders p ON p.id = f.entity_id
+        WHERE f.entity_type = 'PO'
+          AND f.file_type = 'SIGNED_AGREEMENT'
+          AND p.po_type = 'OPEX'
+        """
+    )
+    assert opex_pos_with_signed_agreement_pdf >= 1, (
+        f"expected >=1 SIGNED_AGREEMENT file on an OPEX PO, got {opex_pos_with_signed_agreement_pdf}"
+    )

@@ -1,4 +1,4 @@
-import type { UserRole } from './types';
+import type { UserRole, User, POType } from './types';
 
 function is(role: UserRole, ...allowed: UserRole[]): boolean {
 	return role === 'ADMIN' || allowed.includes(role);
@@ -27,3 +27,33 @@ export const canViewInvoices = (role: UserRole) => is(role, 'SM', 'VENDOR', 'PRO
 export const canViewPOs = (role: UserRole) => is(role, 'SM', 'VENDOR', 'PROCUREMENT_MANAGER', 'FREIGHT_MANAGER');
 export const canMarkAdvancePaid = (role: UserRole) => is(role, 'SM');
 export const canModifyPostAccept = (role: UserRole) => is(role, 'SM');
+
+export function canViewPOAttachments(
+	user: User,
+	po: { po_type: POType; vendor_id: string }
+): boolean {
+	if (user.status !== 'ACTIVE') return false;
+	if (po.po_type === 'PROCUREMENT') {
+		if (is(user.role, 'SM', 'PROCUREMENT_MANAGER', 'FREIGHT_MANAGER', 'QUALITY_LAB')) return true;
+		if (user.role === 'VENDOR') return user.vendor_id === po.vendor_id;
+		return false;
+	}
+	// OPEX
+	if (is(user.role, 'FREIGHT_MANAGER')) return true;
+	if (user.role === 'VENDOR') return user.vendor_id === po.vendor_id;
+	return false;
+}
+
+export function canManagePOAttachments(
+	user: User,
+	po: { po_type: POType; vendor_id: string }
+): boolean {
+	if (user.status !== 'ACTIVE') return false;
+	if (po.po_type === 'PROCUREMENT') {
+		if (is(user.role, 'SM')) return true;
+		if (user.role === 'VENDOR') return user.vendor_id === po.vendor_id;
+		return false;
+	}
+	// OPEX
+	return is(user.role, 'FREIGHT_MANAGER');
+}

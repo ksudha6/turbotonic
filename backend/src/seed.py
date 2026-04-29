@@ -1,23 +1,32 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import random
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from uuid import uuid4
 
 import asyncpg
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph
+from reportlab.lib.styles import getSampleStyleSheet
 
 from src.db import DEFAULT_DATABASE_URL
 from src.domain.activity import EVENT_METADATA, ActivityEvent, EntityType
 from src.domain.certificate import CertificateStatus
+from src.domain.document import FileMetadata
 from src.domain.invoice import InvoiceStatus
 from src.domain.milestone import ProductionMilestone
+from src.domain.po_attachment import POAttachmentType
 from src.domain.purchase_order import LineItemStatus, POStatus, POType
 from src.domain.shipment import ShipmentStatus
 from src.domain.user import UserRole, UserStatus
 from src.domain.vendor import VendorStatus, VendorType
+from src.document_repository import DocumentRepository
 from src.schema import init_db
+from src.services.file_storage import FileStorageService
 
 # Deterministic variety: fixture data should look the same across dev machines.
 random.seed(1729)
@@ -514,6 +523,77 @@ def _make_activity_log(pos: list[dict[str, object]]) -> list[dict[str, object]]:
     return rows
 
 
+_SEED_PDF_FILENAMES: tuple[str, str] = ("signed-po.pdf", "signed-agreement.pdf")
+_SEED_PDF_CONTENT_TYPE: str = "application/pdf"
+
+
+def _make_seed_pdf(label: str) -> bytes:
+    """Generate a minimal one-page PDF with a placeholder label. ≤5 KB."""
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=letter)
+    styles = getSampleStyleSheet()
+    doc.build([Paragraph(label, styles["Normal"])])
+    return buf.getvalue()
+
+
+async def _seed_po_attachments(
+    conn: asyncpg.Connection,
+    pos: list[dict[str, object]],
+    users: list[dict[str, object]],
+) -> None:
+    """Attach a sample PDF to one PROCUREMENT and one OPEX PO."""
+    # uploads/ lives one level above the backend package directory
+    uploads_dir = Path(__file__).resolve().parent.parent.parent / "uploads"
+    storage = FileStorageService(uploads_dir)
+    repo = DocumentRepository(conn)
+
+    # Seed admin (alice) is always users[0]; use her id as uploaded_by.
+    admin_id = str(users[0]["id"])
+
+    # First ACCEPTED PROCUREMENT PO; fall back to first PROCUREMENT PO.
+    procurement_pos = [p for p in pos if p["po_type"] == POType.PROCUREMENT.value]
+    accepted_procurement = [p for p in procurement_pos if p["status"] == POStatus.ACCEPTED.value]
+    procurement_target = (accepted_procurement or procurement_pos)[0] if procurement_pos else None
+
+    # First OPEX PO.
+    opex_pos = [p for p in pos if p["po_type"] == POType.OPEX.value]
+    opex_target = opex_pos[0] if opex_pos else None
+
+    if procurement_target is not None:
+        po_id = str(procurement_target["id"])
+        po_number = str(procurement_target["po_number"])
+        pdf_bytes = _make_seed_pdf(f"Signed PO — sample seed document for {po_number}")
+        stored_path = await storage.save_file("PO", po_id, _SEED_PDF_FILENAMES[0], pdf_bytes)
+        metadata = FileMetadata.create(
+            entity_type="PO",
+            entity_id=po_id,
+            file_type=POAttachmentType.SIGNED_PO.value,
+            original_name=_SEED_PDF_FILENAMES[0],
+            stored_path=stored_path,
+            content_type=_SEED_PDF_CONTENT_TYPE,
+            size_bytes=len(pdf_bytes),
+            uploaded_by=admin_id,
+        )
+        await repo.save(metadata)
+
+    if opex_target is not None:
+        po_id = str(opex_target["id"])
+        po_number = str(opex_target["po_number"])
+        pdf_bytes = _make_seed_pdf(f"Signed Agreement — sample seed document for {po_number}")
+        stored_path = await storage.save_file("PO", po_id, _SEED_PDF_FILENAMES[1], pdf_bytes)
+        metadata = FileMetadata.create(
+            entity_type="PO",
+            entity_id=po_id,
+            file_type=POAttachmentType.SIGNED_AGREEMENT.value,
+            original_name=_SEED_PDF_FILENAMES[1],
+            stored_path=stored_path,
+            content_type=_SEED_PDF_CONTENT_TYPE,
+            size_bytes=len(pdf_bytes),
+            uploaded_by=admin_id,
+        )
+        await repo.save(metadata)
+
+
 async def _insert(conn: asyncpg.Connection, sql: str, rows: list[dict[str, object]], columns: tuple[str, ...]) -> None:
     if not rows:
         return
@@ -736,6 +816,8 @@ async def seed(conn: asyncpg.Connection) -> None:
                 "actor_id", "detail", "read_at", "created_at",
             ),
         )
+
+        await _seed_po_attachments(conn, pos, users)
 
     print(
         "seed: inserted "

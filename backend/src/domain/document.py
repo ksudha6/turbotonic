@@ -18,6 +18,7 @@ class FileMetadata:
         content_type: str,
         size_bytes: int,
         uploaded_at: datetime,
+        uploaded_by: str | None = None,
     ) -> None:
         self._id = id
         self.entity_type = entity_type
@@ -28,6 +29,7 @@ class FileMetadata:
         self.content_type = content_type
         self.size_bytes = size_bytes
         self._uploaded_at = uploaded_at
+        self.uploaded_by = uploaded_by
 
     @property
     def id(self) -> str:
@@ -48,6 +50,7 @@ class FileMetadata:
         stored_path: str,
         content_type: str,
         size_bytes: int,
+        uploaded_by: str | None = None,
     ) -> FileMetadata:
         if not entity_type or not entity_type.strip():
             raise ValueError("entity_type must not be empty or whitespace-only")
@@ -67,4 +70,5 @@ class FileMetadata:
             content_type=content_type,
             size_bytes=size_bytes,
             uploaded_at=datetime.now(UTC),
+            uploaded_by=uploaded_by,
         )

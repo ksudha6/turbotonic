@@ -32,6 +32,7 @@
 	import PoRejectionHistoryPanel from '$lib/po/PoRejectionHistoryPanel.svelte';
 	import PoInvoicesPanel from '$lib/po/PoInvoicesPanel.svelte';
 	import PoActivityPanel from '$lib/po/PoActivityPanel.svelte';
+	import PoDocumentsPanel from '$lib/po/PoDocumentsPanel.svelte';
 	import PoLineAcceptedTable from '$lib/po/PoLineAcceptedTable.svelte';
 	import PoMilestoneTimelinePanel from '$lib/po/PoMilestoneTimelinePanel.svelte';
 	import PoAddLineDialog from '$lib/po/PoAddLineDialog.svelte';
@@ -552,6 +553,10 @@
 			<PoInvoicesPanel {invoices} {po} {remainingMap} {formatDate} {formatValue} />
 
 			<PoActivityPanel poId={po.id} />
+
+			{#if user}
+				<PoDocumentsPanel {po} {user} />
+			{/if}
 
 			{#if opexError}
 				<p class="error-message">{opexError}</p>

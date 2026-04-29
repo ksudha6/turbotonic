@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Literal
 
 import asyncpg
 
@@ -27,8 +28,8 @@ class DocumentRepository:
         await self._conn.execute(
             """
             INSERT INTO files (id, entity_type, entity_id, file_type, original_name,
-                stored_path, content_type, size_bytes, uploaded_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                stored_path, content_type, size_bytes, uploaded_at, uploaded_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             """,
             metadata.id,
             metadata.entity_type,
@@ -39,6 +40,7 @@ class DocumentRepository:
             metadata.content_type,
             metadata.size_bytes,
             _iso(metadata.uploaded_at),
+            metadata.uploaded_by,
         )
 
     async def get_by_id(self, file_id: str) -> FileMetadata | None:
@@ -49,9 +51,16 @@ class DocumentRepository:
             return None
         return _reconstruct(row)
 
-    async def list_by_entity(self, entity_type: str, entity_id: str) -> list[FileMetadata]:
+    async def list_by_entity(
+        self,
+        entity_type: str,
+        entity_id: str,
+        order: Literal["asc", "desc"] = "asc",
+    ) -> list[FileMetadata]:
+        # All existing callers rely on ASC order; PO documents use DESC.
+        direction = "DESC" if order == "desc" else "ASC"
         rows = await self._conn.fetch(
-            "SELECT * FROM files WHERE entity_type = $1 AND entity_id = $2 ORDER BY uploaded_at",
+            f"SELECT * FROM files WHERE entity_type = $1 AND entity_id = $2 ORDER BY uploaded_at {direction}",
             entity_type,
             entity_id,
         )
@@ -77,4 +86,5 @@ def _reconstruct(row: asyncpg.Record) -> FileMetadata:
         content_type=row["content_type"],
         size_bytes=row["size_bytes"],
         uploaded_at=_parse_dt(row["uploaded_at"]),
+        uploaded_by=row["uploaded_by"] if "uploaded_by" in row.keys() else None,
     )

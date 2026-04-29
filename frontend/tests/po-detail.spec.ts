@@ -187,6 +187,12 @@ function mockPoInvoices(page: Page) {
 	});
 }
 
+function mockPoDocuments(page: Page) {
+	return page.route('**/api/v1/po/*/documents', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+}
+
 function mockMilestones(page: Page) {
 	return page.route('**/api/v1/po/*/milestones', (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
@@ -211,6 +217,7 @@ async function setupDetailPage(page: Page, user: typeof SM_USER, po: POFixture) 
 	await mockUnreadCount(page);
 	await mockReferenceData(page);
 	await mockPoInvoices(page);
+	await mockPoDocuments(page);
 	await mockMilestones(page);
 	await mockRemainingQuantities(page);
 	await mockPoDetail(page, po);

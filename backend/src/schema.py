@@ -481,3 +481,9 @@ async def init_db(conn: asyncpg.Connection) -> None:
         ON shipment_document_requirements (shipment_id)
         """
     )
+
+    # Iter 084: track which user uploaded each file so PO documents panel can
+    # show "Uploaded by" without a separate user lookup join.
+    await conn.execute(
+        "ALTER TABLE files ADD COLUMN IF NOT EXISTS uploaded_by TEXT"
+    )
