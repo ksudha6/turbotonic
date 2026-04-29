@@ -371,6 +371,34 @@ export interface MilestoneUpdate {
 	posted_at: string;
 }
 
+// Iter 082: backend extends list response with overdue indicators. Only the
+// latest posted milestone in the list carries is_overdue=true; earlier rows
+// are always is_overdue=false, days_overdue=null.
+export interface MilestoneResponse {
+	milestone: ProductionMilestone;
+	posted_at: string;
+	is_overdue: boolean;
+	days_overdue: number | null;
+}
+
+// Iter 082: mirrors backend MILESTONE_ORDER. Position determines sequence;
+// also used by PoMilestoneTimelinePanel to compute the next-expected step.
+export const MILESTONE_ORDER: readonly ProductionMilestone[] = [
+	'RAW_MATERIALS',
+	'PRODUCTION_STARTED',
+	'QC_PASSED',
+	'READY_FOR_SHIPMENT',
+	'SHIPPED'
+] as const;
+
+export const MILESTONE_LABELS: Readonly<Record<ProductionMilestone, string>> = {
+	RAW_MATERIALS: 'Raw Materials',
+	PRODUCTION_STARTED: 'Production Started',
+	QC_PASSED: 'QC Passed',
+	READY_FOR_SHIPMENT: 'Ready for Shipment',
+	SHIPPED: 'Shipped'
+};
+
 export type NotificationCategory = 'LIVE' | 'ACTION_REQUIRED' | 'DELAYED';
 export type EntityType = 'PO' | 'INVOICE';
 
