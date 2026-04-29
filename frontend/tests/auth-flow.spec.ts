@@ -104,10 +104,10 @@ test('visiting /login does not redirect when unauthenticated', async ({ page }) 
 });
 
 // ---------------------------------------------------------------------------
-// Register page without username param
+// Register page without token param
 // ---------------------------------------------------------------------------
 
-test('visiting /register without username shows invalid invite link', async ({ page }) => {
+test('visiting /register without token shows invalid invite link', async ({ page }) => {
 	await page.route('**/api/v1/auth/me', (route) => {
 		route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ detail: 'Not authenticated' }) });
 	});

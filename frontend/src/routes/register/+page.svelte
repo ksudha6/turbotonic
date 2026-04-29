@@ -13,7 +13,7 @@
 	let user: User | null = $state(null);
 	let registrationOptions: Record<string, unknown> | null = $state(null);
 
-	const username = page.url.searchParams.get('username')?.trim() ?? '';
+	const token = page.url.searchParams.get('token')?.trim() ?? '';
 
 	// Redirect immediately if already authenticated
 	$effect(() => {
@@ -23,13 +23,13 @@
 	});
 
 	onMount(async () => {
-		if (!username) {
+		if (!token) {
 			loadState = 'invalid';
 			return;
 		}
 
 		try {
-			const result = await registerOptions(username);
+			const result = await registerOptions(token);
 			user = result.user;
 			registrationOptions = result.options;
 			loadState = 'ready';
@@ -63,7 +63,7 @@
 		}
 
 		try {
-			await registerVerify(username, credential);
+			await registerVerify(token, credential);
 			await goto('/dashboard');
 		} catch (e: unknown) {
 			error = e instanceof Error ? e.message : 'Registration failed.';

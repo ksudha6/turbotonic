@@ -177,6 +177,16 @@ async def init_db(conn: asyncpg.Connection) -> None:
     # rows; recipient resolution skips users with NULL or empty email.
     await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT")
 
+    # Iter 096: per-invite secret embedded in the registration link, replacing
+    # the guessable username. Set by User.invite()/bootstrap, cleared by
+    # User.activate(). Backfill any existing PENDING rows so a redeploy on a
+    # database with mid-flight invites does not strand them with NULL tokens.
+    await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS invite_token TEXT")
+    await conn.execute(
+        "UPDATE users SET invite_token = gen_random_uuid()::text "
+        "WHERE status = 'PENDING' AND invite_token IS NULL"
+    )
+
     await conn.execute("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS marketplace TEXT")
     await conn.execute("ALTER TABLE line_items ADD COLUMN IF NOT EXISTS product_id TEXT REFERENCES products(id)")
     await conn.execute("ALTER TABLE line_items ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'PENDING'")

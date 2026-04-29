@@ -23,7 +23,7 @@ async function throwOnError(res: Response): Promise<void> {
 export async function bootstrap(
 	username: string,
 	displayName: string
-): Promise<{ options: any; user: User }> {
+): Promise<{ options: any; user: User; invite_token: string }> {
 	const res = await authFetch('/api/v1/auth/bootstrap', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
@@ -33,24 +33,24 @@ export async function bootstrap(
 	return res.json();
 }
 
-export async function registerOptions(username: string): Promise<{ options: any; user: User }> {
+export async function registerOptions(token: string): Promise<{ options: any; user: User }> {
 	const res = await authFetch('/api/v1/auth/register/options', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ username })
+		body: JSON.stringify({ token })
 	});
 	await throwOnError(res);
 	return res.json();
 }
 
 export async function registerVerify(
-	username: string,
+	token: string,
 	credential: any
 ): Promise<{ user: User }> {
 	const res = await authFetch('/api/v1/auth/register/verify', {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ username, credential })
+		body: JSON.stringify({ token, credential })
 	});
 	await throwOnError(res);
 	return res.json();

@@ -28,7 +28,7 @@
 
 		loading = true;
 		try {
-			const { options } = await bootstrap(username, displayName);
+			const { options, invite_token } = await bootstrap(username, displayName);
 
 			let credential;
 			try {
@@ -42,7 +42,7 @@
 				return;
 			}
 
-			await registerVerify(username, credential);
+			await registerVerify(invite_token, credential);
 			await goto('/dashboard');
 		} catch (e: unknown) {
 			if (e instanceof Error) {

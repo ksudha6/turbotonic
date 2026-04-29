@@ -33,6 +33,7 @@ class User:
         vendor_id: str | None,
         created_at: datetime,
         email: str | None = None,
+        invite_token: str | None = None,
     ) -> None:
         self._id = id
         self.username = username
@@ -42,6 +43,10 @@ class User:
         self.vendor_id = vendor_id
         self._created_at = created_at
         self.email = email
+        # Set on invite/bootstrap, consumed by registration handshake, cleared
+        # by activate(). Never persisted into surfaces other than the original
+        # invite/bootstrap response.
+        self.invite_token = invite_token
 
     @property
     def id(self) -> str:
@@ -93,13 +98,16 @@ class User:
             vendor_id=vendor_id,
             created_at=datetime.now(UTC),
             email=email,
+            invite_token=str(uuid4()),
         )
 
     def activate(self) -> None:
-        # PENDING -> ACTIVE; only pending users complete registration
+        # PENDING -> ACTIVE; only pending users complete registration. The
+        # invite_token is consumed here so a stolen link cannot be reused.
         if self.status is not UserStatus.PENDING:
             raise ValueError(f"cannot activate user in {self.status.value} status")
         self.status = UserStatus.ACTIVE
+        self.invite_token = None
 
     def deactivate(self) -> None:
         # ACTIVE or PENDING -> INACTIVE; already-inactive is an error

@@ -104,6 +104,7 @@ async def test_dev_login_creates_session_for_active_user(
         "role": "ADMIN",
         "status": "ACTIVE",
         "vendor_id": None,
+        "email": None,
     }
 
     resp = await client.post("/api/v1/auth/dev-login", json={"username": "alice"})

@@ -71,6 +71,7 @@ def _user_to_dict(user: User) -> dict:
         "role": user.role.value,
         "status": user.status.value,
         "vendor_id": user.vendor_id,
+        "email": user.email,
     }
 
 
@@ -85,11 +86,20 @@ class UsernameRequest(BaseModel):
     username: str
 
 
+class TokenRequest(BaseModel):
+    token: str
+
+
 class InviteRequest(BaseModel):
     username: str
     display_name: str
     role: str
     vendor_id: str | None = None
+
+
+class UserUpdateRequest(BaseModel):
+    display_name: str | None = None
+    email: str | None = None
 
 
 # --- Endpoints ---
@@ -107,14 +117,18 @@ async def bootstrap(body: BootstrapRequest, response: Response, repo: UserRepoDe
     await repo.save(user)
     options, challenge = create_registration_options(user.id, user.username, user.display_name)
     _set_challenge_cookie(response, challenge)
-    return {"options": options, "user": _user_to_dict(user)}
+    return {
+        "options": options,
+        "user": _user_to_dict(user),
+        "invite_token": user.invite_token,
+    }
 
 
 @router.post("/register/options")
-async def register_options(body: UsernameRequest, response: Response, repo: UserRepoDep):
-    user = await repo.get_by_username(body.username)
+async def register_options(body: TokenRequest, response: Response, repo: UserRepoDep):
+    user = await repo.get_by_invite_token(body.token)
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Invalid invite token")
     if user.status is not UserStatus.PENDING:
         raise HTTPException(status_code=409, detail="User already registered")
     creds = await repo.get_credentials_by_user_id(user.id)
@@ -132,12 +146,12 @@ async def register_verify(request: Request, response: Response, repo: UserRepoDe
         raise HTTPException(status_code=400, detail="Missing or expired challenge")
     body = await request.json()
     credential_json = body.get("credential")
-    username = body.get("username")
-    if not credential_json or not username:
-        raise HTTPException(status_code=400, detail="Missing credential or username")
-    user = await repo.get_by_username(username)
+    token = body.get("token")
+    if not credential_json or not token:
+        raise HTTPException(status_code=400, detail="Missing credential or token")
+    user = await repo.get_by_invite_token(token)
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="Invalid invite token")
     try:
         credential_id, public_key, sign_count = verify_registration(credential_json, challenge)
     except Exception as exc:
@@ -279,4 +293,112 @@ async def invite_user(body: InviteRequest, request: Request, repo: UserRepoDep):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await repo.save(user)
-    return {"user": _user_to_dict(user)}
+    return {"user": _user_to_dict(user), "invite_token": user.invite_token}
+
+
+def _require_admin(request: Request) -> User:
+    # Local helper matching the manual request.state pattern used elsewhere in
+    # this router. Returns the current ADMIN user or raises 403.
+    current_user = getattr(request.state, "current_user", None)
+    if current_user is None or current_user.role is not UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only ADMIN users can manage users")
+    return current_user
+
+
+@invite_router.get("/")
+async def list_users(
+    request: Request,
+    repo: UserRepoDep,
+    status: str | None = None,
+    role: str | None = None,
+):
+    _require_admin(request)
+    status_filter: UserStatus | None = None
+    role_filter: UserRole | None = None
+    if status is not None:
+        try:
+            status_filter = UserStatus(status)
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"Invalid status: {status!r}")
+    if role is not None:
+        try:
+            role_filter = UserRole(role)
+        except ValueError:
+            raise HTTPException(status_code=422, detail=f"Invalid role: {role!r}")
+    users = await repo.list_users(status=status_filter, role=role_filter)
+    return {"users": [_user_to_dict(u) for u in users]}
+
+
+@invite_router.get("/{user_id}")
+async def get_user(user_id: str, request: Request, repo: UserRepoDep):
+    _require_admin(request)
+    target = await repo.get_by_id(user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"user": _user_to_dict(target)}
+
+
+@invite_router.patch("/{user_id}")
+async def update_user(
+    user_id: str, body: UserUpdateRequest, request: Request, repo: UserRepoDep
+):
+    _require_admin(request)
+    target = await repo.get_by_id(user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if body.display_name is not None:
+        if not body.display_name.strip():
+            raise HTTPException(
+                status_code=422,
+                detail="display_name must not be empty or whitespace-only",
+            )
+        target.display_name = body.display_name
+    # Email passes through unchanged shape: explicit None clears, omitted leaves
+    # untouched. Pydantic default of None means we cannot distinguish "omitted"
+    # from "set to null"; the request shape uses `email: null` to clear, and
+    # the only callers are the ADMIN UI that always sends both fields.
+    if "email" in body.model_fields_set:
+        target.email = body.email
+    await repo.save(target)
+    return {"user": _user_to_dict(target)}
+
+
+@invite_router.post("/{user_id}/deactivate")
+async def deactivate_user(user_id: str, request: Request, repo: UserRepoDep):
+    current_user = _require_admin(request)
+    target = await repo.get_by_id(user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Last-admin guard runs before the self-deactivate guard so a single ADMIN
+    # trying to disable themselves gets the system-level message instead of the
+    # account-level one. With multiple admins, count_active_admins() >= 2 so
+    # the self check below catches the user-level case.
+    if target.role is UserRole.ADMIN and target.status is UserStatus.ACTIVE:
+        active_admin_count = await repo.count_active_admins()
+        if active_admin_count <= 1:
+            raise HTTPException(
+                status_code=409,
+                detail="cannot deactivate the last active admin",
+            )
+    if target.id == current_user.id:
+        raise HTTPException(status_code=409, detail="cannot deactivate yourself")
+    try:
+        target.deactivate()
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await repo.save(target)
+    return {"user": _user_to_dict(target)}
+
+
+@invite_router.post("/{user_id}/reactivate")
+async def reactivate_user(user_id: str, request: Request, repo: UserRepoDep):
+    _require_admin(request)
+    target = await repo.get_by_id(user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        target.reactivate()
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await repo.save(target)
+    return {"user": _user_to_dict(target)}
