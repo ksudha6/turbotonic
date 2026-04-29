@@ -1,4 +1,4 @@
-import type { UserRole, User, POType } from './types';
+import type { UserRole, User, POType, ShipmentStatus } from './types';
 
 function is(role: UserRole, ...allowed: UserRole[]): boolean {
 	return role === 'ADMIN' || allowed.includes(role);
@@ -27,6 +27,11 @@ export const canViewInvoices = (role: UserRole) => is(role, 'SM', 'VENDOR', 'PRO
 export const canViewPOs = (role: UserRole) => is(role, 'SM', 'VENDOR', 'PROCUREMENT_MANAGER', 'FREIGHT_MANAGER');
 export const canMarkAdvancePaid = (role: UserRole) => is(role, 'SM');
 export const canModifyPostAccept = (role: UserRole) => is(role, 'SM');
+
+// Iter 097: SM/FM may edit shipment line items only while the shipment is still
+// gathering documentation. Backend remains the source of truth for transitions.
+export const canEditShipment = (role: UserRole, status: ShipmentStatus): boolean =>
+	is(role, 'SM', 'FREIGHT_MANAGER') && (status === 'DRAFT' || status === 'DOCUMENTS_PENDING');
 
 export function canViewPOAttachments(
 	user: User,
