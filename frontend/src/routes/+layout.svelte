@@ -19,7 +19,8 @@
 			page.url.pathname === '/dashboard' ||
 			page.url.pathname.startsWith('/dashboard/') ||
 			page.url.pathname === '/po' ||
-			page.url.pathname.startsWith('/po/')
+			page.url.pathname.startsWith('/po/') ||
+			page.url.pathname === '/invoices'
 	);
 
 
