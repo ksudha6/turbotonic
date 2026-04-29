@@ -70,10 +70,10 @@ test('product create form renders manufacturing_address field', async ({ page })
 	});
 
 	await page.goto('/products/new');
-	await page.waitForSelector('form');
+	await expect(page.getByTestId('product-create-form')).toBeVisible();
 
-	await expect(page.locator('#manufacturing_address')).toBeVisible();
-	await expect(page.locator('#manufacturing_address')).toHaveValue('');
+	await expect(page.getByTestId('product-form-manufacturing-address')).toBeVisible();
+	await expect(page.getByTestId('product-form-manufacturing-address')).toHaveValue('');
 });
 
 test('product create form submits manufacturing_address', async ({ page }) => {
@@ -107,16 +107,127 @@ test('product create form submits manufacturing_address', async ({ page }) => {
 	});
 
 	await page.goto('/products/new');
-	await page.waitForSelector('form');
+	await expect(page.getByTestId('product-create-form')).toBeVisible();
 
-	await page.selectOption('#vendor_id', 'v1');
-	await page.fill('#part_number', 'PN-002');
-	await page.locator('#manufacturing_address').fill(MANUFACTURING_ADDRESS);
+	await page.getByTestId('product-form-vendor').selectOption('v1');
+	await page.getByTestId('product-form-part-number').fill('PN-002');
+	await page.getByTestId('product-form-manufacturing-address').fill(MANUFACTURING_ADDRESS);
 
-	await page.getByRole('button', { name: 'Create Product' }).click();
+	await page.getByTestId('product-form-submit').click();
 	await page.waitForURL('**/products');
 
 	expect(capturedBody['manufacturing_address']).toBe(MANUFACTURING_ADDRESS);
+});
+
+// ---------------------------------------------------------------------------
+// Iter 091 — `/products/new` under (nexus) AppShell (additional specs)
+// ---------------------------------------------------------------------------
+
+test('product create page mounts under (nexus) AppShell', async ({ page }) => {
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([VENDOR_ACTIVE]),
+		});
+	});
+	await page.goto('/products/new');
+	await expect(page.getByTestId('ui-appshell-sidebar')).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Create Product', level: 1 })).toBeVisible();
+	await expect(page.getByTestId('product-create-form')).toBeVisible();
+});
+
+test('product create form blocks submit when vendor unselected', async ({ page }) => {
+	let postCalled = false;
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([VENDOR_ACTIVE]),
+		});
+	});
+	await page.route('**/api/v1/products**', (route) => {
+		if (route.request().method() === 'POST') postCalled = true;
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+
+	await page.goto('/products/new');
+	await page.getByTestId('product-form-part-number').fill('PN-XYZ');
+	await page.getByTestId('product-form-submit').click();
+
+	await expect(page.getByText('Vendor is required.')).toBeVisible();
+	expect(postCalled).toBe(false);
+});
+
+test('product create form blocks submit when part_number empty', async ({ page }) => {
+	let postCalled = false;
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([VENDOR_ACTIVE]),
+		});
+	});
+	await page.route('**/api/v1/products**', (route) => {
+		if (route.request().method() === 'POST') postCalled = true;
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+
+	await page.goto('/products/new');
+	await page.getByTestId('product-form-vendor').selectOption('v1');
+	await page.getByTestId('product-form-submit').click();
+
+	await expect(page.getByText('Part Number is required.')).toBeVisible();
+	expect(postCalled).toBe(false);
+});
+
+test('product create form surfaces 409 conflict inline', async ({ page }) => {
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([VENDOR_ACTIVE]),
+		});
+	});
+	await page.route('**/api/v1/products**', (route) => {
+		if (route.request().method() === 'POST') {
+			route.fulfill({
+				status: 409,
+				contentType: 'application/json',
+				body: JSON.stringify({ detail: 'duplicate' })
+			});
+		} else {
+			route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+		}
+	});
+
+	await page.goto('/products/new');
+	await page.getByTestId('product-form-vendor').selectOption('v1');
+	await page.getByTestId('product-form-part-number').fill('PN-001');
+	await page.getByTestId('product-form-submit').click();
+
+	await expect(page.getByTestId('product-form-error')).toContainText(
+		'A product with this part number already exists for this vendor.'
+	);
+});
+
+test('product create form Cancel returns to /products', async ({ page }) => {
+	await page.route('**/api/v1/vendors**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify([VENDOR_ACTIVE]),
+		});
+	});
+	await page.route('**/api/v1/products**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+	});
+
+	await page.goto('/products/new');
+	await page.getByTestId('product-form-cancel').click();
+	await page.waitForURL('**/products');
+	expect(page.url()).toContain('/products');
+	expect(page.url()).not.toContain('/new');
 });
 
 test('product edit form shows existing manufacturing_address', async ({ page }) => {

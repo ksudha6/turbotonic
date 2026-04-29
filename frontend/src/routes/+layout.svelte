@@ -24,7 +24,8 @@
 			page.url.pathname.startsWith('/invoice/') ||
 			page.url.pathname === '/vendors' ||
 			page.url.pathname.startsWith('/vendors/') ||
-			page.url.pathname === '/products'
+			page.url.pathname === '/products' ||
+			page.url.pathname === '/products/new'
 	);
 
 
