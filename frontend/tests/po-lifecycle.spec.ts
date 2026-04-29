@@ -262,25 +262,20 @@ test('create PO form validates empty part number', async ({ page }) => {
 	});
 
 	await page.goto('/po/new');
-	await page.waitForSelector('form');
+	await page.getByTestId('po-form').waitFor();
 
-	// Fill required header fields
-	await page.selectOption('#vendor_id', 'v1');
-	await page.selectOption('#currency', 'USD');
-	await page.fill('#issued_date', '2026-03-16');
-	await page.fill('#required_delivery_date', '2026-04-16');
+	// Fill required header fields (form already has novalidate)
+	await page.getByTestId('po-form-vendor').selectOption('v1');
+	await page.getByTestId('po-form-currency').selectOption('USD');
+	await page.getByTestId('po-form-issued-date').fill('2026-03-16');
+	await page.getByTestId('po-form-required-delivery-date').fill('2026-04-16');
 
-	// Fill part_number with whitespace to bypass HTML required but fail JS trim() check
-	await page.locator('input[placeholder="Part No."]').fill('   ');
+	// Whitespace-only part_number fails JS trim() check
+	await page.getByTestId('po-form-line-0-part-number').fill('   ');
 
-	// Remove HTML validation so JS validation runs
-	await page.evaluate(() => {
-		document.querySelector('form')?.setAttribute('novalidate', '');
-	});
+	await page.getByTestId('po-form-submit').click();
 
-	await page.getByRole('button', { name: 'Create PO' }).click();
-
-	await expect(page.locator('.error-message')).toContainText('Part Number is required');
+	await expect(page.getByTestId('po-form-error-banner')).toContainText('Part Number is required');
 });
 
 test('create PO form rejects quantity <= 0', async ({ page }) => {
@@ -302,33 +297,23 @@ test('create PO form rejects quantity <= 0', async ({ page }) => {
 	});
 
 	await page.goto('/po/new');
-	await page.waitForSelector('form');
+	await page.getByTestId('po-form').waitFor();
 
-	// Fill required header fields
-	await page.selectOption('#vendor_id', 'v1');
-	await page.selectOption('#currency', 'USD');
-	await page.fill('#issued_date', '2026-03-16');
-	await page.fill('#required_delivery_date', '2026-04-16');
+	// Fill required header fields (form already has novalidate)
+	await page.getByTestId('po-form-vendor').selectOption('v1');
+	await page.getByTestId('po-form-currency').selectOption('USD');
+	await page.getByTestId('po-form-issued-date').fill('2026-03-16');
+	await page.getByTestId('po-form-required-delivery-date').fill('2026-04-16');
 
 	// Fill part_number so it passes that check
-	await page.locator('input[placeholder="Part No."]').fill('PART-001');
+	await page.getByTestId('po-form-line-0-part-number').fill('PART-001');
 
-	// Set quantity to 0 via JS to bypass HTML min=1 constraint
-	const qtyInput = page.locator('input[placeholder="Qty"]');
-	await qtyInput.fill('0');
-	await qtyInput.evaluate((el: HTMLInputElement) => {
-		el.value = '0';
-		el.dispatchEvent(new Event('input', { bubbles: true }));
-	});
+	// Set quantity to 0 (form parses with parseInt + non-positive guard)
+	await page.getByTestId('po-form-line-0-quantity').fill('0');
 
-	// Remove HTML validation so the form submits and JS validation runs
-	await page.evaluate(() => {
-		document.querySelector('form')?.setAttribute('novalidate', '');
-	});
+	await page.getByTestId('po-form-submit').click();
 
-	await page.getByRole('button', { name: 'Create PO' }).click();
-
-	await expect(page.locator('.error-message')).toContainText('Quantity must be greater than 0');
+	await expect(page.getByTestId('po-form-error-banner')).toContainText('Quantity must be greater than 0');
 });
 
 // Iter 056 removed the PO-level reject endpoint and the single-shot accept-lines flow.
@@ -392,14 +377,15 @@ test('HS code input shows error for invalid value', async ({ page }) => {
 	});
 
 	await page.goto('/po/new');
-	await page.waitForSelector('form');
+	await page.getByTestId('po-form').waitFor();
 
 	// Enter a value that fails the HS code pattern (letters, fewer than 4 chars)
-	await page.locator('input[placeholder="HS Code"]').fill('AB');
+	await page.getByTestId('po-form-line-0-hs-code').fill('AB');
 
-	// Error message must appear near the input
-	await expect(page.locator('.hs-code-cell .error-message')).toBeVisible();
-	await expect(page.locator('.hs-code-cell .error-message')).toContainText('digits and dots');
+	// Error message must appear via FormField on the same field
+	const hsCodeField = page.getByTestId('po-form-line-0-hs-code-field');
+	await expect(hsCodeField.getByRole('alert')).toBeVisible();
+	await expect(hsCodeField.getByRole('alert')).toContainText('digits and dots');
 });
 
 test('submit button disabled when HS code invalid', async ({ page }) => {
@@ -420,13 +406,13 @@ test('submit button disabled when HS code invalid', async ({ page }) => {
 	});
 
 	await page.goto('/po/new');
-	await page.waitForSelector('form');
+	await page.getByTestId('po-form').waitFor();
 
 	// Enter an invalid HS code
-	await page.locator('input[placeholder="HS Code"]').fill('AB');
+	await page.getByTestId('po-form-line-0-hs-code').fill('AB');
 
 	// Submit button must be disabled while HS code error is present
-	await expect(page.getByRole('button', { name: 'Create PO' })).toBeDisabled();
+	await expect(page.getByTestId('po-form-submit')).toBeDisabled();
 });
 
 test('PO form renders dropdown fields from reference data', async ({ page }) => {
@@ -447,26 +433,23 @@ test('PO form renders dropdown fields from reference data', async ({ page }) => 
 	});
 
 	await page.goto('/po/new');
-	await page.waitForSelector('form');
+	await page.getByTestId('po-form').waitFor();
 
 	// Verify currency is a select with options from reference data
-	const currencySelect = page.locator('#currency');
+	const currencySelect = page.getByTestId('po-form-currency');
 	await expect(currencySelect).toBeVisible();
 	const currencyOptions = currencySelect.locator('option');
 	// "Select..." placeholder + reference data items
 	await expect(currencyOptions).toHaveCount(4); // placeholder + USD + EUR + GBP
 
 	// Verify incoterm is a select
-	const incotermSelect = page.locator('#incoterm');
-	await expect(incotermSelect).toBeVisible();
+	await expect(page.getByTestId('po-form-incoterm')).toBeVisible();
 
 	// Verify port_of_loading is a select
-	const polSelect = page.locator('#port_of_loading');
-	await expect(polSelect).toBeVisible();
+	await expect(page.getByTestId('po-form-port-loading')).toBeVisible();
 
 	// Verify buyer_country is a select with default value pre-selected
-	const bcSelect = page.locator('#buyer_country');
-	await expect(bcSelect).toHaveValue('US');
+	await expect(page.getByTestId('po-form-buyer-country')).toHaveValue('US');
 });
 
 // ---------------------------------------------------------------------------
@@ -491,18 +474,18 @@ test('PO form renders marketplace dropdown with correct options', async ({ page 
 	});
 
 	await page.goto('/po/new');
-	await page.waitForSelector('form');
+	await page.getByTestId('po-form').waitFor();
 
-	const marketplaceSelect = page.locator('#marketplace');
+	const marketplaceSelect = page.getByTestId('po-form-marketplace');
 	await expect(marketplaceSelect).toBeVisible();
 
-	// 1 empty option + 4 marketplace values = 5 total
-	const options = page.locator('#marketplace option');
+	// 1 empty (None) option + 4 marketplace values = 5 total
+	const options = marketplaceSelect.locator('option');
 	await expect(options).toHaveCount(5);
 
 	// Assert each expected value is present
 	for (const value of ['', 'AMZ', '3PL_1', '3PL_2', '3PL_3']) {
-		await expect(page.locator(`#marketplace option[value="${value}"]`)).toHaveCount(1);
+		await expect(marketplaceSelect.locator(`option[value="${value}"]`)).toHaveCount(1);
 	}
 });
 
@@ -540,21 +523,21 @@ test('PO form submits marketplace value', async ({ page }) => {
 	});
 
 	await page.goto('/po/new');
-	await page.waitForSelector('form');
+	await page.getByTestId('po-form').waitFor();
 
 	// Fill required header fields
-	await page.selectOption('#vendor_id', 'vendor-uuid-1');
-	await page.selectOption('#currency', 'USD');
-	await page.fill('#issued_date', '2026-03-16');
-	await page.fill('#required_delivery_date', '2026-04-16');
+	await page.getByTestId('po-form-vendor').selectOption('vendor-uuid-1');
+	await page.getByTestId('po-form-currency').selectOption('USD');
+	await page.getByTestId('po-form-issued-date').fill('2026-03-16');
+	await page.getByTestId('po-form-required-delivery-date').fill('2026-04-16');
 
 	// Fill required line item field
-	await page.locator('input[placeholder="Part No."]').fill('PART-001');
+	await page.getByTestId('po-form-line-0-part-number').fill('PART-001');
 
 	// Select marketplace
-	await page.selectOption('#marketplace', 'AMZ');
+	await page.getByTestId('po-form-marketplace').selectOption('AMZ');
 
-	await page.getByRole('button', { name: 'Create PO' }).click();
+	await page.getByTestId('po-form-submit').click();
 	await page.waitForURL(`**/po/${PO_ID}`);
 
 	// Assert the POST body included the selected marketplace

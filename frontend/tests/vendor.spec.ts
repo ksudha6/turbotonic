@@ -169,10 +169,10 @@ test('PO form prefills buyer fields with defaults', async ({ page }) => {
 	});
 
 	await page.goto('/po/new');
-	await page.waitForSelector('form');
+	await page.getByTestId('po-form').waitFor();
 
-	await expect(page.locator('#buyer_name')).toHaveValue('TurboTonic Ltd');
-	await expect(page.locator('#buyer_country')).toHaveValue('US');
+	await expect(page.getByTestId('po-form-buyer-name')).toHaveValue('TurboTonic Ltd');
+	await expect(page.getByTestId('po-form-buyer-country')).toHaveValue('US');
 });
 
 test('reactivate vendor updates status badge', async ({ page }) => {
