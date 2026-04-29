@@ -125,4 +125,16 @@ None. The mock route at `/ui-demo/po-finishing` is the visual verification surfa
 
 ## Notes
 
-(populated at close)
+DataTable does not support snippet cells (its `render` returns `string | number`), so `PoInvoicesPanel` hand-rolls a `<table>` matching DataTable's CSS rhythm rather than extending the primitive. Same precedent as `PoListTable` from iter 076. Promoting snippet support out of the two consumers into the shared primitive stays on the backlog.
+
+`event-labels.ts` is a fresh module rather than a refactor of the dictionary buried inside `ActivityTimeline.svelte`. The legacy file keeps its own copy until invoice detail revamps and retires the component. Two copies for one iter is preferable to a partial refactor that leaves the legacy timeline reaching across module boundaries.
+
+`PoActivityPanel` accepts an optional `mockEntries` prop that bypasses `onMount` fetch. The prod page never sets it; the `/ui-demo/po-finishing` mock route uses it to demo the panel offline without `window.fetch` interception. This is the cleanest way to keep the component self-fetching in production while still mockable in the demo gallery.
+
+Tone mapping `LIVE → blue, ACTION_REQUIRED → orange, DELAYED → red` lives in `categoryToTone` next to `EVENT_LABELS` rather than inside `PoActivityPanel`. Future PO event surfaces (notification routing, dashboard category filters) can import the same helper.
+
+Rejection History stays a hand-rolled `<article>` list inside `PanelCard` rather than reusing `ActivityFeed`. Folding it would mix Rejection Record value objects with Activity Log Entry events — the inventory's G-25 decision called this out and the implementation honors it.
+
+Per-row icon glyphs from the legacy `ActivityTimeline` (pencil/check/x/shield-check etc.) did not carry over. `ActivityFeed` is dot+text only by design; the icons were advisory and the dashboard ships without them. The migrated negotiation-events spec was rewritten to assert via `EVENT_LABELS` text, which is the contract that actually matters.
+
+The four pre-revamp specs that targeted `.timeline-entry` / `.entry-label` / `.timeline-dot` class selectors migrated as scope expansion (per CLAUDE.md selector policy: when a new component lands, the consumer's specs migrate with it). `activity-timeline.spec.ts` and `po-negotiation-events.spec.ts` now query through `po-activity-feed` testid + ActivityFeed role/class structure.
