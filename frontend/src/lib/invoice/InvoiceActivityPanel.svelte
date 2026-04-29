@@ -10,10 +10,10 @@
 	import type { ActivityLogEntry } from '$lib/types';
 
 	let {
-		poId,
+		invoiceId,
 		mockEntries
 	}: {
-		poId: string;
+		invoiceId: string;
 		mockEntries?: ActivityLogEntry[];
 	} = $props();
 
@@ -31,7 +31,7 @@
 			loading = false;
 			return;
 		}
-		entries = await fetchActivityForEntity('PO', poId);
+		entries = await fetchActivityForEntity('INVOICE', invoiceId);
 		loading = false;
 	});
 
@@ -51,17 +51,17 @@
 	}
 </script>
 
-<PanelCard title="Activity" data-testid="po-activity-panel">
+<PanelCard title="Activity" data-testid="invoice-activity-panel">
 	{#snippet children()}
 		{#if loading}
 			<LoadingState />
 		{:else if entries.length === 0}
 			<EmptyState title="No activity yet." />
 		{:else}
-			<ActivityFeed entries={feedEntries} data-testid="po-activity-feed" />
+			<ActivityFeed entries={feedEntries} data-testid="invoice-activity-feed" />
 			{#if visibleCount < entries.length}
-				<div class="show-more">
-					<Button variant="ghost" onclick={showMore} data-testid="po-activity-show-more-btn">
+				<div class="invoice-activity-panel__more">
+					<Button variant="ghost" onclick={showMore} data-testid="invoice-activity-show-more-btn">
 						Show more
 					</Button>
 				</div>
@@ -71,7 +71,7 @@
 </PanelCard>
 
 <style>
-	.show-more {
+	.invoice-activity-panel__more {
 		display: flex;
 		justify-content: center;
 		padding-top: var(--space-3);

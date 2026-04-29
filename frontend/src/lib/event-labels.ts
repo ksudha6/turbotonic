@@ -1,6 +1,5 @@
 // Shared dictionary of ActivityLogEntry.event codes to human-readable labels.
-// Source of truth: copied verbatim from ActivityTimeline.svelte (iter 083).
-// ActivityTimeline keeps its own inline copy until invoice detail retires it.
+// Source of truth for PO + Invoice activity surfaces.
 export const EVENT_LABELS = {
 	PO_CREATED: 'PO created',
 	PO_SUBMITTED: 'PO submitted',

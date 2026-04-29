@@ -1,7 +1,21 @@
 <script lang="ts">
 	import PanelCard from '$lib/ui/PanelCard.svelte';
-	import StatusPill from '$lib/components/StatusPill.svelte';
-	import type { InvoiceListItem, PurchaseOrder, RemainingLine } from '$lib/types';
+	import StatusPill from '$lib/ui/StatusPill.svelte';
+	import type { InvoiceListItem, InvoiceStatus, PurchaseOrder, RemainingLine } from '$lib/types';
+
+	type Tone = 'green' | 'blue' | 'orange' | 'red' | 'gray';
+
+	const STATUS_TONE: Readonly<Record<InvoiceStatus, Tone>> = {
+		DRAFT: 'gray',
+		SUBMITTED: 'blue',
+		APPROVED: 'green',
+		PAID: 'green',
+		DISPUTED: 'red'
+	};
+
+	function statusLabel(status: string): string {
+		return status.charAt(0) + status.slice(1).toLowerCase();
+	}
 
 	let {
 		invoices,
@@ -59,7 +73,7 @@
 					{#each invoices as inv}
 						<tr data-testid="po-invoices-row-{inv.id}">
 							<td><a href="/invoice/{inv.id}">{inv.invoice_number}</a></td>
-							<td><StatusPill status={inv.status} /></td>
+							<td><StatusPill tone={STATUS_TONE[inv.status]} label={statusLabel(inv.status)} /></td>
 							<td>{formatValue(inv.subtotal, po.currency)}</td>
 							<td>{formatDate(inv.created_at)}</td>
 						</tr>

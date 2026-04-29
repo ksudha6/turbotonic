@@ -180,7 +180,7 @@ test('PO detail activity timeline shows empty message when no entries', async ({
 // Invoice detail — Activity section
 // ---------------------------------------------------------------------------
 
-test('invoice detail page shows Activity section heading and timeline entries', async ({ page }) => {
+test('invoice detail page shows Activity panel and feed entries', async ({ page }) => {
 	await page.route(`**/api/v1/invoices/${INV_ID}`, (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(INVOICE_DETAIL) });
 	});
@@ -189,29 +189,28 @@ test('invoice detail page shows Activity section heading and timeline entries', 
 	await page.goto(`/invoice/${INV_ID}`);
 	await page.waitForSelector('h1');
 
-	await expect(page.getByRole('heading', { name: 'Activity' })).toBeVisible();
-	await expect(page.locator('.timeline-entry')).toHaveCount(1);
-	await expect(page.locator('.entry-label')).toContainText('Invoice created');
+	await expect(page.getByTestId('invoice-activity-panel')).toBeVisible();
+	const feed = page.getByTestId('invoice-activity-feed');
+	await expect(feed).toBeVisible();
+	await expect(feed.getByText('Invoice created')).toHaveCount(1);
 });
 
-test('invoice detail activity timeline shows category-colored dot', async ({ page }) => {
+test('invoice detail activity feed dot uses category-mapped tone class', async ({ page }) => {
 	await page.route(`**/api/v1/invoices/${INV_ID}`, (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(INVOICE_DETAIL) });
 	});
 	await mockActivityRoutes(page, [INVOICE_ACTIVITY_ENTRY]);
 
 	await page.goto(`/invoice/${INV_ID}`);
-	await page.waitForSelector('.timeline-entry');
+	await page.waitForSelector('h1');
 
-	// ACTION_REQUIRED category maps to #f59e0b (amber) per ActivityTimeline component.
-	// Browsers normalise inline hex to rgb() when reading back style.background.
-	const dot = page.locator('.timeline-dot').first();
-	await expect(dot).toBeVisible();
-	const bg = await dot.evaluate((el) => (el as HTMLElement).style.background);
-	expect(bg).toBe('rgb(245, 158, 11)');
+	// ACTION_REQUIRED → 'orange' tone via categoryToTone in $lib/event-labels.
+	const feed = page.getByTestId('invoice-activity-feed');
+	await expect(feed).toBeVisible();
+	await expect(feed.locator('.dot.orange').first()).toBeVisible();
 });
 
-test('invoice detail activity timeline shows empty message when no entries', async ({ page }) => {
+test('invoice detail activity panel shows empty state when no entries', async ({ page }) => {
 	await page.route(`**/api/v1/invoices/${INV_ID}`, (route) => {
 		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(INVOICE_DETAIL) });
 	});
@@ -220,6 +219,7 @@ test('invoice detail activity timeline shows empty message when no entries', asy
 	await page.goto(`/invoice/${INV_ID}`);
 	await page.waitForSelector('h1');
 
-	await expect(page.locator('.timeline')).toContainText('No activity recorded.');
-	await expect(page.locator('.timeline-entry')).toHaveCount(0);
+	const panel = page.getByTestId('invoice-activity-panel');
+	await expect(panel).toContainText('No activity yet.');
+	await expect(page.getByTestId('invoice-activity-feed')).toHaveCount(0);
 });

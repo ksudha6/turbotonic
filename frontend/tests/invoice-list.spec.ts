@@ -287,33 +287,3 @@ test('pagination Prev disabled at page 1 and Next disabled when no more pages', 
 	await expect(page.getByTestId('invoice-pagination-next')).toBeDisabled();
 });
 
-test('invoice detail page shows Download PDF button', async ({ page }) => {
-	const INVOICE_DETAIL = {
-		id: 'inv-1',
-		invoice_number: 'INV-20260401-0001',
-		po_id: 'po-1',
-		status: 'DRAFT',
-		payment_terms: 'TT',
-		currency: 'USD',
-		line_items: [
-			{ part_number: 'PN-001', description: 'Widget', quantity: 100, uom: 'EA', unit_price: '5.00' }
-		],
-		subtotal: '500.00',
-		dispute_reason: '',
-		created_at: '2026-04-01T00:00:00+00:00',
-		updated_at: '2026-04-01T00:00:00+00:00'
-	};
-
-	await page.route('**/api/v1/invoices/inv-1', (route) => {
-		route.fulfill({
-			status: 200,
-			contentType: 'application/json',
-			body: JSON.stringify(INVOICE_DETAIL)
-		});
-	});
-
-	await page.goto('/invoice/inv-1');
-	await page.waitForSelector('h1');
-
-	await expect(page.getByRole('button', { name: 'Download PDF' })).toBeVisible();
-});

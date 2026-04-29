@@ -180,7 +180,7 @@ const PO_DETAIL = {
 };
 
 // All seven iter-058 events, each with a distinct category/target_role so the
-// mocked entries exercise the full label and icon mapping in ActivityTimeline.
+// mocked entries exercise the full label mapping in PoActivityPanel.
 const NEW_EVENT_ENTRIES = [
 	{ id: 'e1', entity_type: 'PO', entity_id: PO_ID, event: 'PO_LINE_MODIFIED', category: 'LIVE', target_role: 'VENDOR', detail: 'PN-001: quantity', read_at: null, created_at: '2026-04-01T00:00:00+00:00' },
 	{ id: 'e2', entity_type: 'PO', entity_id: PO_ID, event: 'PO_LINE_ACCEPTED', category: 'LIVE', target_role: 'VENDOR', detail: 'PN-001', read_at: null, created_at: '2026-04-01T00:01:00+00:00' },

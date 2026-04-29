@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
 // Activity mocks — NotificationBell calls unread-count on every page load;
-// detail pages with ActivityTimeline call the entity activity endpoint.
+// detail pages with PoActivityPanel/InvoiceActivityPanel call the entity activity endpoint.
 // ---------------------------------------------------------------------------
 
 test.beforeEach(async ({ page }) => {
