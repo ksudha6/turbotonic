@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, Certificate, CertificateCreateInput, CertificateListItem, CertWarning, DashboardData, DashboardSummary, DocumentRequirementStatus, Invoice, InvoiceLineItemCreate, InvoiceListItem, InviteUserInput, InviteUserResponse, MilestoneResponse, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, PatchUserInput, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReadinessResult, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentBookingPayload, ShipmentDocumentRequirement, ShipmentUpdate, User, UserRole, UserStatus, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, Certificate, CertificateCreateInput, CertificateListItem, CertWarning, DashboardData, DashboardSummary, DocumentRequirementStatus, Invoice, InvoiceLineItemCreate, InvoiceListItem, InviteUserInput, InviteUserResponse, MilestoneResponse, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, PatchUserInput, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReadinessResult, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentBookingPayload, ShipmentDeclarePayload, ShipmentDocumentRequirement, ShipmentTransportPayload, ShipmentUpdate, User, UserRole, UserStatus, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -839,6 +839,55 @@ export async function bookShipment(id: string, payload: ShipmentBookingPayload):
 		}
 		const body = await res.json().catch(() => ({}));
 		throw new Error(body.detail ?? `POST /api/v1/shipments/${id}/book failed: ${res.status}`);
+	}
+	return res.json() as Promise<Shipment>;
+}
+
+// Iter 106: PATCH /{id}/transport — record vessel_name + voyage_number post-booking.
+// Both fields are nullable; passing null clears a previously set value.
+export async function setShipmentTransport(id: string, payload: ShipmentTransportPayload): Promise<Shipment> {
+	const res = await fetch(`/api/v1/shipments/${id}/transport`, {
+		method: 'PATCH',
+		credentials: 'include',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload)
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail ?? `PATCH /api/v1/shipments/${id}/transport failed: ${res.status}`);
+	}
+	return res.json() as Promise<Shipment>;
+}
+
+// Iter 106: POST /{id}/declare — record signatory_name + signatory_title; sets declared_at server-side.
+export async function declareShipment(id: string, payload: ShipmentDeclarePayload): Promise<Shipment> {
+	const signatory_name = payload.signatory_name.trim();
+	const signatory_title = payload.signatory_title.trim();
+	if (!signatory_name) throw new Error('Signatory name must not be empty');
+	if (!signatory_title) throw new Error('Signatory title must not be empty');
+	const res = await fetch(`/api/v1/shipments/${id}/declare`, {
+		method: 'POST',
+		credentials: 'include',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ signatory_name, signatory_title })
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail ?? `POST /api/v1/shipments/${id}/declare failed: ${res.status}`);
 	}
 	return res.json() as Promise<Shipment>;
 }
