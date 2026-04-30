@@ -54,6 +54,11 @@ function makeShipment(overrides: ShipmentFixture = {}): ShipmentFixture {
 		],
 		created_at: '2026-04-01T10:00:00+00:00',
 		updated_at: '2026-04-02T10:00:00+00:00',
+		// Iter 103: booking metadata fields (nullable until BOOKED).
+		carrier: null,
+		booking_reference: null,
+		pickup_date: null,
+		shipped_at: null,
 		...overrides
 	};
 }
@@ -244,6 +249,28 @@ async function setupShipmentDetail(
 			status: 200,
 			contentType: 'application/json',
 			body: JSON.stringify(makeShipment({ status: 'READY_TO_SHIP' }))
+		});
+	});
+	// Iter 103: booking and mark-shipped default mocks.
+	await page.route(`**/api/v1/shipments/${SHIPMENT_ID}/book`, (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(
+				makeShipment({
+					status: 'BOOKED',
+					carrier: 'Maersk',
+					booking_reference: 'MAEU1234567',
+					pickup_date: '2026-05-10'
+				})
+			)
+		});
+	});
+	await page.route(`**/api/v1/shipments/${SHIPMENT_ID}/ship`, (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(makeShipment({ status: 'SHIPPED', shipped_at: '2026-05-10T12:00:00+00:00' }))
 		});
 	});
 	await page.route(`**/api/v1/shipments/${SHIPMENT_ID}/documents/*/upload`, (route) => {
@@ -1048,5 +1075,160 @@ test.describe('iter 102 — documents + readiness', () => {
 		await expect(page.getByTestId('shipment-document-row-req-bol')).toContainText(KNOWN_LABEL);
 		// Unknown type renders verbatim.
 		await expect(page.getByTestId('shipment-document-row-req-custom')).toContainText(UNKNOWN_TYPE);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// Iter 103 — booking + mark-shipped
+// ---------------------------------------------------------------------------
+
+test.describe('iter 103 — booking + mark-shipped', () => {
+	// -----------------------------------------------------------------------
+	// Spec 1: READY_TO_SHIP + SM — booking panel visible; submit button disabled
+	// until required fields are filled; successful book transitions to BOOKED.
+	// -----------------------------------------------------------------------
+	test('READY_TO_SHIP + SM: booking panel visible; submit disabled until fields filled; book transitions to BOOKED', async ({
+		page
+	}) => {
+		const STATUS_READY = 'READY_TO_SHIP' as ShipmentStatus;
+		const STATUS_BOOKED = 'BOOKED' as ShipmentStatus;
+		const CARRIER = 'Maersk';
+		const BOOKING_REF = 'MAEU1234567';
+		const PICKUP_DATE = '2026-05-10';
+
+		await setupShipmentDetail(page, { status: STATUS_READY, role: 'SM' });
+
+		let bookCalls = 0;
+		let capturedBody: Record<string, unknown> = {};
+		await page.route(`**/api/v1/shipments/${SHIPMENT_ID}/book`, (route) => {
+			bookCalls++;
+			capturedBody = JSON.parse(route.request().postData() ?? '{}');
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(
+					makeShipment({
+						status: STATUS_BOOKED,
+						carrier: CARRIER,
+						booking_reference: BOOKING_REF,
+						pickup_date: PICKUP_DATE
+					})
+				)
+			});
+		});
+
+		await page.goto(`/shipments/${SHIPMENT_ID}`);
+
+		// Booking panel visible.
+		await expect(page.getByTestId('shipment-booking-panel')).toBeVisible();
+
+		// Submit disabled until required fields are filled.
+		const submitBtn = page.getByTestId('shipment-booking-submit');
+		await expect(submitBtn).toBeDisabled();
+
+		// Fill carrier only — still disabled (booking reference + pickup date missing).
+		await page.getByLabel('Carrier').fill(CARRIER);
+		await expect(submitBtn).toBeDisabled();
+
+		// Fill booking reference — still disabled (pickup date missing).
+		await page.getByLabel('Booking reference').fill(BOOKING_REF);
+		await expect(submitBtn).toBeDisabled();
+
+		// Fill pickup date — now enabled.
+		await page.getByLabel('Pickup date').fill(PICKUP_DATE);
+		await expect(submitBtn).not.toBeDisabled();
+
+		// Submit.
+		await submitBtn.click();
+		expect(bookCalls).toBe(1);
+		expect(capturedBody['carrier']).toBe(CARRIER);
+		expect(capturedBody['booking_reference']).toBe(BOOKING_REF);
+		expect(capturedBody['pickup_date']).toBe(PICKUP_DATE);
+
+		// After BOOKED transition the booking panel collapses (canBookShipment(SM, BOOKED) = false).
+		await expect(page.getByTestId('shipment-booking-panel')).toHaveCount(0);
+	});
+
+	// -----------------------------------------------------------------------
+	// Spec 2: READY_TO_SHIP + FREIGHT_MANAGER — booking panel visible.
+	// -----------------------------------------------------------------------
+	test('READY_TO_SHIP + FM: booking panel visible', async ({ page }) => {
+		await setupShipmentDetail(page, { status: 'READY_TO_SHIP', role: 'FREIGHT_MANAGER' });
+		await page.goto(`/shipments/${SHIPMENT_ID}`);
+		await expect(page.getByTestId('shipment-booking-panel')).toBeVisible();
+	});
+
+	// -----------------------------------------------------------------------
+	// Spec 3: READY_TO_SHIP + VENDOR — no booking panel.
+	// -----------------------------------------------------------------------
+	test('READY_TO_SHIP + VENDOR: booking panel absent', async ({ page }) => {
+		await setupShipmentDetail(page, {
+			status: 'READY_TO_SHIP',
+			role: 'VENDOR',
+			readiness: null
+		});
+		await page.goto(`/shipments/${SHIPMENT_ID}`);
+		await expect(page.getByTestId('shipment-booking-panel')).toHaveCount(0);
+	});
+
+	// -----------------------------------------------------------------------
+	// Spec 4: BOOKED + SM — "Mark shipped" button visible; click transitions to SHIPPED.
+	// Booking panel absent (BOOKED is past READY_TO_SHIP).
+	// -----------------------------------------------------------------------
+	test('BOOKED + SM: Mark shipped button visible; booking panel absent; click transitions to SHIPPED', async ({
+		page
+	}) => {
+		const STATUS_BOOKED = 'BOOKED' as ShipmentStatus;
+		const STATUS_SHIPPED = 'SHIPPED' as ShipmentStatus;
+
+		await setupShipmentDetail(page, { status: STATUS_BOOKED, role: 'SM' });
+
+		let shipCalls = 0;
+		await page.route(`**/api/v1/shipments/${SHIPMENT_ID}/ship`, (route) => {
+			shipCalls++;
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify(
+					makeShipment({ status: STATUS_SHIPPED, shipped_at: '2026-05-10T12:00:00+00:00' })
+				)
+			});
+		});
+
+		await page.goto(`/shipments/${SHIPMENT_ID}`);
+
+		// Booking panel absent — BOOKED is not READY_TO_SHIP.
+		await expect(page.getByTestId('shipment-booking-panel')).toHaveCount(0);
+
+		// Mark shipped button visible in action rail.
+		const markShippedBtn = page.getByTestId('shipment-action-mark-shipped');
+		await expect(markShippedBtn).toBeVisible();
+		await expect(markShippedBtn).not.toBeDisabled();
+
+		// Click.
+		await markShippedBtn.click();
+		expect(shipCalls).toBe(1);
+
+		// After SHIPPED the action rail collapses (no button applies to SHIPPED).
+		await expect(page.getByTestId('shipment-action-rail')).toHaveCount(0);
+	});
+
+	// -----------------------------------------------------------------------
+	// Spec 5: BOOKED + FM — Mark shipped visible.
+	// -----------------------------------------------------------------------
+	test('BOOKED + FM: Mark shipped button visible', async ({ page }) => {
+		await setupShipmentDetail(page, { status: 'BOOKED', role: 'FREIGHT_MANAGER' });
+		await page.goto(`/shipments/${SHIPMENT_ID}`);
+		await expect(page.getByTestId('shipment-action-mark-shipped')).toBeVisible();
+	});
+
+	// -----------------------------------------------------------------------
+	// Spec 6: BOOKED + VENDOR — Mark shipped absent.
+	// -----------------------------------------------------------------------
+	test('BOOKED + VENDOR: Mark shipped button absent', async ({ page }) => {
+		await setupShipmentDetail(page, { status: 'BOOKED', role: 'VENDOR', readiness: null });
+		await page.goto(`/shipments/${SHIPMENT_ID}`);
+		await expect(page.getByTestId('shipment-action-mark-shipped')).toHaveCount(0);
+		await expect(page.getByTestId('shipment-action-rail')).toHaveCount(0);
 	});
 });

@@ -40,4 +40,4 @@ No existing tests break. The `setupShipmentDetail` helper adds default mocks for
 
 ## Notes
 
-_placeholder_
+Booking payload matches the backend `ShipmentBookRequest` exactly: `carrier`, `booking_reference`, `pickup_date` — the iter 074 spec did not include vessel, voyage, or bl_number fields, so those were not added. The `ShipmentBookingPanel` collapses after a successful book (status changes to BOOKED, `canBookShipment` returns false) rather than showing a confirmation; the status pill update in the header is the confirmation. `ShipmentActionRail` gained a `shipping` prop and `on_mark_shipped` callback alongside the existing `marking`/`on_mark_ready`; the rail renders when any of submit, mark-ready, or mark-shipped applies. Booking form submit is disabled client-side when carrier or booking_reference is empty/whitespace-only (mirrors backend validation). Browser tests could not run in the worktree (no node_modules); the test file is committed and will run on merge to main via the main repo's Playwright setup.
