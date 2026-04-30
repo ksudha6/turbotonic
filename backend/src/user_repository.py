@@ -172,6 +172,13 @@ class UserRepository:
             new_count, credential_id,
         )
 
+    async def delete_credentials_by_user_id(self, user_id: str) -> None:
+        # Idempotent: zero rows is fine (used by reset-credentials on a user
+        # whose rows were already gone, or on a never-registered PENDING).
+        await self._conn.execute(
+            "DELETE FROM webauthn_credentials WHERE user_id = $1", user_id
+        )
+
 
 def _reconstruct(row: asyncpg.Record) -> User:
     # Older rows may not carry the email/invite_token columns depending on

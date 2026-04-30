@@ -402,3 +402,46 @@ async def reactivate_user(user_id: str, request: Request, repo: UserRepoDep):
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await repo.save(target)
     return {"user": _user_to_dict(target)}
+
+
+@invite_router.post("/{user_id}/reset-credentials")
+async def reset_credentials(user_id: str, request: Request, repo: UserRepoDep):
+    _require_admin(request)
+    target = await repo.get_by_id(user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Mirror the iter-095 deactivate guard: dropping the only ACTIVE admin's
+    # status to PENDING locks every admin out the same way deactivation does.
+    if target.role is UserRole.ADMIN and target.status is UserStatus.ACTIVE:
+        active_admin_count = await repo.count_active_admins()
+        if active_admin_count <= 1:
+            raise HTTPException(
+                status_code=409,
+                detail="cannot reset credentials for the last active admin",
+            )
+    try:
+        target.reset_credentials()
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    # Save before deleting credentials. If the DELETE fails after a successful
+    # save, the user is PENDING with stale credentials and the iter-030 guard
+    # ("User already has credentials") rejects register/options — recoverable
+    # by retrying. The inverse order would leave an ACTIVE user with no
+    # credentials, breaking login with no signal of why.
+    await repo.save(target)
+    await repo.delete_credentials_by_user_id(target.id)
+    return {"user": _user_to_dict(target), "invite_token": target.invite_token}
+
+
+@invite_router.post("/{user_id}/reissue-invite")
+async def reissue_invite(user_id: str, request: Request, repo: UserRepoDep):
+    _require_admin(request)
+    target = await repo.get_by_id(user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    try:
+        target.reissue_invite()
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await repo.save(target)
+    return {"user": _user_to_dict(target), "invite_token": target.invite_token}

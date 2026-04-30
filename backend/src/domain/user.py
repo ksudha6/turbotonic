@@ -121,6 +121,25 @@ class User:
             raise ValueError("only INACTIVE users can be reactivated")
         self.status = UserStatus.ACTIVE
 
+    def reset_credentials(self) -> None:
+        # ACTIVE | INACTIVE -> PENDING with a fresh invite_token. The
+        # webauthn_credentials rows themselves live on a separate aggregate
+        # and are deleted by the repository; the User aggregate only owns the
+        # status flip and the new token. Already-PENDING is the wrong call
+        # (use reissue_invite() instead) and is rejected.
+        if self.status is UserStatus.PENDING:
+            raise ValueError("user is already PENDING")
+        self.status = UserStatus.PENDING
+        self.invite_token = str(uuid4())
+
+    def reissue_invite(self) -> None:
+        # PENDING -> PENDING with a fresh invite_token. Used when the original
+        # invite link is lost before consumption. Non-PENDING users do not have
+        # an invite to reissue; reset_credentials() is the right call there.
+        if self.status is not UserStatus.PENDING:
+            raise ValueError("only PENDING users have an invite to reissue")
+        self.invite_token = str(uuid4())
+
 
 def _validate_fields(
     username: str, display_name: str, role: UserRole, vendor_id: str | None
