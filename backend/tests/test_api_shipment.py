@@ -1146,3 +1146,164 @@ async def test_mark_ready_when_not_ready_returns_409_with_readiness_details(
     assert detail["is_ready"] is False
     assert doc_type in detail["missing_documents"]
     assert set(detail.keys()) == _EXPECTED_READINESS_KEYS
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Iter 104: PL/CI customs fields — ports, country of origin, HS code,
+#           manufacturer block, marketplace, declaration
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Expected resolved labels for the _PO_BASE / _make_vendor fixture data:
+#   port_of_loading  "USLAX"  -> "Los Angeles, United States"
+#   port_of_discharge "CNSHA" -> "Shanghai, China"
+#   country_of_origin "US"    -> "United States"
+#   vendor country    "CN"    -> "China"
+#   marketplace       "AMZ"   -> "AMZ"
+_EXPECTED_POL_LABEL = "Los Angeles"
+_EXPECTED_POD_LABEL = "Shanghai"
+_EXPECTED_COO_LABEL = "United States"
+_EXPECTED_VENDOR_COUNTRY_LABEL = "China"
+_EXPECTED_MARKETPLACE = "AMZ"
+_EXPECTED_DECLARATION = "I declare that the information on this invoice is true and correct."
+_EXPECTED_HS_CODE: str = str(_LINE_ITEM_A["hs_code"])
+
+
+async def test_packing_list_contains_ports(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/packing-list")
+    assert r2.status_code == 200
+    pdf_text = _extract_pdf_text(r2.content)
+    assert _EXPECTED_POL_LABEL in pdf_text
+    assert _EXPECTED_POD_LABEL in pdf_text
+
+
+async def test_packing_list_contains_country_of_origin_header(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/packing-list")
+    assert r2.status_code == 200
+    pdf_text = _extract_pdf_text(r2.content)
+    assert _EXPECTED_COO_LABEL in pdf_text
+
+
+async def test_packing_list_contains_hs_code_per_line(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/packing-list")
+    assert r2.status_code == 200
+    pdf_text = _extract_pdf_text(r2.content)
+    # HS code from PO line item must appear in PL
+    assert _EXPECTED_HS_CODE in pdf_text
+
+
+async def test_packing_list_contains_manufacturer_block(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/packing-list")
+    assert r2.status_code == 200
+    pdf_text = _extract_pdf_text(r2.content)
+    # Vendor acts as manufacturer; vendor name and country appear in the Shipper/Manufacturer block
+    assert "ShipTest Vendor" in pdf_text
+    assert _EXPECTED_VENDOR_COUNTRY_LABEL in pdf_text
+
+
+async def test_commercial_invoice_contains_marketplace(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/commercial-invoice")
+    assert r2.status_code == 200
+    pdf_text = _extract_pdf_text(r2.content)
+    assert _EXPECTED_MARKETPLACE in pdf_text
+
+
+async def test_commercial_invoice_contains_ports(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/commercial-invoice")
+    assert r2.status_code == 200
+    pdf_text = _extract_pdf_text(r2.content)
+    assert _EXPECTED_POL_LABEL in pdf_text
+    assert _EXPECTED_POD_LABEL in pdf_text
+
+
+async def test_commercial_invoice_contains_declaration(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/commercial-invoice")
+    assert r2.status_code == 200
+    pdf_text = _extract_pdf_text(r2.content)
+    assert _EXPECTED_DECLARATION in pdf_text
+
+
+async def test_commercial_invoice_seller_contains_vendor_country(authenticated_client: AsyncClient) -> None:
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r2 = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/commercial-invoice")
+    assert r2.status_code == 200
+    pdf_text = _extract_pdf_text(r2.content)
+    assert _EXPECTED_VENDOR_COUNTRY_LABEL in pdf_text

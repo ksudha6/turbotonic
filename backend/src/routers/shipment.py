@@ -537,6 +537,7 @@ async def get_packing_list(
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vendor_name = vendor.name if vendor is not None else ""
     vendor_address = vendor.address if vendor is not None else ""
+    vendor_country = vendor.country if vendor is not None else ""
 
     # Buyer info is owned by the PO; no standalone Buyer entity exists yet
     buyer_name = po.buyer_name
@@ -549,6 +550,7 @@ async def get_packing_list(
         vendor_address=vendor_address,
         buyer_name=buyer_name,
         buyer_address=buyer_address,
+        vendor_country=vendor_country,
     )
 
     filename = f"packing-list-{shipment.shipment_number}.pdf"
@@ -580,6 +582,7 @@ async def get_commercial_invoice(
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vendor_name = vendor.name if vendor is not None else ""
     vendor_address = vendor.address if vendor is not None else ""
+    vendor_country = vendor.country if vendor is not None else ""
 
     buyer_name = po.buyer_name
     buyer_address = po.ship_to_address
@@ -591,6 +594,7 @@ async def get_commercial_invoice(
         vendor_address=vendor_address,
         buyer_name=buyer_name,
         buyer_address=buyer_address,
+        vendor_country=vendor_country,
     )
 
     filename = f"commercial-invoice-{shipment.shipment_number}.pdf"

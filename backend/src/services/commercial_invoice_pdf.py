@@ -20,9 +20,10 @@ from src.domain.purchase_order import LineItemStatus, PurchaseOrder
 from src.domain.shipment import Shipment
 from src.domain.reference_labels import (
     currency_label,
+    country_label,
     incoterm_label,
     payment_terms_label,
-    country_label,
+    port_label,
 )
 
 # Page margins — match po_pdf.py
@@ -65,6 +66,7 @@ def generate_commercial_invoice_pdf(
     vendor_address: str,
     buyer_name: str,
     buyer_address: str,
+    vendor_country: str = "",
 ) -> bytes:
     """Build a commercial invoice PDF for the given Shipment and PurchaseOrder.
 
@@ -129,6 +131,8 @@ def generate_commercial_invoice_pdf(
     # -------------------------------------------------------------------------
     ci_number = generate_ci_number(shipment.shipment_number)
     today = _date_str(datetime.now(UTC))
+    pol_label = port_label(po.port_of_loading) if po.port_of_loading else "-"
+    pod_label = port_label(po.port_of_discharge) if po.port_of_discharge else "-"
 
     header_data = [
         [
@@ -138,6 +142,14 @@ def generate_commercial_invoice_pdf(
         [
             Paragraph(f"<b>PO Number:</b> {po.po_number}", body_style),
             Paragraph(f"<b>Shipment Number:</b> {shipment.shipment_number}", body_style),
+        ],
+        [
+            Paragraph(f"<b>Marketplace:</b> {shipment.marketplace}", body_style),
+            Paragraph("", body_style),
+        ],
+        [
+            Paragraph(f"<b>Port of Loading:</b> {pol_label}", body_style),
+            Paragraph(f"<b>Port of Discharge:</b> {pod_label}", body_style),
         ],
     ]
     header_table = Table(header_data, colWidths=[_PAGE_WIDTH / 2, _PAGE_WIDTH / 2])
@@ -193,10 +205,12 @@ def generate_commercial_invoice_pdf(
     # -------------------------------------------------------------------------
     story.append(Paragraph("Parties", heading_style))
 
+    vendor_country_display = country_label(vendor_country) if vendor_country else ""
     seller_content = [
         Paragraph("<b>Seller</b>", cell_bold),
         Paragraph(vendor_name, cell_style),
         Paragraph(vendor_address, cell_style),
+        Paragraph(vendor_country_display, cell_style),
     ]
     buyer_content = [
         Paragraph("<b>Buyer</b>", cell_bold),
@@ -372,6 +386,26 @@ def generate_commercial_invoice_pdf(
         ])
     )
     story.append(summary_table)
+    story.append(Spacer(1, 20))
+
+    # -------------------------------------------------------------------------
+    # 7. Declaration
+    # Standard shipper's declaration for customs acceptance
+    # -------------------------------------------------------------------------
+    _DECLARATION_TEXT = (
+        "I declare that the information on this invoice is true and correct."
+    )
+    declaration_style = ParagraphStyle(
+        "CIDeclaration",
+        parent=normal,
+        fontSize=8,
+        leading=12,
+        borderPad=6,
+        borderColor=colors.lightgrey,
+        borderWidth=0.5,
+        backColor=colors.Color(0.97, 0.97, 0.97),
+    )
+    story.append(Paragraph(_DECLARATION_TEXT, declaration_style))
 
     doc.build(story)
     return buf.getvalue()

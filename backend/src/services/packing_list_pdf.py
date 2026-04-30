@@ -15,8 +15,9 @@ from reportlab.platypus import (
     Spacer,
 )
 
-from src.domain.purchase_order import PurchaseOrder
+from src.domain.purchase_order import LineItemStatus, PurchaseOrder
 from src.domain.shipment import Shipment
+from src.domain.reference_labels import country_label, port_label
 
 # Page margins — match po_pdf.py and invoice_pdf.py
 _LEFT_MARGIN = 0.75 * inch
@@ -58,6 +59,7 @@ def generate_packing_list_pdf(
     vendor_address: str,
     buyer_name: str,
     buyer_address: str,
+    vendor_country: str = "",
 ) -> bytes:
     """Build a packing list PDF for the given Shipment and return it as raw bytes."""
     buf = io.BytesIO()
@@ -114,8 +116,12 @@ def generate_packing_list_pdf(
     story.append(Paragraph("PACKING LIST", title_style))
 
     # -------------------------------------------------------------------------
-    # 2. Header: shipment number, PO number, date, marketplace
+    # 2. Header: shipment number, PO number, date, marketplace, ports, origin
     # -------------------------------------------------------------------------
+    pol_label = port_label(po.port_of_loading) if po.port_of_loading else "-"
+    pod_label = port_label(po.port_of_discharge) if po.port_of_discharge else "-"
+    coo_label = country_label(po.country_of_origin) if po.country_of_origin else "-"
+
     header_data = [
         [
             Paragraph(f"<b>Shipment Number:</b> {shipment.shipment_number}", body_style),
@@ -124,6 +130,14 @@ def generate_packing_list_pdf(
         [
             Paragraph(f"<b>Date:</b> {_date_str(shipment.created_at)}", body_style),
             Paragraph(f"<b>Marketplace:</b> {shipment.marketplace}", body_style),
+        ],
+        [
+            Paragraph(f"<b>Port of Loading:</b> {pol_label}", body_style),
+            Paragraph(f"<b>Port of Discharge:</b> {pod_label}", body_style),
+        ],
+        [
+            Paragraph(f"<b>Country of Origin:</b> {coo_label}", body_style),
+            Paragraph("", body_style),
         ],
     ]
     header_table = Table(header_data, colWidths=[_PAGE_WIDTH / 2, _PAGE_WIDTH / 2])
@@ -141,14 +155,17 @@ def generate_packing_list_pdf(
     story.append(Spacer(1, 14))
 
     # -------------------------------------------------------------------------
-    # 3. Parties: Shipper (vendor) and Consignee (buyer) in side-by-side boxes
+    # 3. Parties: Shipper/Manufacturer (vendor) and Consignee (buyer) side-by-side
+    # vendor_country resolves from the Vendor aggregate; country_label handles unknown codes
     # -------------------------------------------------------------------------
     story.append(Paragraph("Parties", heading_style))
 
+    vendor_country_display = country_label(vendor_country) if vendor_country else ""
     shipper_content = [
-        Paragraph("<b>Shipper</b>", cell_bold),
+        Paragraph("<b>Shipper / Manufacturer</b>", cell_bold),
         Paragraph(vendor_name, cell_style),
         Paragraph(_fmt_str(vendor_address), cell_style),
+        Paragraph(vendor_country_display, cell_style),
     ]
     consignee_content = [
         Paragraph("<b>Consignee</b>", cell_bold),
@@ -179,26 +196,36 @@ def generate_packing_list_pdf(
 
     # -------------------------------------------------------------------------
     # 4. Line items table
-    # Columns: #, Description, Quantity, UOM, Package Count, Net Weight,
-    #          Gross Weight, Dimensions, Country of Origin
+    # Columns: #, Description, HS Code, Quantity, UOM, Package Count,
+    #          Net Weight, Gross Weight, Dimensions, Country of Origin
+    # HS code sourced from PO ACCEPTED line items keyed by part_number
     # -------------------------------------------------------------------------
     story.append(Paragraph("Line Items", heading_style))
 
+    # Build lookup: part_number -> PO line item (HS code source)
+    po_line_map = {
+        li.part_number: li
+        for li in po.line_items
+        if li.status is LineItemStatus.ACCEPTED
+    }
+
     col_widths = [
-        0.30 * inch,   # #
-        1.10 * inch,   # Description
-        0.45 * inch,   # Qty
-        0.40 * inch,   # UOM
-        0.60 * inch,   # Pkg Count
-        0.70 * inch,   # Net Weight
-        0.70 * inch,   # Gross Weight
-        0.90 * inch,   # Dimensions
-        0.85 * inch,   # Country of Origin
+        0.25 * inch,   # #
+        1.00 * inch,   # Description
+        0.60 * inch,   # HS Code
+        0.40 * inch,   # Qty
+        0.35 * inch,   # UOM
+        0.50 * inch,   # Pkg Count
+        0.60 * inch,   # Net Weight
+        0.60 * inch,   # Gross Weight
+        0.75 * inch,   # Dimensions
+        0.80 * inch,   # Country of Origin
     ]
 
     header_row = [
         Paragraph("<b>#</b>", cell_bold),
         Paragraph("<b>Description</b>", cell_bold),
+        Paragraph("<b>HS Code</b>", cell_bold),
         Paragraph("<b>Qty</b>", cell_bold),
         Paragraph("<b>UOM</b>", cell_bold),
         Paragraph("<b>Pkg Count</b>", cell_bold),
@@ -210,9 +237,12 @@ def generate_packing_list_pdf(
 
     line_rows = []
     for idx, item in enumerate(shipment.line_items, start=1):
+        po_li = po_line_map.get(item.part_number)
+        hs_code = po_li.hs_code if po_li is not None else ""
         line_rows.append([
             Paragraph(str(idx), cell_style),
             Paragraph(f"{item.part_number}<br/>{item.description}", cell_style),
+            Paragraph(_fmt_str(hs_code), cell_style),
             Paragraph(str(item.quantity), cell_style),
             Paragraph(item.uom, cell_style),
             Paragraph(_fmt_int(item.package_count), cell_style),
@@ -239,6 +269,7 @@ def generate_packing_list_pdf(
     has_packages = any(item.package_count is not None for item in shipment.line_items)
 
     summary_row = [
+        Paragraph("", cell_style),
         Paragraph("", cell_style),
         Paragraph("", cell_style),
         Paragraph("", cell_style),
