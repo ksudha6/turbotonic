@@ -280,7 +280,12 @@ invite_router = APIRouter(prefix="/api/v1/users", tags=["users"])
 
 
 @invite_router.post("/invite")
-async def invite_user(body: InviteRequest, request: Request, repo: UserRepoDep):
+async def invite_user(
+    body: InviteRequest,
+    request: Request,
+    repo: UserRepoDep,
+    activity_repo: ActivityRepoDep,
+):
     current_user = getattr(request.state, "current_user", None)
     if current_user is None or current_user.role is not UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Only ADMIN users can invite")
@@ -301,6 +306,13 @@ async def invite_user(body: InviteRequest, request: Request, repo: UserRepoDep):
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await repo.save(user)
+    await activity_repo.append(
+        entity_type=EntityType.USER,
+        entity_id=user.id,
+        event=ActivityEvent.USER_INVITED,
+        detail=f"{user.username} invited as {user.role.value}",
+        actor_id=current_user.id,
+    )
     return {"user": _user_to_dict(user), "invite_token": user.invite_token}
 
 

@@ -12,6 +12,10 @@ emits an email-worthy event also calls `dispatch`, which:
 Only four event types trigger email in iter 060: PO_ACCEPTED convergence,
 PO_MODIFIED hand-off, PO_LINE_MODIFIED hand-off, PO_ADVANCE_PAID. Other events
 continue to fire in-app-only via ActivityLogRepository.append.
+
+Iter 107 adds TargetRole.ADMIN fan-out: events with target_role=ADMIN resolve
+to all ACTIVE ADMIN users via a single SQL query. No USER_* email templates
+exist yet; the recipient path is wired so future templates auto-route correctly.
 """
 from __future__ import annotations
 
@@ -20,7 +24,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.activity_repository import ActivityLogRepository
-from src.domain.activity import ActivityEvent, EntityType
+from src.domain.activity import ActivityEvent, EntityType, TargetRole
 from src.domain.purchase_order import PurchaseOrder
 from src.domain.user import UserRole
 from src.services.email import EmailService
@@ -42,6 +46,10 @@ _EVENT_TEMPLATE: dict[ActivityEvent, str] = {
 # SM-targeted recipient roles for the SM-side of hand-offs. Iter 060 spec:
 # "all ACTIVE users with role SM or ADMIN".
 _SM_ROLES: tuple[str, ...] = ("SM", "ADMIN")
+
+# ADMIN fan-out: all ACTIVE users with role ADMIN receive ADMIN-targeted events.
+# Iter 107: single role tuple; immutable to prevent accidental mutation at call sites.
+_ADMIN_ROLES: tuple[str, ...] = ("ADMIN",)
 
 
 @dataclass(frozen=True)
@@ -129,6 +137,14 @@ class NotificationDispatcher:
                 ActivityEvent.EMAIL_SEND_FAILED,
                 detail=detail,
             )
+
+    async def resolve_admin_recipients(self) -> list[str]:
+        """Return email list of all ACTIVE ADMIN users.
+
+        Used when an event targets TargetRole.ADMIN. A single SQL query fans
+        out to the full ADMIN set without per-user iteration.
+        """
+        return await self._users.list_active_emails_by_roles(_ADMIN_ROLES)
 
     async def _resolve_recipients(
         self,
