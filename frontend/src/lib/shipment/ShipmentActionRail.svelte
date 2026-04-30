@@ -1,6 +1,10 @@
 <script lang="ts">
 	import Button from '$lib/ui/Button.svelte';
-	import { canSubmitShipmentForDocuments, canMarkShipmentReady } from '$lib/permissions';
+	import {
+		canSubmitShipmentForDocuments,
+		canMarkShipmentReady,
+		canMarkShipmentShipped
+	} from '$lib/permissions';
 	import type { ShipmentStatus, UserRole, ReadinessResult } from '$lib/types';
 
 	let {
@@ -9,27 +13,32 @@
 		readiness,
 		submitting,
 		marking,
+		shipping,
 		error,
 		on_submit,
-		on_mark_ready
+		on_mark_ready,
+		on_mark_shipped
 	}: {
 		status: ShipmentStatus;
 		role: UserRole;
 		readiness: ReadinessResult | null;
 		submitting: boolean;
 		marking: boolean;
+		shipping: boolean;
 		error: string | null;
 		on_submit: () => void;
 		on_mark_ready: () => void;
+		on_mark_shipped: () => void;
 	} = $props();
 
 	const showSubmit = $derived(canSubmitShipmentForDocuments(role, status));
 	const showMarkReady = $derived(canMarkShipmentReady(role, status));
+	const showMarkShipped = $derived(canMarkShipmentShipped(role, status));
 
 	const markReadyDisabled = $derived(marking || readiness === null || readiness.is_ready === false);
 </script>
 
-{#if showSubmit || showMarkReady}
+{#if showSubmit || showMarkReady || showMarkShipped}
 	<div class="shipment-action-rail" data-testid="shipment-action-rail">
 		{#if showSubmit}
 			<Button
@@ -56,6 +65,17 @@
 					Resolve missing items in the readiness panel before marking ready.
 				</p>
 			{/if}
+		{/if}
+
+		{#if showMarkShipped}
+			<Button
+				variant="primary"
+				disabled={shipping}
+				onclick={on_mark_shipped}
+				data-testid="shipment-action-mark-shipped"
+			>
+				{shipping ? 'Marking shipped…' : 'Mark shipped'}
+			</Button>
 		{/if}
 
 		{#if error !== null}
