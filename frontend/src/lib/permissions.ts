@@ -72,6 +72,16 @@ export const canMarkShipmentShipped = (role: UserRole, status: ShipmentStatus): 
 export const canApproveCertificate = (role: UserRole, status: CertificateStatus): boolean =>
 	is(role, 'FREIGHT_MANAGER') && status === 'VALID';
 
+// Iter 106: SM and FM set vessel + voyage after booking.
+// Allowed on BOOKED and SHIPPED (voyage may need correction after shipping).
+export const canSetTransport = (role: UserRole, status: ShipmentStatus): boolean =>
+	is(role, 'SM', 'FREIGHT_MANAGER') && (status === 'BOOKED' || status === 'SHIPPED');
+
+// Iter 106: SM and FM record the signatory for the CI customs declaration.
+// Allowed in any post-DRAFT status (matches backend declare() method constraints).
+export const canDeclareShipment = (role: UserRole, status: ShipmentStatus): boolean =>
+	is(role, 'SM', 'FREIGHT_MANAGER') && status !== 'DRAFT';
+
 export function canViewPOAttachments(
 	user: User,
 	po: { po_type: POType; vendor_id: string }

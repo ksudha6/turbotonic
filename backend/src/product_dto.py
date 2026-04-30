@@ -13,6 +13,10 @@ class ProductCreate(BaseModel):
     part_number: str
     description: str = ""
     manufacturing_address: str = ""
+    # Iter 106: manufacturer identity (separate from shipping vendor)
+    manufacturer_name: str = ""
+    manufacturer_address: str = ""
+    manufacturer_country: str = ""
 
     @field_validator("vendor_id")
     @classmethod
@@ -32,6 +36,10 @@ class ProductCreate(BaseModel):
 class ProductUpdate(BaseModel):
     description: str | None = None
     manufacturing_address: str | None = None
+    # Iter 106: manufacturer identity fields
+    manufacturer_name: str | None = None
+    manufacturer_address: str | None = None
+    manufacturer_country: str | None = None
 
 
 class ProductResponse(BaseModel):
@@ -40,6 +48,10 @@ class ProductResponse(BaseModel):
     part_number: str
     description: str
     manufacturing_address: str
+    # Iter 106: manufacturer identity fields
+    manufacturer_name: str
+    manufacturer_address: str
+    manufacturer_country: str
     qualifications: list[QualificationTypeListItem]
     created_at: datetime
     updated_at: datetime
@@ -51,6 +63,10 @@ class ProductListItem(BaseModel):
     part_number: str
     description: str
     manufacturing_address: str
+    # Iter 106: manufacturer identity fields
+    manufacturer_name: str
+    manufacturer_address: str
+    manufacturer_country: str
     qualifications: list[QualificationTypeListItem]
 
 
@@ -61,6 +77,9 @@ def product_to_response(product: Product, qualifications: list[QualificationType
         part_number=product.part_number,
         description=product.description,
         manufacturing_address=product.manufacturing_address,
+        manufacturer_name=product.manufacturer_name,
+        manufacturer_address=product.manufacturer_address,
+        manufacturer_country=product.manufacturer_country,
         qualifications=qualifications,
         created_at=product.created_at,
         updated_at=product.updated_at,
@@ -74,5 +93,8 @@ def product_to_list_item(product: Product, qualifications: list[QualificationTyp
         part_number=product.part_number,
         description=product.description,
         manufacturing_address=product.manufacturing_address,
+        manufacturer_name=product.manufacturer_name,
+        manufacturer_address=product.manufacturer_address,
+        manufacturer_country=product.manufacturer_country,
         qualifications=qualifications,
     )

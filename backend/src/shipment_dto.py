@@ -98,6 +98,13 @@ class ShipmentResponse(BaseModel):
     booking_reference: str | None = None
     pickup_date: date | None = None
     shipped_at: datetime | None = None
+    # Iter 106: transport details (vessel + voyage)
+    vessel_name: str | None = None
+    voyage_number: str | None = None
+    # Iter 106: declaration details
+    signatory_name: str | None = None
+    signatory_title: str | None = None
+    declared_at: datetime | None = None
 
 
 class ShipmentBookRequest(BaseModel):
@@ -106,6 +113,34 @@ class ShipmentBookRequest(BaseModel):
     pickup_date: date
 
     @field_validator("carrier", "booking_reference")
+    @classmethod
+    def not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("must not be empty or whitespace-only")
+        return v.strip()
+
+
+class ShipmentTransportRequest(BaseModel):
+    """Iter 106: vessel + voyage recorded post-booking."""
+
+    vessel_name: str | None = None
+    voyage_number: str | None = None
+
+    @field_validator("vessel_name", "voyage_number", mode="before")
+    @classmethod
+    def reject_whitespace_only(cls, v: str | None) -> str | None:
+        if isinstance(v, str) and not v.strip():
+            raise ValueError("field must not be whitespace-only")
+        return v
+
+
+class ShipmentDeclareRequest(BaseModel):
+    """Iter 106: signatory details for customs declaration."""
+
+    signatory_name: str
+    signatory_title: str
+
+    @field_validator("signatory_name", "signatory_title")
     @classmethod
     def not_empty(cls, v: str) -> str:
         if not v or not v.strip():
@@ -166,4 +201,9 @@ def shipment_to_response(
         booking_reference=shipment.booking_reference,
         pickup_date=shipment.pickup_date,
         shipped_at=shipment.shipped_at,
+        vessel_name=shipment.vessel_name,
+        voyage_number=shipment.voyage_number,
+        signatory_name=shipment.signatory_name,
+        signatory_title=shipment.signatory_title,
+        declared_at=shipment.declared_at,
     )

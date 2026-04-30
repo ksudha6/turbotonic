@@ -34,6 +34,13 @@ export interface Shipment {
 	booking_reference: string | null;
 	pickup_date: string | null;
 	shipped_at: string | null;
+	// Iter 106: transport details — vessel + voyage, populated via PATCH /transport post-booking.
+	vessel_name: string | null;
+	voyage_number: string | null;
+	// Iter 106: declaration details — signatory + date, populated via POST /declare.
+	signatory_name: string | null;
+	signatory_title: string | null;
+	declared_at: string | null;
 }
 
 // Iter 103: payload for POST /{id}/book. Mirrors backend ShipmentBookRequest exactly.
@@ -42,6 +49,18 @@ export interface ShipmentBookingPayload {
 	carrier: string;
 	booking_reference: string;
 	pickup_date: string;
+}
+
+// Iter 106: payload for PATCH /{id}/transport. Both fields are optional (nullable).
+export interface ShipmentTransportPayload {
+	vessel_name: string | null;
+	voyage_number: string | null;
+}
+
+// Iter 106: payload for POST /{id}/declare. signatory_name is required; signatory_title is required.
+export interface ShipmentDeclarePayload {
+	signatory_name: string;
+	signatory_title: string;
 }
 
 export interface ShipmentLineItemUpdate {
@@ -469,6 +488,10 @@ export interface ProductListItem {
 	part_number: string;
 	description: string;
 	manufacturing_address: string;
+	// Iter 106: manufacturer identity (may differ from shipping vendor)
+	manufacturer_name: string;
+	manufacturer_address: string;
+	manufacturer_country: string;
 	qualifications: QualificationTypeListItem[];
 }
 
@@ -482,6 +505,10 @@ export interface ProductInput {
 	part_number: string;
 	description: string;
 	manufacturing_address: string;
+	// Iter 106: optional manufacturer identity fields
+	manufacturer_name?: string;
+	manufacturer_address?: string;
+	manufacturer_country?: string;
 }
 
 export type PackagingSpecStatus = 'PENDING';

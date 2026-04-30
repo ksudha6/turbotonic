@@ -60,7 +60,14 @@ def generate_packing_list_pdf(
     buyer_name: str,
     buyer_address: str,
     vendor_country: str = "",
+    manufacturer_lookup: dict[str, dict[str, str]] | None = None,
 ) -> bytes:
+    """Build a packing list PDF for the given Shipment and return it as raw bytes.
+
+    manufacturer_lookup maps part_number → {name, address, country}. When present,
+    per-line manufacturer data overrides the vendor block for that line. When absent
+    or a line has no entry, the vendor block is used as the manufacturer.
+    """
     """Build a packing list PDF for the given Shipment and return it as raw bytes."""
     buf = io.BytesIO()
 
@@ -116,7 +123,8 @@ def generate_packing_list_pdf(
     story.append(Paragraph("PACKING LIST", title_style))
 
     # -------------------------------------------------------------------------
-    # 2. Header: shipment number, PO number, date, marketplace, ports, origin
+    # 2. Header: shipment number, PO number, date, marketplace, ports, origin,
+    #    vessel + voyage (iter 106, when populated post-booking)
     # -------------------------------------------------------------------------
     pol_label = port_label(po.port_of_loading) if po.port_of_loading else "-"
     pod_label = port_label(po.port_of_discharge) if po.port_of_discharge else "-"
@@ -140,6 +148,15 @@ def generate_packing_list_pdf(
             Paragraph("", body_style),
         ],
     ]
+
+    # Vessel + voyage rows only appear when populated (iter 106)
+    if shipment.vessel_name or shipment.voyage_number:
+        vessel_str = _fmt_str(shipment.vessel_name)
+        voyage_str = _fmt_str(shipment.voyage_number)
+        header_data.append([
+            Paragraph(f"<b>Vessel:</b> {vessel_str}", body_style),
+            Paragraph(f"<b>Voyage:</b> {voyage_str}", body_style),
+        ])
     header_table = Table(header_data, colWidths=[_PAGE_WIDTH / 2, _PAGE_WIDTH / 2])
     header_table.setStyle(
         TableStyle([
@@ -155,17 +172,39 @@ def generate_packing_list_pdf(
     story.append(Spacer(1, 14))
 
     # -------------------------------------------------------------------------
-    # 3. Parties: Shipper/Manufacturer (vendor) and Consignee (buyer) side-by-side
-    # vendor_country resolves from the Vendor aggregate; country_label handles unknown codes
+    # 3. Parties: Shipper/Manufacturer and Consignee (buyer) side-by-side.
+    # Iter 106: when manufacturer_lookup is provided and all line items share the
+    # same manufacturer, use that manufacturer; otherwise fall back to vendor.
+    # vendor_country resolves from the Vendor aggregate; country_label handles unknown codes.
     # -------------------------------------------------------------------------
     story.append(Paragraph("Parties", heading_style))
 
-    vendor_country_display = country_label(vendor_country) if vendor_country else ""
+    # Determine the manufacturer block to display.
+    # If all line items have a consistent non-empty manufacturer_name, use it;
+    # otherwise fall back to the vendor.
+    mfr_name = vendor_name
+    mfr_address = vendor_address
+    mfr_country = vendor_country
+    if manufacturer_lookup:
+        mfr_entries = [
+            manufacturer_lookup[item.part_number]
+            for item in shipment.line_items
+            if item.part_number in manufacturer_lookup
+                and manufacturer_lookup[item.part_number].get("name", "").strip()
+        ]
+        if mfr_entries:
+            # Use the first non-empty manufacturer; typical case is one manufacturer per shipment.
+            first = mfr_entries[0]
+            mfr_name = first.get("name", vendor_name) or vendor_name
+            mfr_address = first.get("address", vendor_address) or vendor_address
+            mfr_country = first.get("country", vendor_country) or vendor_country
+
+    mfr_country_display = country_label(mfr_country) if mfr_country else ""
     shipper_content = [
         Paragraph("<b>Shipper / Manufacturer</b>", cell_bold),
-        Paragraph(vendor_name, cell_style),
-        Paragraph(_fmt_str(vendor_address), cell_style),
-        Paragraph(vendor_country_display, cell_style),
+        Paragraph(mfr_name, cell_style),
+        Paragraph(_fmt_str(mfr_address), cell_style),
+        Paragraph(mfr_country_display, cell_style),
     ]
     consignee_content = [
         Paragraph("<b>Consignee</b>", cell_bold),

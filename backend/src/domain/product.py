@@ -16,12 +16,19 @@ class Product:
         created_at: datetime,
         updated_at: datetime,
         manufacturing_address: str = "",
+        # Iter 106: manufacturer identity separate from the shipping vendor.
+        manufacturer_name: str = "",
+        manufacturer_address: str = "",
+        manufacturer_country: str = "",
     ) -> None:
         self._id = id
         self.vendor_id = vendor_id
         self.part_number = part_number
         self.description = description
         self.manufacturing_address = manufacturing_address
+        self.manufacturer_name = manufacturer_name
+        self.manufacturer_address = manufacturer_address
+        self.manufacturer_country = manufacturer_country
         self._created_at = created_at
         self.updated_at = updated_at
 
@@ -41,6 +48,9 @@ class Product:
         part_number: str,
         description: str = "",
         manufacturing_address: str = "",
+        manufacturer_name: str = "",
+        manufacturer_address: str = "",
+        manufacturer_country: str = "",
     ) -> Product:
         if not vendor_id or not vendor_id.strip():
             raise ValueError("vendor_id must not be empty or whitespace-only")
@@ -53,6 +63,9 @@ class Product:
             part_number=part_number,
             description=description,
             manufacturing_address=manufacturing_address,
+            manufacturer_name=manufacturer_name,
+            manufacturer_address=manufacturer_address,
+            manufacturer_country=manufacturer_country,
             created_at=now,
             updated_at=now,
         )
@@ -62,9 +75,18 @@ class Product:
         *,
         description: str | None = None,
         manufacturing_address: str | None = None,
+        manufacturer_name: str | None = None,
+        manufacturer_address: str | None = None,
+        manufacturer_country: str | None = None,
     ) -> None:
         if description is not None:
             self.description = description
         if manufacturing_address is not None:
             self.manufacturing_address = manufacturing_address
+        if manufacturer_name is not None:
+            self.manufacturer_name = manufacturer_name
+        if manufacturer_address is not None:
+            self.manufacturer_address = manufacturer_address
+        if manufacturer_country is not None:
+            self.manufacturer_country = manufacturer_country
         self.updated_at = datetime.now(UTC)

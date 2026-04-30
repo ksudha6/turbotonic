@@ -14,13 +14,17 @@
 		markShipmentReady,
 		bookShipment,
 		markShipmentShipped,
+		setShipmentTransport,
+		declareShipment,
 		MarkReadyNotReadyError
 	} from '$lib/api';
-	import { canEditShipment, canViewShipmentReadiness, canBookShipment } from '$lib/permissions';
+	import { canEditShipment, canViewShipmentReadiness, canBookShipment, canSetTransport, canDeclareShipment } from '$lib/permissions';
 	import type {
 		Shipment,
 		ShipmentLineItemUpdate,
 		ShipmentBookingPayload,
+		ShipmentTransportPayload,
+		ShipmentDeclarePayload,
 		UserRole,
 		ShipmentDocumentRequirement,
 		ReadinessResult
@@ -36,6 +40,8 @@
 	import ShipmentDocumentsPanel from '$lib/shipment/ShipmentDocumentsPanel.svelte';
 	import ShipmentReadinessPanel from '$lib/shipment/ShipmentReadinessPanel.svelte';
 	import ShipmentBookingPanel from '$lib/shipment/ShipmentBookingPanel.svelte';
+	import ShipmentTransportPanel from '$lib/shipment/ShipmentTransportPanel.svelte';
+	import ShipmentDeclarePanel from '$lib/shipment/ShipmentDeclarePanel.svelte';
 
 	const ROLE_LABEL: Record<UserRole, string> = {
 		ADMIN: 'Administrator',
@@ -64,8 +70,12 @@
 	let marking: boolean = $state(false);
 	let shipping: boolean = $state(false);
 	let booking: boolean = $state(false);
+	let transporting: boolean = $state(false);
+	let declaring: boolean = $state(false);
 	let actionError: string | null = $state(null);
 	let bookingError: string | null = $state(null);
+	let transportError: string | null = $state(null);
+	let declareError: string | null = $state(null);
 	let uploadingId: string | null = $state(null);
 	let addingRequirement: boolean = $state(false);
 	let documentsError: string | null = $state(null);
@@ -77,6 +87,11 @@
 	const roleLabel = $derived(ROLE_LABEL[role]);
 	const canEdit = $derived(shipment ? canEditShipment(role, shipment.status) : false);
 	const showBookingPanel = $derived(shipment ? canBookShipment(role, shipment.status) : false);
+	const showTransportPanel = $derived(shipment ? canSetTransport(role, shipment.status) : false);
+	// Declare panel shows when user can declare AND the shipment has not been declared yet.
+	const showDeclarePanel = $derived(
+		shipment ? canDeclareShipment(role, shipment.status) && shipment.declared_at === null : false
+	);
 
 	// productLookup maps product_id → { part_number, description } for readiness panel resolution.
 	function buildProductLookup(
@@ -154,6 +169,32 @@
 			bookingError = e instanceof Error ? e.message : 'Booking failed';
 		} finally {
 			booking = false;
+		}
+	}
+
+	async function handleSetTransport(payload: ShipmentTransportPayload) {
+		transporting = true;
+		transportError = null;
+		try {
+			shipment = await setShipmentTransport(shipmentId, payload);
+			await fetchAuxiliary(shipment);
+		} catch (e) {
+			transportError = e instanceof Error ? e.message : 'Save transport details failed';
+		} finally {
+			transporting = false;
+		}
+	}
+
+	async function handleDeclare(payload: ShipmentDeclarePayload) {
+		declaring = true;
+		declareError = null;
+		try {
+			shipment = await declareShipment(shipmentId, payload);
+			await fetchAuxiliary(shipment);
+		} catch (e) {
+			declareError = e instanceof Error ? e.message : 'Declaration failed';
+		} finally {
+			declaring = false;
 		}
 	}
 
@@ -320,6 +361,24 @@
 					submitting={booking}
 					error={bookingError}
 					on_book={handleBook}
+				/>
+			{/if}
+
+			{#if showTransportPanel}
+				<ShipmentTransportPanel
+					vessel_name={shipment.vessel_name ?? ''}
+					voyage_number={shipment.voyage_number ?? ''}
+					submitting={transporting}
+					error={transportError}
+					on_save={handleSetTransport}
+				/>
+			{/if}
+
+			{#if showDeclarePanel}
+				<ShipmentDeclarePanel
+					submitting={declaring}
+					error={declareError}
+					on_declare={handleDeclare}
 				/>
 			{/if}
 
