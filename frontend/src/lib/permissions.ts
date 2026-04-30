@@ -37,6 +37,27 @@ export const canModifyPostAccept = (role: UserRole) => is(role, 'SM');
 export const canEditShipment = (role: UserRole, status: ShipmentStatus): boolean =>
 	is(role, 'SM', 'FREIGHT_MANAGER') && (status === 'DRAFT' || status === 'DOCUMENTS_PENDING');
 
+// Iter 099: Shipment document + readiness permissions.
+// SM owns the DRAFT → DOCUMENTS_PENDING handoff; FM drives the requirement list.
+export const canSubmitShipmentForDocuments = (role: UserRole, status: ShipmentStatus): boolean =>
+	is(role, 'SM') && status === 'DRAFT';
+
+// SM included for ops support; FM owns the requirement list day-to-day.
+export const canManageShipmentRequirements = (role: UserRole, status: ShipmentStatus): boolean =>
+	is(role, 'SM', 'FREIGHT_MANAGER') && status === 'DOCUMENTS_PENDING';
+
+// VENDOR uploads documents; FM's review action is Mark Ready, not Upload.
+export const canUploadShipmentDocument = (role: UserRole, status: ShipmentStatus): boolean =>
+	is(role, 'VENDOR') && status === 'DOCUMENTS_PENDING';
+
+// Mark Ready is FM's implicit approval over the uploaded document set.
+export const canMarkShipmentReady = (role: UserRole, status: ShipmentStatus): boolean =>
+	is(role, 'SM', 'FREIGHT_MANAGER') && status === 'DOCUMENTS_PENDING';
+
+// VENDOR sees the documents panel but not the readiness panel (backend forbids the GET).
+export const canViewShipmentReadiness = (role: UserRole): boolean =>
+	is(role, 'SM', 'FREIGHT_MANAGER');
+
 export function canViewPOAttachments(
 	user: User,
 	po: { po_type: POType; vendor_id: string }

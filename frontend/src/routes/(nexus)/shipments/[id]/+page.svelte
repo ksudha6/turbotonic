@@ -5,10 +5,23 @@
 		getShipment,
 		updateShipmentLineItems,
 		downloadPackingListPdf,
-		downloadCommercialInvoicePdf
+		downloadCommercialInvoicePdf,
+		listShipmentRequirements,
+		addShipmentRequirement,
+		uploadShipmentDocument,
+		getShipmentReadiness,
+		submitShipmentForDocuments,
+		markShipmentReady,
+		MarkReadyNotReadyError
 	} from '$lib/api';
-	import { canEditShipment } from '$lib/permissions';
-	import type { Shipment, ShipmentLineItemUpdate, UserRole } from '$lib/types';
+	import { canEditShipment, canViewShipmentReadiness } from '$lib/permissions';
+	import type {
+		Shipment,
+		ShipmentLineItemUpdate,
+		UserRole,
+		ShipmentDocumentRequirement,
+		ReadinessResult
+	} from '$lib/types';
 	import AppShell from '$lib/ui/AppShell.svelte';
 	import UserMenu from '$lib/ui/UserMenu.svelte';
 	import LoadingState from '$lib/ui/LoadingState.svelte';
@@ -16,6 +29,9 @@
 	import ShipmentDetailHeader from '$lib/shipment/ShipmentDetailHeader.svelte';
 	import ShipmentMetaPanel from '$lib/shipment/ShipmentMetaPanel.svelte';
 	import ShipmentLineItemsPanel from '$lib/shipment/ShipmentLineItemsPanel.svelte';
+	import ShipmentActionRail from '$lib/shipment/ShipmentActionRail.svelte';
+	import ShipmentDocumentsPanel from '$lib/shipment/ShipmentDocumentsPanel.svelte';
+	import ShipmentReadinessPanel from '$lib/shipment/ShipmentReadinessPanel.svelte';
 
 	const ROLE_LABEL: Record<UserRole, string> = {
 		ADMIN: 'Administrator',
@@ -37,21 +53,114 @@
 	let downloading: boolean = $state(false);
 	let downloadingCi: boolean = $state(false);
 
+	// Auxiliary state for documents + readiness
+	let requirements: ShipmentDocumentRequirement[] = $state([]);
+	let readiness: ReadinessResult | null = $state(null);
+	let submitting: boolean = $state(false);
+	let marking: boolean = $state(false);
+	let actionError: string | null = $state(null);
+	let uploadingId: string | null = $state(null);
+	let addingRequirement: boolean = $state(false);
+	let documentsError: string | null = $state(null);
+	let addError: string | null = $state(null);
+
 	const user = $derived(appPage.data.user);
 	const role = $derived<UserRole>((user?.role as UserRole | undefined) ?? 'ADMIN');
 	const userName = $derived(user?.display_name ?? user?.username ?? 'Guest');
 	const roleLabel = $derived(ROLE_LABEL[role]);
 	const canEdit = $derived(shipment ? canEditShipment(role, shipment.status) : false);
 
+	// productLookup maps product_id → { part_number, description } for readiness panel resolution.
+	function buildProductLookup(
+		s: Shipment | null
+	): Map<string, { part_number: string; description: string }> {
+		if (!s?.line_items) return new Map();
+		return new Map(
+			s.line_items
+				.filter((li) => li.product_id !== null)
+				.map((li) => [li.product_id as string, { part_number: li.part_number, description: li.description }])
+		);
+	}
+	const productLookup = $derived(buildProductLookup(shipment));
+
+	async function fetchAuxiliary(s: Shipment) {
+		const [reqs, rdns] = await Promise.all([
+			listShipmentRequirements(s.id),
+			canViewShipmentReadiness(role) && s.status !== 'DRAFT'
+				? getShipmentReadiness(s.id)
+				: Promise.resolve(null)
+		]);
+		requirements = reqs;
+		readiness = rdns;
+	}
+
 	onMount(async () => {
 		try {
 			shipment = await getShipment(shipmentId);
+			await fetchAuxiliary(shipment);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load shipment';
 		} finally {
 			loading = false;
 		}
 	});
+
+	async function handleSubmit() {
+		submitting = true;
+		actionError = null;
+		try {
+			shipment = await submitShipmentForDocuments(shipmentId);
+			await fetchAuxiliary(shipment);
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : 'Submit failed';
+		} finally {
+			submitting = false;
+		}
+	}
+
+	async function handleMarkReady() {
+		marking = true;
+		actionError = null;
+		try {
+			shipment = await markShipmentReady(shipmentId);
+			await fetchAuxiliary(shipment);
+		} catch (e) {
+			if (e instanceof MarkReadyNotReadyError) {
+				readiness = e.readiness;
+				actionError = 'Some readiness checks failed. See the readiness panel below.';
+			} else {
+				actionError = e instanceof Error ? e.message : 'Mark ready failed';
+			}
+		} finally {
+			marking = false;
+		}
+	}
+
+	async function handleUpload(reqId: string, file: File) {
+		uploadingId = reqId;
+		documentsError = null;
+		try {
+			await uploadShipmentDocument(shipmentId, reqId, file);
+			if (shipment) await fetchAuxiliary(shipment);
+		} catch (e) {
+			documentsError = e instanceof Error ? e.message : 'Upload failed';
+		} finally {
+			uploadingId = null;
+		}
+	}
+
+	async function handleAddRequirement(documentType: string) {
+		addingRequirement = true;
+		addError = null;
+		try {
+			await addShipmentRequirement(shipmentId, documentType);
+			if (shipment) await fetchAuxiliary(shipment);
+		} catch (e) {
+			addError = e instanceof Error ? e.message : 'Add requirement failed';
+		} finally {
+			addingRequirement = false;
+		}
+	}
 
 	async function handleSave(drafts: ShipmentLineItemUpdate[]) {
 		if (!shipment) return;
@@ -135,6 +244,40 @@
 			</ShipmentDetailHeader>
 
 			<ShipmentMetaPanel {shipment} />
+
+			<ShipmentActionRail
+				status={shipment.status}
+				{role}
+				{readiness}
+				{submitting}
+				{marking}
+				error={actionError}
+				on_submit={handleSubmit}
+				on_mark_ready={handleMarkReady}
+			/>
+
+			{#if shipment.status !== 'DRAFT' || requirements.length > 0}
+				<ShipmentDocumentsPanel
+					{requirements}
+					{role}
+					status={shipment.status}
+					uploading_id={uploadingId}
+					adding={addingRequirement}
+					error={documentsError}
+					add_error={addError}
+					on_upload={handleUpload}
+					on_add={handleAddRequirement}
+				/>
+			{/if}
+
+			{#if readiness !== null && canViewShipmentReadiness(role)}
+				<ShipmentReadinessPanel
+					{readiness}
+					{productLookup}
+					loading={false}
+					error={null}
+				/>
+			{/if}
 
 			<ShipmentLineItemsPanel
 				lineItems={shipment.line_items}

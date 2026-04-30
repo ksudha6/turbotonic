@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, Certificate, CertificateCreateInput, CertificateListItem, CertWarning, DashboardData, DashboardSummary, Invoice, InvoiceLineItemCreate, InvoiceListItem, InviteUserInput, InviteUserResponse, MilestoneResponse, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, PatchUserInput, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentUpdate, User, UserRole, UserStatus, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, Certificate, CertificateCreateInput, CertificateListItem, CertWarning, DashboardData, DashboardSummary, DocumentRequirementStatus, Invoice, InvoiceLineItemCreate, InvoiceListItem, InviteUserInput, InviteUserResponse, MilestoneResponse, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, PatchUserInput, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReadinessResult, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentDocumentRequirement, ShipmentUpdate, User, UserRole, UserStatus, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -700,4 +700,118 @@ export async function reissueInvite(id: string): Promise<InviteUserResponse> {
 	const res = await fetch(path, { method: 'POST', credentials: 'include' });
 	if (!res.ok) await detailOrThrow(res, 'POST', path);
 	return (await res.json()) as InviteUserResponse;
+}
+
+// Iter 102: Shipment document requirements + readiness + transitions (backend iter 046)
+
+// MarkReadyNotReadyError carries the ReadinessResult from a 409 response so the
+// page can render missing items inline rather than as a flat string.
+export class MarkReadyNotReadyError extends Error {
+	readonly readiness: ReadinessResult;
+	constructor(readiness: ReadinessResult) {
+		super('Shipment is not ready to ship');
+		this.name = 'MarkReadyNotReadyError';
+		this.readiness = readiness;
+	}
+}
+
+export function listShipmentRequirements(id: string): Promise<ShipmentDocumentRequirement[]> {
+	return apiGet<ShipmentDocumentRequirement[]>(`/api/v1/shipments/${id}/requirements`);
+}
+
+export async function addShipmentRequirement(
+	id: string,
+	document_type: string
+): Promise<ShipmentDocumentRequirement> {
+	if (!document_type.trim()) {
+		throw new Error('document_type must not be empty');
+	}
+	return apiPost<ShipmentDocumentRequirement>(`/api/v1/shipments/${id}/requirements`, {
+		document_type
+	});
+}
+
+const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+
+export async function uploadShipmentDocument(
+	id: string,
+	requirementId: string,
+	file: File
+): Promise<ShipmentDocumentRequirement> {
+	if (file.size > MAX_UPLOAD_BYTES) {
+		throw new Error('File exceeds the 10 MB limit');
+	}
+	if (file.type !== 'application/pdf') {
+		throw new Error('Only PDF files are accepted');
+	}
+	const form = new FormData();
+	form.append('file', file);
+	const res = await fetch(`/api/v1/shipments/${id}/documents/${requirementId}/upload`, {
+		method: 'POST',
+		body: form,
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		const body = await res.json().catch(() => ({}));
+		throw new Error(
+			body.detail ??
+				`POST /api/v1/shipments/${id}/documents/${requirementId}/upload failed: ${res.status}`
+		);
+	}
+	return res.json() as Promise<ShipmentDocumentRequirement>;
+}
+
+export function getShipmentReadiness(id: string): Promise<ReadinessResult> {
+	return apiGet<ReadinessResult>(`/api/v1/shipments/${id}/readiness`);
+}
+
+export async function submitShipmentForDocuments(id: string): Promise<Shipment> {
+	const res = await fetch(`/api/v1/shipments/${id}/submit-for-documents`, {
+		method: 'POST',
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		const body = await res.json().catch(() => ({}));
+		throw new Error(
+			body.detail ?? `POST /api/v1/shipments/${id}/submit-for-documents failed: ${res.status}`
+		);
+	}
+	return res.json() as Promise<Shipment>;
+}
+
+export async function markShipmentReady(id: string): Promise<Shipment> {
+	const res = await fetch(`/api/v1/shipments/${id}/mark-ready`, {
+		method: 'POST',
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		const body = await res.json().catch(() => ({}));
+		if (res.status === 409) {
+			// Backend returns the ReadinessResult in detail when the shipment is not ready.
+			throw new MarkReadyNotReadyError(body.detail as ReadinessResult);
+		}
+		throw new Error(body.detail ?? `POST /api/v1/shipments/${id}/mark-ready failed: ${res.status}`);
+	}
+	return res.json() as Promise<Shipment>;
 }

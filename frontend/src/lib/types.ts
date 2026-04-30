@@ -44,6 +44,30 @@ export interface ShipmentUpdate {
 	line_items: ShipmentLineItemUpdate[];
 }
 
+// Iter 099: Shipment document requirement types (backend iter 046)
+export type DocumentRequirementStatus = 'PENDING' | 'COLLECTED';
+
+export interface ShipmentDocumentRequirement {
+	id: string;
+	shipment_id: string;
+	document_type: string;
+	is_auto_generated: boolean;
+	status: DocumentRequirementStatus;
+	document_id: string | null;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface ReadinessResult {
+	documents_ready: boolean;
+	certificates_ready: boolean;
+	packaging_ready: boolean;
+	is_ready: boolean;
+	missing_documents: string[];
+	missing_certificates: { product_id: string; qualification_type: string }[];
+	missing_packaging: { product_id: string; marketplace: string }[];
+}
+
 export type VendorStatus = 'ACTIVE' | 'INACTIVE';
 
 export type VendorType = 'PROCUREMENT' | 'OPEX' | 'FREIGHT' | 'MISCELLANEOUS';

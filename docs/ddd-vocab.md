@@ -254,3 +254,14 @@ stateDiagram-v2
 | Payment Term Metadata | Reference data per payment term code carrying behavior flags (currently `has_advance: bool`). Extensible; additional flags can be added without schema changes. | Procurement |
 | Post-Acceptance Gate | Window during which an SM may add or remove lines on an ACCEPTED PO. Closes when the first milestone is posted OR when the advance is marked paid (for advance-required terms). Whichever fires first closes the window. | Procurement |
 | Downstream Artifact | An invoice line or shipment line that references a PO line item. Presence blocks post-acceptance line removal via `remove_line_post_acceptance`. | Procurement |
+
+## Shipments
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| DocumentRequirementStatus | Status of a single shipment document requirement: PENDING (file not yet received) or COLLECTED (file received and stored). | Shipment |
+| ShipmentDocumentRequirement | Per-shipment document checklist entry. Carries `document_type`, `is_auto_generated` flag, and optional `document_id`. Status PENDING → COLLECTED on file upload. Auto-generated rows (PACKING_LIST, COMMERCIAL_INVOICE) are seeded on submit-for-documents and always pass the readiness gate; user-defined rows require a VENDOR upload. Child of Shipment. | Shipment |
+| ReadinessResult | Composite readiness snapshot for a shipment: `documents_ready`, `certificates_ready`, `packaging_ready` booleans plus structured missing-item lists (`missing_documents: string[]`, `missing_certificates: [{product_id, qualification_type}]`, `missing_packaging: [{product_id, marketplace}]`), and a derived `is_ready` boolean. Returned by `GET /shipments/{id}/readiness`; also carried by a 409 from `mark-ready` when not ready. | Shipment |
+| Auto-generated Requirement | A `ShipmentDocumentRequirement` with `is_auto_generated = true`. Seeded automatically on submit-for-documents for PACKING_LIST and COMMERCIAL_INVOICE. Always passes the documents readiness check; the PDFs are generated on demand from PO + shipment data. UI renders these rows read-only with no upload affordance for any role. | Shipment |
+| MarkReadyNotReadyError | Client-side typed error (extends `Error`) thrown by `markShipmentReady` when the backend returns 409 with a `ReadinessResult` payload. Carries the parsed result so the page can re-render the readiness panel from the server's view and surface an inline action-rail message without a separate fetch. | Shipment |
+| Mark Ready (as FM approval) | The `POST /shipments/{id}/mark-ready` transition (DOCUMENTS_PENDING → READY_TO_SHIP) is FREIGHT_MANAGER's implicit approval action over the uploaded document set. Gated by `ReadinessResult.is_ready`; a failing readiness check returns 409 with the structured `ReadinessResult`. FM reviews what VENDOR uploaded and clicks Mark Ready — FM does not upload documents. SM has the same capability as an ops override. | Shipment |
