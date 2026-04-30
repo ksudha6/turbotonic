@@ -4,6 +4,10 @@
 	import { onMount } from 'svelte';
 	import { bootstrap, registerVerify } from '$lib/auth';
 	import { startRegistration } from '$lib/webauthn';
+	import Button from '$lib/ui/Button.svelte';
+	import PanelCard from '$lib/ui/PanelCard.svelte';
+	import FormField from '$lib/ui/FormField.svelte';
+	import Input from '$lib/ui/Input.svelte';
 
 	let username = $state('');
 	let displayName = $state('');
@@ -60,60 +64,59 @@
 	}
 </script>
 
-<div class="page">
-	<div class="card setup-card">
+<div class="auth-page">
+	<div class="auth-card">
 		{#if page.data.user?.status === 'PENDING'}
-			<h1>System Setup</h1>
-			<p class="pending-message">
-				Your account is pending approval. Contact your administrator.
-			</p>
+			<PanelCard title="System Setup">
+				<p class="auth-info">
+					Your account is pending approval. Contact your administrator.
+				</p>
+			</PanelCard>
 		{:else if alreadyConfigured}
-			<h1>System Setup</h1>
-			<p class="info-message">System already configured.</p>
-			<a href="/login">Go to login</a>
+			<PanelCard title="System Setup">
+				<p class="auth-info">System already configured.</p>
+				<a href="/login">Go to login</a>
+			</PanelCard>
 		{:else}
-			<h1>System Setup</h1>
-			<p class="subtitle">Create the first admin account</p>
+			<PanelCard title="System Setup" subtitle="Create the first admin account">
+				<form onsubmit={handleSubmit}>
+					<FormField label="Username">
+						{#snippet children()}
+							<Input
+								bind:value={username}
+								disabled={loading}
+								ariaLabel="Username"
+								data-testid="setup-username"
+							/>
+						{/snippet}
+					</FormField>
 
-			<form onsubmit={handleSubmit}>
-				<div class="form-group">
-					<label for="username">Username</label>
-					<input
-						id="username"
-						class="input"
-						type="text"
-						autocomplete="username"
-						bind:value={username}
-						disabled={loading}
-					/>
-				</div>
+					<FormField label="Display Name">
+						{#snippet children()}
+							<Input
+								bind:value={displayName}
+								disabled={loading}
+								ariaLabel="Display Name"
+								data-testid="setup-display-name"
+							/>
+						{/snippet}
+					</FormField>
 
-				<div class="form-group">
-					<label for="display-name">Display Name</label>
-					<input
-						id="display-name"
-						class="input"
-						type="text"
-						autocomplete="name"
-						bind:value={displayName}
-						disabled={loading}
-					/>
-				</div>
+					{#if error}
+						<p class="auth-error" data-testid="setup-error">{error}</p>
+					{/if}
 
-				{#if error}
-					<p class="error-message">{error}</p>
-				{/if}
-
-				<button type="submit" class="btn btn-primary btn-full" disabled={loading}>
-					{loading ? 'Creating account...' : 'Create Admin Account'}
-				</button>
-			</form>
+					<Button type="submit" disabled={loading} data-testid="setup-submit">
+						{loading ? 'Creating account...' : 'Create Admin Account'}
+					</Button>
+				</form>
+			</PanelCard>
 		{/if}
 	</div>
 </div>
 
 <style>
-	.page {
+	.auth-page {
 		min-height: 100vh;
 		display: flex;
 		align-items: center;
@@ -121,46 +124,21 @@
 		padding: var(--space-4);
 	}
 
-	.setup-card {
+	.auth-card {
 		width: 100%;
 		max-width: 400px;
 	}
 
-	.setup-card h1 {
-		text-align: center;
-		margin-bottom: var(--space-2);
-	}
-
-	.subtitle {
-		text-align: center;
-		color: var(--gray-500);
-		font-size: var(--font-size-sm);
-		margin-bottom: var(--space-8);
-	}
-
-	.pending-message {
+	.auth-info {
 		color: var(--gray-600);
 		font-size: var(--font-size-sm);
 		text-align: center;
-		margin-top: var(--space-4);
+		margin: 0 0 var(--space-3) 0;
 	}
 
-	.info-message {
-		color: var(--gray-600);
+	.auth-error {
+		color: var(--red-700);
 		font-size: var(--font-size-sm);
-		text-align: center;
-		margin-top: var(--space-4);
-		margin-bottom: var(--space-4);
-	}
-
-	.error-message {
-		color: var(--red-600);
-		font-size: var(--font-size-sm);
-		margin-bottom: var(--space-4);
-	}
-
-	.btn-full {
-		width: 100%;
-		padding: var(--space-3) var(--space-4);
+		margin: 0 0 var(--space-3) 0;
 	}
 </style>

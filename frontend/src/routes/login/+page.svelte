@@ -5,6 +5,9 @@
 	import { devLogin, getDevUsers, loginOptions, loginVerify, type DevUser } from '$lib/auth';
 	import { startAuthentication } from '$lib/webauthn';
 	import Button from '$lib/ui/Button.svelte';
+	import PanelCard from '$lib/ui/PanelCard.svelte';
+	import FormField from '$lib/ui/FormField.svelte';
+	import Input from '$lib/ui/Input.svelte';
 
 	let username = $state('');
 	let error = $state('');
@@ -91,55 +94,53 @@
 	}
 </script>
 
-<div class="page">
-	<div class="card login-card">
-		<h1>Vendor Portal</h1>
-		<p class="subtitle">Sign in to your account</p>
-
-		<form onsubmit={handleSubmit}>
-			<div class="form-group">
-				<label for="username">Username</label>
-				<input
-					id="username"
-					class="input"
-					type="text"
-					autocomplete="username"
-					bind:value={username}
-					disabled={loading}
-				/>
-			</div>
-
-			{#if error}
-				<p class="error-message">{error}</p>
-			{/if}
-
-			<button type="submit" class="btn btn-primary btn-full" disabled={loading}>
-				{loading ? 'Logging in...' : 'Log in'}
-			</button>
-		</form>
-
-		{#if devUsers}
-			<div class="dev-login-row" data-testid="dev-login-row">
-				<p class="dev-login-label">Dev quick-login</p>
-				<div class="dev-login-buttons">
-					{#each devUsers as devUser (devUser.username)}
-						<Button
-							variant="secondary"
+<div class="auth-page">
+	<div class="auth-card">
+		<PanelCard title="Vendor Portal" subtitle="Sign in to your account">
+			<form onsubmit={handleSubmit}>
+				<FormField label="Username">
+					{#snippet children()}
+						<Input
+							bind:value={username}
 							disabled={loading}
-							onclick={() => handleDevLogin(devUser.username)}
-							data-testid={`dev-login-${devUser.username}`}
-						>
-							{devUser.display_name} ({devUser.role})
-						</Button>
-					{/each}
+							ariaLabel="Username"
+							data-testid="login-username"
+						/>
+					{/snippet}
+				</FormField>
+
+				{#if error}
+					<p class="auth-error" data-testid="login-error">{error}</p>
+				{/if}
+
+				<Button type="submit" disabled={loading} data-testid="login-submit">
+					{loading ? 'Logging in...' : 'Log in'}
+				</Button>
+			</form>
+
+			{#if devUsers}
+				<div class="dev-login-row" data-testid="dev-login-row">
+					<p class="dev-login-label">Dev quick-login</p>
+					<div class="dev-login-buttons">
+						{#each devUsers as devUser (devUser.username)}
+							<Button
+								variant="secondary"
+								disabled={loading}
+								onclick={() => handleDevLogin(devUser.username)}
+								data-testid={`dev-login-${devUser.username}`}
+							>
+								{devUser.display_name} ({devUser.role})
+							</Button>
+						{/each}
+					</div>
 				</div>
-			</div>
-		{/if}
+			{/if}
+		</PanelCard>
 	</div>
 </div>
 
 <style>
-	.page {
+	.auth-page {
 		min-height: 100vh;
 		display: flex;
 		align-items: center;
@@ -147,32 +148,15 @@
 		padding: var(--space-4);
 	}
 
-	.login-card {
+	.auth-card {
 		width: 100%;
 		max-width: 400px;
 	}
 
-	.login-card h1 {
-		text-align: center;
-		margin-bottom: var(--space-2);
-	}
-
-	.subtitle {
-		text-align: center;
-		color: var(--gray-500);
+	.auth-error {
+		color: var(--red-700);
 		font-size: var(--font-size-sm);
-		margin-bottom: var(--space-8);
-	}
-
-	.error-message {
-		color: var(--red-600);
-		font-size: var(--font-size-sm);
-		margin-bottom: var(--space-4);
-	}
-
-	.btn-full {
-		width: 100%;
-		padding: var(--space-3) var(--space-4);
+		margin: 0 0 var(--space-3) 0;
 	}
 
 	.dev-login-row {

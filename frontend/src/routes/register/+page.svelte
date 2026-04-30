@@ -5,6 +5,8 @@
 	import { registerOptions, registerVerify } from '$lib/auth';
 	import { startRegistration } from '$lib/webauthn';
 	import type { User } from '$lib/types';
+	import Button from '$lib/ui/Button.svelte';
+	import PanelCard from '$lib/ui/PanelCard.svelte';
 
 	type LoadState = 'loading' | 'invalid' | 'error' | 'ready' | 'registering';
 
@@ -72,43 +74,43 @@
 	}
 </script>
 
-<div class="page">
-	<div class="card register-card">
-		<h1>Register Your Account</h1>
+<div class="auth-page">
+	<div class="auth-card">
+		<PanelCard title="Register Your Account">
+			{#if loadState === 'loading'}
+				<p class="auth-status">Setting up...</p>
+			{:else if loadState === 'invalid'}
+				<p class="auth-error" data-testid="register-error">Invalid invite link.</p>
+				<a href="/login">Go to sign in</a>
+			{:else if loadState === 'error'}
+				<p class="auth-error" data-testid="register-error">{error}</p>
+				<a href="/login">Go to sign in</a>
+			{:else if loadState === 'ready' || loadState === 'registering'}
+				{#if user}
+					<p class="welcome-message">Welcome, {user.display_name}</p>
+					<p class="role-label">{user.role}</p>
+				{/if}
 
-		{#if loadState === 'loading'}
-			<p class="status-message">Setting up...</p>
-		{:else if loadState === 'invalid'}
-			<p class="error-message">Invalid invite link.</p>
-			<a href="/login">Go to sign in</a>
-		{:else if loadState === 'error'}
-			<p class="error-message">{error}</p>
-			<a href="/login">Go to sign in</a>
-		{:else if loadState === 'ready' || loadState === 'registering'}
-			{#if user}
-				<p class="welcome-message">Welcome, {user.display_name}</p>
-				<p class="role-label">{user.role}</p>
+				{#if error}
+					<p class="auth-error" data-testid="register-error">{error}</p>
+				{/if}
+
+				<Button
+					disabled={loadState === 'registering'}
+					onclick={handleRegister}
+					data-testid="register-submit"
+				>
+					{loadState === 'registering' ? 'Registering...' : 'Register passkey'}
+				</Button>
+
+				<p class="signin-link"><a href="/login">Already registered? Sign in</a></p>
 			{/if}
-
-			{#if error}
-				<p class="error-message">{error}</p>
-			{/if}
-
-			<button
-				class="btn btn-primary btn-full"
-				disabled={loadState === 'registering'}
-				onclick={handleRegister}
-			>
-				{loadState === 'registering' ? 'Registering...' : 'Register passkey'}
-			</button>
-
-			<p class="signin-link"><a href="/login">Already registered? Sign in</a></p>
-		{/if}
+		</PanelCard>
 	</div>
 </div>
 
 <style>
-	.page {
+	.auth-page {
 		min-height: 100vh;
 		display: flex;
 		align-items: center;
@@ -116,48 +118,39 @@
 		padding: var(--space-4);
 	}
 
-	.register-card {
+	.auth-card {
 		width: 100%;
 		max-width: 400px;
 	}
 
-	.register-card h1 {
-		text-align: center;
-		margin-bottom: var(--space-6);
-	}
-
-	.status-message {
-		text-align: center;
+	.auth-status {
 		color: var(--gray-500);
 		font-size: var(--font-size-sm);
+		text-align: center;
+		margin: 0;
 	}
 
 	.welcome-message {
 		font-size: var(--font-size-lg);
 		font-weight: 600;
-		margin-bottom: var(--space-1);
+		margin: 0 0 var(--space-1) 0;
 	}
 
 	.role-label {
 		font-size: var(--font-size-sm);
 		color: var(--gray-500);
-		margin-bottom: var(--space-6);
+		margin: 0 0 var(--space-3) 0;
 	}
 
-	.error-message {
-		color: var(--red-600);
+	.auth-error {
+		color: var(--red-700);
 		font-size: var(--font-size-sm);
-		margin-bottom: var(--space-4);
-	}
-
-	.btn-full {
-		width: 100%;
-		padding: var(--space-3) var(--space-4);
+		margin: 0 0 var(--space-3) 0;
 	}
 
 	.signin-link {
 		text-align: center;
 		font-size: var(--font-size-sm);
-		margin-top: var(--space-4);
+		margin: var(--space-3) 0 0 0;
 	}
 </style>
