@@ -45,9 +45,9 @@ class ActivityEvent(Enum):
     # Iter 074: shipment booking lifecycle. FM records carrier + booking; SM observes.
     SHIPMENT_BOOKED = "SHIPMENT_BOOKED"
     SHIPMENT_SHIPPED = "SHIPMENT_SHIPPED"
-    # Iter 099: ADMIN user-lifecycle audit events. target_role=None broadcasts to all roles since
-    # TargetRole has no ADMIN member; in practice only ADMINs view these. If user-event noise
-    # appears in non-ADMIN feeds, add TargetRole.ADMIN and narrow.
+    # Iter 099: ADMIN user-lifecycle audit events. Iter 107 assigns TargetRole.ADMIN so
+    # these rows appear only in ADMIN feeds, not in SM, VENDOR, or other operational feeds.
+    USER_INVITED = "USER_INVITED"
     USER_UPDATED = "USER_UPDATED"
     USER_DEACTIVATED = "USER_DEACTIVATED"
     USER_REACTIVATED = "USER_REACTIVATED"
@@ -76,6 +76,9 @@ class TargetRole(Enum):
     QUALITY_LAB = "QUALITY_LAB"
     FREIGHT_MANAGER = "FREIGHT_MANAGER"
     PROCUREMENT_MANAGER = "PROCUREMENT_MANAGER"
+    # Iter 107: ADMIN-scoped events route exclusively to ADMIN users via
+    # dispatcher fan-out. Only user-lifecycle events carry this target.
+    ADMIN = "ADMIN"
 
 
 @dataclass(frozen=True)
@@ -140,10 +143,13 @@ EVENT_METADATA: dict[ActivityEvent, tuple[NotificationCategory, TargetRole | Non
     # Iter 074: SM observes FM bookings and dispatches.
     ActivityEvent.SHIPMENT_BOOKED: (NotificationCategory.LIVE, TargetRole.SM),
     ActivityEvent.SHIPMENT_SHIPPED: (NotificationCategory.LIVE, TargetRole.SM),
-    # Iter 099: user-lifecycle audit events. target_role=None per Decisions in iter doc.
-    ActivityEvent.USER_UPDATED: (NotificationCategory.LIVE, None),
-    ActivityEvent.USER_DEACTIVATED: (NotificationCategory.LIVE, None),
-    ActivityEvent.USER_REACTIVATED: (NotificationCategory.LIVE, None),
-    ActivityEvent.USER_CREDENTIALS_RESET: (NotificationCategory.LIVE, None),
-    ActivityEvent.USER_INVITE_REISSUED: (NotificationCategory.LIVE, None),
+    # Iter 107: user-lifecycle events target TargetRole.ADMIN so they appear only
+    # in ADMIN notification feeds. The dispatcher fans these out to all ACTIVE
+    # ADMIN users via a single role-scoped query (no per-user iteration).
+    ActivityEvent.USER_INVITED: (NotificationCategory.LIVE, TargetRole.ADMIN),
+    ActivityEvent.USER_UPDATED: (NotificationCategory.LIVE, TargetRole.ADMIN),
+    ActivityEvent.USER_DEACTIVATED: (NotificationCategory.LIVE, TargetRole.ADMIN),
+    ActivityEvent.USER_REACTIVATED: (NotificationCategory.LIVE, TargetRole.ADMIN),
+    ActivityEvent.USER_CREDENTIALS_RESET: (NotificationCategory.LIVE, TargetRole.ADMIN),
+    ActivityEvent.USER_INVITE_REISSUED: (NotificationCategory.LIVE, TargetRole.ADMIN),
 }
