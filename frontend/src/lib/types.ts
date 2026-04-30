@@ -29,6 +29,19 @@ export interface Shipment {
 	line_items: ShipmentLineItem[];
 	created_at: string;
 	updated_at: string;
+	// Iter 103: booking metadata populated on book_shipment transition (iter 074 backend).
+	carrier: string | null;
+	booking_reference: string | null;
+	pickup_date: string | null;
+	shipped_at: string | null;
+}
+
+// Iter 103: payload for POST /{id}/book. Mirrors backend ShipmentBookRequest exactly.
+// carrier and booking_reference are validated non-empty/whitespace client-side before send.
+export interface ShipmentBookingPayload {
+	carrier: string;
+	booking_reference: string;
+	pickup_date: string;
 }
 
 export interface ShipmentLineItemUpdate {

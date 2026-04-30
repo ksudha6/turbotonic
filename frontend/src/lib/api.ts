@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, Certificate, CertificateCreateInput, CertificateListItem, CertWarning, DashboardData, DashboardSummary, DocumentRequirementStatus, Invoice, InvoiceLineItemCreate, InvoiceListItem, InviteUserInput, InviteUserResponse, MilestoneResponse, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, PatchUserInput, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReadinessResult, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentDocumentRequirement, ShipmentUpdate, User, UserRole, UserStatus, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, Certificate, CertificateCreateInput, CertificateListItem, CertWarning, DashboardData, DashboardSummary, DocumentRequirementStatus, Invoice, InvoiceLineItemCreate, InvoiceListItem, InviteUserInput, InviteUserResponse, MilestoneResponse, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, PatchUserInput, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReadinessResult, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentBookingPayload, ShipmentDocumentRequirement, ShipmentUpdate, User, UserRole, UserStatus, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -812,6 +812,53 @@ export async function markShipmentReady(id: string): Promise<Shipment> {
 			throw new MarkReadyNotReadyError(body.detail as ReadinessResult);
 		}
 		throw new Error(body.detail ?? `POST /api/v1/shipments/${id}/mark-ready failed: ${res.status}`);
+	}
+	return res.json() as Promise<Shipment>;
+}
+
+// Iter 103: POST /{id}/book — transitions READY_TO_SHIP → BOOKED.
+// carrier and booking_reference are validated non-empty client-side; pickup_date is ISO date string.
+export async function bookShipment(id: string, payload: ShipmentBookingPayload): Promise<Shipment> {
+	const carrier = payload.carrier.trim();
+	const booking_reference = payload.booking_reference.trim();
+	if (!carrier) throw new Error('Carrier must not be empty');
+	if (!booking_reference) throw new Error('Booking reference must not be empty');
+	const res = await fetch(`/api/v1/shipments/${id}/book`, {
+		method: 'POST',
+		credentials: 'include',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ carrier, booking_reference, pickup_date: payload.pickup_date })
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail ?? `POST /api/v1/shipments/${id}/book failed: ${res.status}`);
+	}
+	return res.json() as Promise<Shipment>;
+}
+
+// Iter 103: POST /{id}/ship — transitions BOOKED → SHIPPED. No request body.
+export async function markShipmentShipped(id: string): Promise<Shipment> {
+	const res = await fetch(`/api/v1/shipments/${id}/ship`, {
+		method: 'POST',
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail ?? `POST /api/v1/shipments/${id}/ship failed: ${res.status}`);
 	}
 	return res.json() as Promise<Shipment>;
 }

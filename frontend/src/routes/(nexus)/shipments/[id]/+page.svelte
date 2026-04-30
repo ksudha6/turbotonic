@@ -12,12 +12,15 @@
 		getShipmentReadiness,
 		submitShipmentForDocuments,
 		markShipmentReady,
+		bookShipment,
+		markShipmentShipped,
 		MarkReadyNotReadyError
 	} from '$lib/api';
-	import { canEditShipment, canViewShipmentReadiness } from '$lib/permissions';
+	import { canEditShipment, canViewShipmentReadiness, canBookShipment } from '$lib/permissions';
 	import type {
 		Shipment,
 		ShipmentLineItemUpdate,
+		ShipmentBookingPayload,
 		UserRole,
 		ShipmentDocumentRequirement,
 		ReadinessResult
@@ -32,6 +35,7 @@
 	import ShipmentActionRail from '$lib/shipment/ShipmentActionRail.svelte';
 	import ShipmentDocumentsPanel from '$lib/shipment/ShipmentDocumentsPanel.svelte';
 	import ShipmentReadinessPanel from '$lib/shipment/ShipmentReadinessPanel.svelte';
+	import ShipmentBookingPanel from '$lib/shipment/ShipmentBookingPanel.svelte';
 
 	const ROLE_LABEL: Record<UserRole, string> = {
 		ADMIN: 'Administrator',
@@ -58,7 +62,10 @@
 	let readiness: ReadinessResult | null = $state(null);
 	let submitting: boolean = $state(false);
 	let marking: boolean = $state(false);
+	let shipping: boolean = $state(false);
+	let booking: boolean = $state(false);
 	let actionError: string | null = $state(null);
+	let bookingError: string | null = $state(null);
 	let uploadingId: string | null = $state(null);
 	let addingRequirement: boolean = $state(false);
 	let documentsError: string | null = $state(null);
@@ -69,6 +76,7 @@
 	const userName = $derived(user?.display_name ?? user?.username ?? 'Guest');
 	const roleLabel = $derived(ROLE_LABEL[role]);
 	const canEdit = $derived(shipment ? canEditShipment(role, shipment.status) : false);
+	const showBookingPanel = $derived(shipment ? canBookShipment(role, shipment.status) : false);
 
 	// productLookup maps product_id → { part_number, description } for readiness panel resolution.
 	function buildProductLookup(
@@ -133,6 +141,32 @@
 			}
 		} finally {
 			marking = false;
+		}
+	}
+
+	async function handleBook(payload: ShipmentBookingPayload) {
+		booking = true;
+		bookingError = null;
+		try {
+			shipment = await bookShipment(shipmentId, payload);
+			await fetchAuxiliary(shipment);
+		} catch (e) {
+			bookingError = e instanceof Error ? e.message : 'Booking failed';
+		} finally {
+			booking = false;
+		}
+	}
+
+	async function handleMarkShipped() {
+		shipping = true;
+		actionError = null;
+		try {
+			shipment = await markShipmentShipped(shipmentId);
+			await fetchAuxiliary(shipment);
+		} catch (e) {
+			actionError = e instanceof Error ? e.message : 'Mark shipped failed';
+		} finally {
+			shipping = false;
 		}
 	}
 
@@ -251,9 +285,11 @@
 				{readiness}
 				{submitting}
 				{marking}
+				{shipping}
 				error={actionError}
 				on_submit={handleSubmit}
 				on_mark_ready={handleMarkReady}
+				on_mark_shipped={handleMarkShipped}
 			/>
 
 			{#if shipment.status !== 'DRAFT' || requirements.length > 0}
@@ -276,6 +312,14 @@
 					{productLookup}
 					loading={false}
 					error={null}
+				/>
+			{/if}
+
+			{#if showBookingPanel}
+				<ShipmentBookingPanel
+					submitting={booking}
+					error={bookingError}
+					on_book={handleBook}
 				/>
 			{/if}
 
