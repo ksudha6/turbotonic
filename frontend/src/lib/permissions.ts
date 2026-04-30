@@ -22,7 +22,8 @@ export const canManageVendors = (role: UserRole) => is(role, 'SM');
 // reads as "ADMIN-only" at the call site.
 export const canManageUsers = (role: UserRole) => is(role, 'ADMIN');
 export const canManageProducts = (role: UserRole) => is(role, 'SM');
-export const canViewProducts = (role: UserRole) => is(role, 'SM', 'QUALITY_LAB', 'VENDOR', 'PROCUREMENT_MANAGER');
+// Iter 105: FM added — FM needs to view product cert panels to approve certificates.
+export const canViewProducts = (role: UserRole) => is(role, 'SM', 'QUALITY_LAB', 'VENDOR', 'PROCUREMENT_MANAGER', 'FREIGHT_MANAGER');
 export const canPostMilestone = (role: UserRole) => is(role, 'VENDOR');
 export const canViewInvoices = (role: UserRole) => is(role, 'SM', 'VENDOR', 'PROCUREMENT_MANAGER', 'FREIGHT_MANAGER');
 // FM sidebar excludes POs (iter 071 matrix), but FM needs PO detail read access

@@ -907,6 +907,123 @@ test('certificates upload PDF rejects oversize file client-side', async ({ page 
 });
 
 // ---------------------------------------------------------------------------
+// Iter 105 — certificate approve button
+// ---------------------------------------------------------------------------
+
+const CERT_APPROVED = {
+	id: 'cert-4',
+	product_id: PRODUCT_WITH_QUAL.id,
+	qualification_type_id: 'qt-iso',
+	cert_number: 'ISO-APPROVED',
+	issuer: 'TUV',
+	target_market: 'AMZ',
+	status: 'APPROVED',
+	expiry_date: '2028-01-01T00:00:00+00:00',
+	document_id: 'file-cert-4'
+};
+
+const FM_USER = {
+	id: 'u-fm',
+	username: 'fm',
+	display_name: 'FM User',
+	role: 'FREIGHT_MANAGER',
+	status: 'ACTIVE',
+	vendor_id: null,
+	email: null
+};
+
+async function setupEditPageWithCertsAsRole(
+	page: import('@playwright/test').Page,
+	certsPayload: object[],
+	role: string
+) {
+	await setupEditPageWithCerts(page, certsPayload);
+	// Override auth/me with the specified role (LIFO wins over beforeEach mock).
+	await page.route('**/api/v1/auth/me', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ user: { ...FM_USER, role } })
+		});
+	});
+}
+
+test('certificates approve: FM sees Approve button on VALID cert', async ({ page }) => {
+	await setupEditPageWithCertsAsRole(page, [CERT_VALID], 'FREIGHT_MANAGER');
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	const panel = page.getByTestId('product-certificates-panel');
+	await expect(panel.getByTestId(`cert-approve-${CERT_VALID.id}`)).toBeVisible();
+});
+
+test('certificates approve: SM does not see Approve button on VALID cert', async ({ page }) => {
+	// beforeEach already sets SM role; setupEditPageWithCerts uses that.
+	await setupEditPageWithCerts(page, [CERT_VALID]);
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	const panel = page.getByTestId('product-certificates-panel');
+	await expect(panel.getByTestId(`cert-approve-${CERT_VALID.id}`)).toHaveCount(0);
+});
+
+test('certificates approve: VENDOR does not see Approve button on VALID cert', async ({ page }) => {
+	await setupEditPageWithCertsAsRole(page, [CERT_VALID], 'VENDOR');
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	const panel = page.getByTestId('product-certificates-panel');
+	await expect(panel.getByTestId(`cert-approve-${CERT_VALID.id}`)).toHaveCount(0);
+});
+
+test('certificates approve: FM clicking Approve transitions cert to APPROVED', async ({ page }) => {
+	const approvedCert = { ...CERT_VALID, status: 'APPROVED' };
+	await setupEditPageWithCertsAsRole(page, [CERT_VALID], 'FREIGHT_MANAGER');
+
+	// Mock the approve POST — returns the cert with APPROVED status.
+	await page.route(`**/api/v1/certificates/${CERT_VALID.id}/approve`, (route) => {
+		if (route.request().method() === 'POST') {
+			route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					id: CERT_VALID.id,
+					product_id: CERT_VALID.product_id,
+					qualification_type_id: CERT_VALID.qualification_type_id,
+					cert_number: CERT_VALID.cert_number,
+					issuer: CERT_VALID.issuer,
+					testing_lab: '',
+					test_date: null,
+					issue_date: '2026-01-01T00:00:00+00:00',
+					expiry_date: approvedCert.expiry_date,
+					target_market: CERT_VALID.target_market,
+					document_id: CERT_VALID.document_id,
+					status: 'APPROVED',
+					created_at: '2026-01-01T00:00:00+00:00',
+					updated_at: '2026-04-30T00:00:00+00:00'
+				})
+			});
+		} else {
+			route.continue();
+		}
+	});
+
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+	const panel = page.getByTestId('product-certificates-panel');
+
+	await panel.getByTestId(`cert-approve-${CERT_VALID.id}`).click();
+
+	// After approve: status pill shows APPROVED, Approve button is gone.
+	await expect(panel.getByTestId(`product-certificates-row-status-${CERT_VALID.id}`)).toContainText('APPROVED');
+	await expect(panel.getByTestId(`cert-approve-${CERT_VALID.id}`)).toHaveCount(0);
+});
+
+test('certificates approve: APPROVED cert row has no Approve button', async ({ page }) => {
+	await setupEditPageWithCertsAsRole(page, [CERT_APPROVED], 'FREIGHT_MANAGER');
+	await page.goto(`/products/${PRODUCT_WITH_QUAL.id}/edit`);
+
+	const panel = page.getByTestId('product-certificates-panel');
+	await expect(panel.getByTestId(`cert-approve-${CERT_APPROVED.id}`)).toHaveCount(0);
+});
+
+// ---------------------------------------------------------------------------
 // Iter 090 — `/products` list under (nexus) AppShell
 // ---------------------------------------------------------------------------
 
