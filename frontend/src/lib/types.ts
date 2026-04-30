@@ -608,4 +608,31 @@ export interface User {
 	role: UserRole;
 	status: UserStatus;
 	vendor_id: string | null;
+	email: string | null;
+}
+
+// Iter 100: ADMIN /users page request shapes.
+export interface InviteUserInput {
+	username: string;
+	display_name: string;
+	role: UserRole;
+	email?: string | null;
+	vendor_id?: string | null;
+}
+
+export interface PatchUserInput {
+	display_name?: string;
+	// Explicit null clears email; omitted leaves untouched.
+	email?: string | null;
+}
+
+export interface UserListFilters {
+	status?: UserStatus | '';
+	role?: UserRole | '';
+}
+
+// Iter 100: shared response shape for invite / reset-credentials / reissue-invite.
+export interface InviteUserResponse {
+	user: User;
+	invite_token: string;
 }

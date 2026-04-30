@@ -117,7 +117,8 @@
 				display_name: 'Vendor Own',
 				role: 'VENDOR',
 				status: 'ACTIVE',
-				vendor_id: PO_VENDOR_ID
+				vendor_id: PO_VENDOR_ID,
+				email: null
 			};
 		}
 		if (opt === 'VENDOR_OTHER') {
@@ -127,7 +128,8 @@
 				display_name: 'Vendor Other',
 				role: 'VENDOR',
 				status: 'ACTIVE',
-				vendor_id: 'vendor-B'
+				vendor_id: 'vendor-B',
+				email: null
 			};
 		}
 		const roleMap: Record<Exclude<RoleOption, 'VENDOR_OWN' | 'VENDOR_OTHER'>, UserRole> = {
@@ -143,7 +145,8 @@
 			display_name: opt,
 			role: roleMap[opt as keyof typeof roleMap],
 			status: 'ACTIVE',
-			vendor_id: null
+			vendor_id: null,
+			email: null
 		};
 	}
 

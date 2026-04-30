@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, Certificate, CertificateCreateInput, CertificateListItem, CertWarning, DashboardData, DashboardSummary, Invoice, InvoiceLineItemCreate, InvoiceListItem, MilestoneResponse, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentUpdate, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, BulkTransitionResult, Certificate, CertificateCreateInput, CertificateListItem, CertWarning, DashboardData, DashboardSummary, Invoice, InvoiceLineItemCreate, InvoiceListItem, InviteUserInput, InviteUserResponse, MilestoneResponse, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, PatchUserInput, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentUpdate, User, UserRole, UserStatus, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -613,4 +613,91 @@ export async function downloadCommercialInvoicePdf(id: string, shipmentNumber: s
 	a.download = `commercial-invoice-${shipmentNumber}.pdf`;
 	a.click();
 	URL.revokeObjectURL(url);
+}
+
+// Iter 100: ADMIN /users page clients. Each path that can return a 409 surfaces
+// the backend's `detail` string verbatim so the UI can render server-authored
+// guard messages (last-active-admin, self-deactivate, already-PENDING, etc.)
+// inline. Mirrors the `addLinePostAccept` detail-surfacing pattern.
+
+async function detailOrThrow(res: Response, method: string, path: string): Promise<never> {
+	if (res.status === 401) {
+		if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+			const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+			window.location.href = `/login?redirect=${redirect}`;
+		}
+		throw new Error('Not authenticated');
+	}
+	let detail = `${method} ${path} failed: ${res.status} ${res.statusText}`;
+	try {
+		const body = await res.json();
+		if (body && typeof body.detail === 'string') detail = body.detail;
+	} catch {
+		// non-JSON body; keep status-text fallback.
+	}
+	throw new Error(detail);
+}
+
+export function listUsers(filters?: { status?: UserStatus | ''; role?: UserRole | '' }): Promise<{ users: User[] }> {
+	const query = new URLSearchParams();
+	if (filters?.status) query.set('status', filters.status);
+	if (filters?.role) query.set('role', filters.role);
+	const qs = query.toString();
+	return apiGet<{ users: User[] }>(qs ? `/api/v1/users/?${qs}` : '/api/v1/users/');
+}
+
+export function getUser(id: string): Promise<{ user: User }> {
+	return apiGet<{ user: User }>(`/api/v1/users/${id}`);
+}
+
+export async function inviteUser(input: InviteUserInput): Promise<InviteUserResponse> {
+	const path = '/api/v1/users/invite';
+	const res = await fetch(path, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(input),
+		credentials: 'include'
+	});
+	if (!res.ok) await detailOrThrow(res, 'POST', path);
+	return (await res.json()) as InviteUserResponse;
+}
+
+export async function patchUser(id: string, body: PatchUserInput): Promise<{ user: User }> {
+	const path = `/api/v1/users/${id}`;
+	const res = await fetch(path, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body),
+		credentials: 'include'
+	});
+	if (!res.ok) await detailOrThrow(res, 'PATCH', path);
+	return (await res.json()) as { user: User };
+}
+
+export async function deactivateUser(id: string): Promise<{ user: User }> {
+	const path = `/api/v1/users/${id}/deactivate`;
+	const res = await fetch(path, { method: 'POST', credentials: 'include' });
+	if (!res.ok) await detailOrThrow(res, 'POST', path);
+	return (await res.json()) as { user: User };
+}
+
+export async function reactivateUser(id: string): Promise<{ user: User }> {
+	const path = `/api/v1/users/${id}/reactivate`;
+	const res = await fetch(path, { method: 'POST', credentials: 'include' });
+	if (!res.ok) await detailOrThrow(res, 'POST', path);
+	return (await res.json()) as { user: User };
+}
+
+export async function resetCredentials(id: string): Promise<InviteUserResponse> {
+	const path = `/api/v1/users/${id}/reset-credentials`;
+	const res = await fetch(path, { method: 'POST', credentials: 'include' });
+	if (!res.ok) await detailOrThrow(res, 'POST', path);
+	return (await res.json()) as InviteUserResponse;
+}
+
+export async function reissueInvite(id: string): Promise<InviteUserResponse> {
+	const path = `/api/v1/users/${id}/reissue-invite`;
+	const res = await fetch(path, { method: 'POST', credentials: 'include' });
+	if (!res.ok) await detailOrThrow(res, 'POST', path);
+	return (await res.json()) as InviteUserResponse;
 }

@@ -88,7 +88,8 @@ const SM_USER: User = {
 	display_name: 'SM User',
 	role: 'SM',
 	status: 'ACTIVE',
-	vendor_id: null
+	vendor_id: null,
+	email: null
 };
 
 const VENDOR_USER: User = {
@@ -97,7 +98,8 @@ const VENDOR_USER: User = {
 	display_name: 'Vendor User',
 	role: 'VENDOR',
 	status: 'ACTIVE',
-	vendor_id: 'vendor-1'
+	vendor_id: 'vendor-1',
+	email: null
 };
 
 const PROCUREMENT_USER: User = {
@@ -106,7 +108,8 @@ const PROCUREMENT_USER: User = {
 	display_name: 'Procurement Manager',
 	role: 'PROCUREMENT_MANAGER',
 	status: 'ACTIVE',
-	vendor_id: null
+	vendor_id: null,
+	email: null
 };
 
 const FREIGHT_USER: User = {
@@ -115,7 +118,8 @@ const FREIGHT_USER: User = {
 	display_name: 'Freight Manager',
 	role: 'FREIGHT_MANAGER',
 	status: 'ACTIVE',
-	vendor_id: null
+	vendor_id: null,
+	email: null
 };
 
 const QUALITY_USER: User = {
@@ -124,7 +128,8 @@ const QUALITY_USER: User = {
 	display_name: 'Quality Lab',
 	role: 'QUALITY_LAB',
 	status: 'ACTIVE',
-	vendor_id: null
+	vendor_id: null,
+	email: null
 };
 
 // ---------------------------------------------------------------------------

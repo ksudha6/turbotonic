@@ -17,6 +17,10 @@ export const canPayInvoice = (role: UserRole) => is(role, 'SM');
 export const canDisputeInvoice = (role: UserRole) => is(role, 'SM');
 export const canResolveInvoice = (role: UserRole) => is(role, 'SM');
 export const canManageVendors = (role: UserRole) => is(role, 'SM');
+// Iter 100: ADMIN-only /users page guard. is() bypasses on ADMIN, so passing ADMIN
+// as the explicit allowed role is a no-op vs e.g. is(role, 'SM'); the form here
+// reads as "ADMIN-only" at the call site.
+export const canManageUsers = (role: UserRole) => is(role, 'ADMIN');
 export const canManageProducts = (role: UserRole) => is(role, 'SM');
 export const canViewProducts = (role: UserRole) => is(role, 'SM', 'QUALITY_LAB', 'VENDOR', 'PROCUREMENT_MANAGER');
 export const canPostMilestone = (role: UserRole) => is(role, 'VENDOR');
