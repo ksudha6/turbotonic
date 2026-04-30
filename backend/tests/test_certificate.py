@@ -132,3 +132,33 @@ def test_is_expired_uses_as_of_parameter():
     assert cert.is_expired(as_of=datetime(2024, 5, 31, tzinfo=UTC)) is False
     # as_of after expiry -- expired
     assert cert.is_expired(as_of=datetime(2024, 6, 2, tzinfo=UTC)) is True
+
+
+# Iter 105: approve() state machine
+def test_approve_transitions_valid_to_approved():
+    cert = _make_cert()
+    cert.mark_valid()
+    assert cert.status is CertificateStatus.VALID
+    cert.approve()
+    assert cert.status is CertificateStatus.APPROVED
+
+
+def test_approve_raises_from_pending():
+    cert = _make_cert()
+    with pytest.raises(ValueError, match="cannot be approved"):
+        cert.approve()
+
+
+def test_approve_raises_from_approved():
+    cert = _make_cert()
+    cert.mark_valid()
+    cert.approve()
+    with pytest.raises(ValueError, match="cannot be approved"):
+        cert.approve()
+
+
+def test_display_status_approved_for_approved_cert():
+    cert = _make_cert()
+    cert.mark_valid()
+    cert.approve()
+    assert cert.display_status() == "APPROVED"

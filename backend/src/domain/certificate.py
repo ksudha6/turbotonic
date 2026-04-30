@@ -8,6 +8,8 @@ from uuid import uuid4
 class CertificateStatus(str, Enum):
     PENDING = "PENDING"
     VALID = "VALID"
+    # Iter 105: FREIGHT_MANAGER explicit sign-off after vendor upload.
+    APPROVED = "APPROVED"
 
 
 class Certificate:
@@ -96,10 +98,19 @@ class Certificate:
         )
 
     def mark_valid(self) -> None:
-        # Transitions PENDING -> VALID; VALID is terminal
+        # Transitions PENDING -> VALID; VALID is terminal within the vendor upload flow
         if self.status is CertificateStatus.VALID:
             raise ValueError("Certificate is already VALID")
         self.status = CertificateStatus.VALID
+        self.updated_at = datetime.now(UTC)
+
+    def approve(self) -> None:
+        # Transitions VALID -> APPROVED; only callable once from VALID
+        if self.status is not CertificateStatus.VALID:
+            raise ValueError(
+                f"Certificate cannot be approved from status {self.status.value}; must be VALID"
+            )
+        self.status = CertificateStatus.APPROVED
         self.updated_at = datetime.now(UTC)
 
     def attach_document(self, document_id: str) -> None:
