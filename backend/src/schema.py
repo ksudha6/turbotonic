@@ -497,3 +497,36 @@ async def init_db(conn: asyncpg.Connection) -> None:
     await conn.execute(
         "ALTER TABLE files ADD COLUMN IF NOT EXISTS uploaded_by TEXT"
     )
+
+    # Iter 106: vessel + voyage on shipments (populated post-booking via PATCH /transport).
+    await conn.execute(
+        "ALTER TABLE shipments ADD COLUMN IF NOT EXISTS vessel_name TEXT"
+    )
+    await conn.execute(
+        "ALTER TABLE shipments ADD COLUMN IF NOT EXISTS voyage_number TEXT"
+    )
+
+    # Iter 106: signatory details on shipments (populated via POST /declare).
+    # declared_at is set server-side when the declaration is recorded.
+    await conn.execute(
+        "ALTER TABLE shipments ADD COLUMN IF NOT EXISTS signatory_name TEXT"
+    )
+    await conn.execute(
+        "ALTER TABLE shipments ADD COLUMN IF NOT EXISTS signatory_title TEXT"
+    )
+    await conn.execute(
+        "ALTER TABLE shipments ADD COLUMN IF NOT EXISTS declared_at TEXT"
+    )
+
+    # Iter 106: per-product manufacturer identity (distinct from shipping vendor).
+    # A Manufacturer entity (with its own ID) is deferred; these columns cover the
+    # common case where the manufacturer name/address/country differs from the vendor.
+    await conn.execute(
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_name TEXT NOT NULL DEFAULT ''"
+    )
+    await conn.execute(
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_address TEXT NOT NULL DEFAULT ''"
+    )
+    await conn.execute(
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_country TEXT NOT NULL DEFAULT ''"
+    )

@@ -18,6 +18,7 @@ from src.domain.shipment import Shipment, ShipmentLineItem, ShipmentStatus, vali
 from src.domain.shipment_document_requirement import ShipmentDocumentRequirement
 from src.domain.user import User, UserRole
 from src.packaging_repository import PackagingSpecRepository
+from src.product_repository import ProductRepository
 from src.qualification_type_repository import QualificationTypeRepository
 from src.repository import PurchaseOrderRepository
 from src.shipment_document_requirement_dto import (
@@ -32,7 +33,9 @@ from src.shipment_dto import (
     RemainingShipmentQuantityResponse,
     ShipmentBookRequest,
     ShipmentCreate,
+    ShipmentDeclareRequest,
     ShipmentResponse,
+    ShipmentTransportRequest,
     ShipmentUpdate,
     shipment_to_response,
 )
@@ -86,6 +89,11 @@ async def get_document_repo_for_shipment() -> AsyncIterator[DocumentRepository]:
         yield DocumentRepository(conn)
 
 
+async def get_product_repo_for_shipment() -> AsyncIterator[ProductRepository]:
+    async with get_db() as conn:
+        yield ProductRepository(conn)
+
+
 def get_file_storage_for_shipment() -> FileStorageService:
     return FileStorageService(Path(__file__).resolve().parent.parent.parent / "uploads")
 
@@ -99,6 +107,7 @@ PackagingRepoDep = Annotated[PackagingSpecRepository, Depends(get_packaging_repo
 QtRepoDep = Annotated[QualificationTypeRepository, Depends(get_qt_repo_for_shipment)]
 DocumentRepoDep = Annotated[DocumentRepository, Depends(get_document_repo_for_shipment)]
 FileStorageDep = Annotated[FileStorageService, Depends(get_file_storage_for_shipment)]
+ProductRepoDep = Annotated[ProductRepository, Depends(get_product_repo_for_shipment)]
 
 
 @router.post("/", response_model=ShipmentResponse, status_code=201)
@@ -316,6 +325,52 @@ async def book_shipment(
     return shipment_to_response(shipment, rows)
 
 
+@router.patch("/{shipment_id}/transport", response_model=ShipmentResponse)
+async def set_transport(
+    shipment_id: str,
+    body: ShipmentTransportRequest,
+    repo: ShipmentRepoDep,
+    _user: User = require_role(UserRole.ADMIN, UserRole.SM, UserRole.FREIGHT_MANAGER),
+) -> ShipmentResponse:
+    """Iter 106: record vessel name + voyage number after booking confirmation."""
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+    try:
+        shipment.set_transport(
+            vessel_name=body.vessel_name,
+            voyage_number=body.voyage_number,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await repo.save(shipment)
+    rows = await repo.get_line_item_rows(shipment_id)
+    return shipment_to_response(shipment, rows)
+
+
+@router.post("/{shipment_id}/declare", response_model=ShipmentResponse)
+async def declare_shipment(
+    shipment_id: str,
+    body: ShipmentDeclareRequest,
+    repo: ShipmentRepoDep,
+    _user: User = require_role(UserRole.ADMIN, UserRole.SM, UserRole.FREIGHT_MANAGER),
+) -> ShipmentResponse:
+    """Iter 106: record signatory details for the customs declaration on the CI."""
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+    try:
+        shipment.declare(
+            signatory_name=body.signatory_name,
+            signatory_title=body.signatory_title,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await repo.save(shipment)
+    rows = await repo.get_line_item_rows(shipment_id)
+    return shipment_to_response(shipment, rows)
+
+
 @router.post("/{shipment_id}/ship", response_model=ShipmentResponse)
 async def mark_shipped(
     shipment_id: str,
@@ -522,6 +577,7 @@ async def get_packing_list(
     repo: ShipmentRepoDep,
     po_repo: PORepoDep,
     vendor_repo: VendorRepoDep,
+    product_repo: ProductRepoDep,
     _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
 ) -> Response:
     from src.services.packing_list_pdf import generate_packing_list_pdf
@@ -543,6 +599,19 @@ async def get_packing_list(
     buyer_name = po.buyer_name
     buyer_address = po.ship_to_address
 
+    # Iter 106: build manufacturer lookup from products linked to shipment line items.
+    # Falls back to vendor data for any line where product has no manufacturer_name.
+    manufacturer_lookup: dict[str, dict[str, str]] = {}
+    for li in shipment.line_items:
+        if li.product_id:
+            product = await product_repo.get_by_id(li.product_id)
+            if product is not None and product.manufacturer_name.strip():
+                manufacturer_lookup[li.part_number] = {
+                    "name": product.manufacturer_name,
+                    "address": product.manufacturer_address,
+                    "country": product.manufacturer_country,
+                }
+
     pdf_bytes = generate_packing_list_pdf(
         shipment=shipment,
         po=po,
@@ -551,6 +620,7 @@ async def get_packing_list(
         buyer_name=buyer_name,
         buyer_address=buyer_address,
         vendor_country=vendor_country,
+        manufacturer_lookup=manufacturer_lookup if manufacturer_lookup else None,
     )
 
     filename = f"packing-list-{shipment.shipment_number}.pdf"

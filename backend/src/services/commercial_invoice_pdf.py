@@ -70,7 +70,8 @@ def generate_commercial_invoice_pdf(
 ) -> bytes:
     """Build a commercial invoice PDF for the given Shipment and PurchaseOrder.
 
-    Returns the PDF as raw bytes.
+    Returns the PDF as raw bytes. Signatory details (iter 106) are read from the
+    Shipment aggregate when present; CI renders "[unsigned]" when absent.
     """
     buf = io.BytesIO()
 
@@ -390,7 +391,9 @@ def generate_commercial_invoice_pdf(
 
     # -------------------------------------------------------------------------
     # 7. Declaration
-    # Standard shipper's declaration for customs acceptance
+    # Standard shipper's declaration for customs acceptance (iter 104).
+    # Iter 106: signatory name, title, and declaration date rendered when present.
+    # Falls back to "[unsigned]" / "[undated]" when not yet declared.
     # -------------------------------------------------------------------------
     _DECLARATION_TEXT = (
         "I declare that the information on this invoice is true and correct."
@@ -406,6 +409,20 @@ def generate_commercial_invoice_pdf(
         backColor=colors.Color(0.97, 0.97, 0.97),
     )
     story.append(Paragraph(_DECLARATION_TEXT, declaration_style))
+
+    # Signatory block — iter 106
+    signatory_name = shipment.signatory_name or "[unsigned]"
+    signatory_title = shipment.signatory_title or ""
+    declared_at_str = _date_str(shipment.declared_at) if shipment.declared_at else "[undated]"
+
+    signatory_parts = [signatory_name]
+    if signatory_title:
+        signatory_parts.append(signatory_title)
+    signatory_parts.append(declared_at_str)
+
+    signatory_text = " | ".join(signatory_parts)
+    story.append(Spacer(1, 6))
+    story.append(Paragraph(signatory_text, declaration_style))
 
     doc.build(story)
     return buf.getvalue()

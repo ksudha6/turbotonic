@@ -82,8 +82,13 @@ class ShipmentRepository:
                         carrier = $3,
                         booking_reference = $4,
                         pickup_date = $5,
-                        shipped_at = $6
-                    WHERE id = $7
+                        shipped_at = $6,
+                        vessel_name = $7,
+                        voyage_number = $8,
+                        signatory_name = $9,
+                        signatory_title = $10,
+                        declared_at = $11
+                    WHERE id = $12
                     """,
                     shipment.status.value,
                     _iso(shipment.updated_at),
@@ -91,6 +96,11 @@ class ShipmentRepository:
                     shipment.booking_reference,
                     shipment.pickup_date.isoformat() if shipment.pickup_date else None,
                     _iso(shipment.shipped_at) if shipment.shipped_at else None,
+                    shipment.vessel_name,
+                    shipment.voyage_number,
+                    shipment.signatory_name,
+                    shipment.signatory_title,
+                    _iso(shipment.declared_at) if shipment.declared_at else None,
                     shipment.id,
                 )
                 # Iter 044: update weight/dimension fields on existing line items
@@ -313,4 +323,9 @@ def _reconstruct(
         booking_reference=row["booking_reference"] if "booking_reference" in keys else None,
         pickup_date=_parse_date(row["pickup_date"]) if "pickup_date" in keys else None,
         shipped_at=_parse_dt(row["shipped_at"]) if ("shipped_at" in keys and row["shipped_at"]) else None,
+        vessel_name=row["vessel_name"] if ("vessel_name" in keys and row["vessel_name"]) else None,
+        voyage_number=row["voyage_number"] if ("voyage_number" in keys and row["voyage_number"]) else None,
+        signatory_name=row["signatory_name"] if ("signatory_name" in keys and row["signatory_name"]) else None,
+        signatory_title=row["signatory_title"] if ("signatory_title" in keys and row["signatory_title"]) else None,
+        declared_at=_parse_dt(row["declared_at"]) if ("declared_at" in keys and row["declared_at"]) else None,
     )

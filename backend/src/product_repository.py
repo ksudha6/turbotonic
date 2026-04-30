@@ -32,14 +32,18 @@ class ProductRepository:
             await self._conn.execute(
                 """
                 INSERT INTO products (id, vendor_id, part_number, description,
-                    manufacturing_address, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    manufacturing_address, manufacturer_name, manufacturer_address,
+                    manufacturer_country, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 """,
                 product.id,
                 product.vendor_id,
                 product.part_number,
                 product.description,
                 product.manufacturing_address,
+                product.manufacturer_name,
+                product.manufacturer_address,
+                product.manufacturer_country,
                 _iso(product.created_at),
                 _iso(product.updated_at),
             )
@@ -47,13 +51,17 @@ class ProductRepository:
             await self._conn.execute(
                 """
                 UPDATE products SET vendor_id = $1, part_number = $2, description = $3,
-                    manufacturing_address = $4, updated_at = $5
-                WHERE id = $6
+                    manufacturing_address = $4, manufacturer_name = $5,
+                    manufacturer_address = $6, manufacturer_country = $7, updated_at = $8
+                WHERE id = $9
                 """,
                 product.vendor_id,
                 product.part_number,
                 product.description,
                 product.manufacturing_address,
+                product.manufacturer_name,
+                product.manufacturer_address,
+                product.manufacturer_country,
                 _iso(product.updated_at),
                 product.id,
             )
@@ -92,12 +100,16 @@ class ProductRepository:
 
 
 def _reconstruct(row: asyncpg.Record) -> Product:
+    keys = row.keys()
     return Product(
         id=row["id"],
         vendor_id=row["vendor_id"],
         part_number=row["part_number"],
         description=row["description"],
         manufacturing_address=row["manufacturing_address"] or "",
+        manufacturer_name=row["manufacturer_name"] if "manufacturer_name" in keys else "",
+        manufacturer_address=row["manufacturer_address"] if "manufacturer_address" in keys else "",
+        manufacturer_country=row["manufacturer_country"] if "manufacturer_country" in keys else "",
         created_at=_parse_dt(row["created_at"]),
         updated_at=_parse_dt(row["updated_at"]),
     )

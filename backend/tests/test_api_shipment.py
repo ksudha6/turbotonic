@@ -132,6 +132,9 @@ async def test_create_shipment_returns_201(authenticated_client: AsyncClient) ->
         "id", "po_id", "shipment_number", "marketplace", "status",
         "line_items", "created_at", "updated_at",
         "carrier", "booking_reference", "pickup_date", "shipped_at",
+        # Iter 106: transport + declaration fields (all nullable, present in every response)
+        "vessel_name", "voyage_number",
+        "signatory_name", "signatory_title", "declared_at",
     }
     assert expected_keys == set(body.keys())
     assert body["po_id"] == po_id
@@ -1307,3 +1310,201 @@ async def test_commercial_invoice_seller_contains_vendor_country(authenticated_c
     assert r2.status_code == 200
     pdf_text = _extract_pdf_text(r2.content)
     assert _EXPECTED_VENDOR_COUNTRY_LABEL in pdf_text
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Iter 106: vessel/voyage, signatory/declaration, and schema migrations
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _booked_shipment_id(client: AsyncClient) -> str:
+    """Create a BOOKED shipment and return its id."""
+    shipment_id = await _ready_shipment_id(client)
+    r = await client.post(
+        f"/api/v1/shipments/{shipment_id}/book",
+        json={"carrier": "Maersk", "booking_reference": "BK-99999", "pickup_date": "2026-05-20"},
+    )
+    assert r.status_code == 200
+    return shipment_id
+
+
+async def test_set_transport_happy_path(authenticated_client: AsyncClient) -> None:
+    """PATCH /transport on a BOOKED shipment records vessel + voyage and returns them."""
+    shipment_id = await _booked_shipment_id(authenticated_client)
+    vessel_name = "MSC GULSUN"
+    voyage_number = "031W"
+
+    r = await authenticated_client.patch(
+        f"/api/v1/shipments/{shipment_id}/transport",
+        json={"vessel_name": vessel_name, "voyage_number": voyage_number},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["vessel_name"] == vessel_name
+    assert body["voyage_number"] == voyage_number
+
+
+async def test_set_transport_requires_booked_status(authenticated_client: AsyncClient) -> None:
+    """PATCH /transport on a READY_TO_SHIP shipment returns 409."""
+    shipment_id = await _ready_shipment_id(authenticated_client)
+    r = await authenticated_client.patch(
+        f"/api/v1/shipments/{shipment_id}/transport",
+        json={"vessel_name": "SOME VESSEL", "voyage_number": "001E"},
+    )
+    assert r.status_code == 409
+
+
+async def test_set_transport_whitespace_only_vessel_returns_422(authenticated_client: AsyncClient) -> None:
+    """PATCH /transport rejects whitespace-only vessel_name."""
+    shipment_id = await _booked_shipment_id(authenticated_client)
+    r = await authenticated_client.patch(
+        f"/api/v1/shipments/{shipment_id}/transport",
+        json={"vessel_name": "   ", "voyage_number": "001E"},
+    )
+    assert r.status_code == 422
+
+
+async def test_set_transport_null_fields_accepted(authenticated_client: AsyncClient) -> None:
+    """PATCH /transport accepts null vessel_name + voyage_number (clears previously set values)."""
+    shipment_id = await _booked_shipment_id(authenticated_client)
+    r = await authenticated_client.patch(
+        f"/api/v1/shipments/{shipment_id}/transport",
+        json={"vessel_name": None, "voyage_number": None},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["vessel_name"] is None
+    assert body["voyage_number"] is None
+
+
+async def test_declare_happy_path(authenticated_client: AsyncClient) -> None:
+    """POST /declare on a DOCUMENTS_PENDING shipment records signatory and declared_at."""
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r_sub = await authenticated_client.post(f"/api/v1/shipments/{shipment_id}/submit-for-documents")
+    assert r_sub.status_code == 200
+
+    signatory_name = "Jane Smith"
+    signatory_title = "Export Manager"
+    r = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/declare",
+        json={"signatory_name": signatory_name, "signatory_title": signatory_title},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["signatory_name"] == signatory_name
+    assert body["signatory_title"] == signatory_title
+    assert body["declared_at"] is not None
+
+
+async def test_declare_on_draft_returns_409(authenticated_client: AsyncClient) -> None:
+    """POST /declare on a DRAFT shipment returns 409."""
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+    # DRAFT status — declare should fail
+    r = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/declare",
+        json={"signatory_name": "Jane Smith", "signatory_title": "Manager"},
+    )
+    assert r.status_code == 409
+
+
+async def test_declare_empty_signatory_name_returns_422(authenticated_client: AsyncClient) -> None:
+    """POST /declare rejects empty signatory_name."""
+    shipment_id = await _ready_shipment_id(authenticated_client)
+    r = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/declare",
+        json={"signatory_name": "  ", "signatory_title": "Manager"},
+    )
+    assert r.status_code == 422
+
+
+async def test_packing_list_contains_vessel_and_voyage(authenticated_client: AsyncClient) -> None:
+    """PL PDF contains vessel name and voyage number when set on a BOOKED shipment."""
+    shipment_id = await _booked_shipment_id(authenticated_client)
+    vessel_name = "MSC GULSUN"
+    voyage_number = "031W"
+
+    r_transport = await authenticated_client.patch(
+        f"/api/v1/shipments/{shipment_id}/transport",
+        json={"vessel_name": vessel_name, "voyage_number": voyage_number},
+    )
+    assert r_transport.status_code == 200
+
+    r = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/packing-list")
+    assert r.status_code == 200
+    pdf_text = _extract_pdf_text(r.content)
+    assert vessel_name in pdf_text
+    assert voyage_number in pdf_text
+
+
+async def test_packing_list_no_vessel_voyage_when_not_set(authenticated_client: AsyncClient) -> None:
+    """PL PDF generates without error when vessel + voyage are not set (pre-booking)."""
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/packing-list")
+    assert r.status_code == 200
+    assert len(r.content) > 0
+
+
+async def test_commercial_invoice_contains_signatory_when_declared(authenticated_client: AsyncClient) -> None:
+    """CI PDF contains signatory name and title when shipment is declared."""
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r_sub = await authenticated_client.post(f"/api/v1/shipments/{shipment_id}/submit-for-documents")
+    assert r_sub.status_code == 200
+
+    signatory_name = "Jane Smith"
+    r_declare = await authenticated_client.post(
+        f"/api/v1/shipments/{shipment_id}/declare",
+        json={"signatory_name": signatory_name, "signatory_title": "Export Manager"},
+    )
+    assert r_declare.status_code == 200
+
+    r = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/commercial-invoice")
+    assert r.status_code == 200
+    pdf_text = _extract_pdf_text(r.content)
+    assert signatory_name in pdf_text
+
+
+async def test_commercial_invoice_unsigned_when_not_declared(authenticated_client: AsyncClient) -> None:
+    """CI PDF contains '[unsigned]' placeholder when signatory has not been declared."""
+    vendor_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id)
+    r1 = await authenticated_client.post(
+        "/api/v1/shipments/",
+        json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
+    )
+    assert r1.status_code == 201
+    shipment_id: str = r1.json()["id"]
+
+    r = await authenticated_client.get(f"/api/v1/shipments/{shipment_id}/commercial-invoice")
+    assert r.status_code == 200
+    pdf_text = _extract_pdf_text(r.content)
+    assert "[unsigned]" in pdf_text

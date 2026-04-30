@@ -55,6 +55,13 @@ class Shipment:
         booking_reference: str | None = None,
         pickup_date: date | None = None,
         shipped_at: datetime | None = None,
+        # Iter 106: transport details (vessel + voyage) — set post-booking.
+        vessel_name: str | None = None,
+        voyage_number: str | None = None,
+        # Iter 106: declaration details — set via declare().
+        signatory_name: str | None = None,
+        signatory_title: str | None = None,
+        declared_at: datetime | None = None,
     ) -> None:
         self._id = id
         self.po_id = po_id
@@ -68,6 +75,11 @@ class Shipment:
         self.booking_reference = booking_reference
         self.pickup_date = pickup_date
         self.shipped_at = shipped_at
+        self.vessel_name = vessel_name
+        self.voyage_number = voyage_number
+        self.signatory_name = signatory_name
+        self.signatory_title = signatory_title
+        self.declared_at = declared_at
 
     @property
     def id(self) -> str:
@@ -155,6 +167,51 @@ class Shipment:
         now = datetime.now(UTC)
         self.status = ShipmentStatus.SHIPPED
         self.shipped_at = now
+        self.updated_at = now
+
+    def set_transport(
+        self,
+        *,
+        vessel_name: str | None,
+        voyage_number: str | None,
+    ) -> None:
+        # Transport details (vessel + voyage) are recorded after booking is confirmed.
+        # Both fields are optional but must not be whitespace-only if supplied.
+        if self.status not in (
+            ShipmentStatus.BOOKED,
+            ShipmentStatus.SHIPPED,
+        ):
+            raise ValueError(
+                f"set_transport requires BOOKED or SHIPPED status; current status is {self.status.value}"
+            )
+        if vessel_name is not None and not vessel_name.strip():
+            raise ValueError("vessel_name must not be whitespace-only")
+        if voyage_number is not None and not voyage_number.strip():
+            raise ValueError("voyage_number must not be whitespace-only")
+        self.vessel_name = vessel_name.strip() if vessel_name is not None else None
+        self.voyage_number = voyage_number.strip() if voyage_number is not None else None
+        self.updated_at = datetime.now(UTC)
+
+    def declare(
+        self,
+        *,
+        signatory_name: str,
+        signatory_title: str,
+    ) -> None:
+        # Signatory name and title are required for a customs declaration.
+        # Allowed in any post-DRAFT status so SM can declare at any stage after submission.
+        if self.status is ShipmentStatus.DRAFT:
+            raise ValueError(
+                "declare requires post-DRAFT status; current status is DRAFT"
+            )
+        if not signatory_name or not signatory_name.strip():
+            raise ValueError("signatory_name must not be empty or whitespace-only")
+        if not signatory_title or not signatory_title.strip():
+            raise ValueError("signatory_title must not be empty or whitespace-only")
+        now = datetime.now(UTC)
+        self.signatory_name = signatory_name.strip()
+        self.signatory_title = signatory_title.strip()
+        self.declared_at = now
         self.updated_at = now
 
     def update_line_items(self, updates: list[dict[str, object]]) -> None:

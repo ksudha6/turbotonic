@@ -52,6 +52,9 @@ async def create_product(body: ProductCreate, repo: ProductRepoDep, _user: User 
         part_number=body.part_number,
         description=body.description,
         manufacturing_address=body.manufacturing_address,
+        manufacturer_name=body.manufacturer_name,
+        manufacturer_address=body.manufacturer_address,
+        manufacturer_country=body.manufacturer_country,
     )
     try:
         await repo.save(product)
@@ -105,6 +108,9 @@ async def update_product(
     product.update(
         description=body.description,
         manufacturing_address=body.manufacturing_address,
+        manufacturer_name=body.manufacturer_name,
+        manufacturer_address=body.manufacturer_address,
+        manufacturer_country=body.manufacturer_country,
     )
     await repo.save(product)
     async with get_db() as conn:
