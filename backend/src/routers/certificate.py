@@ -18,7 +18,7 @@ from src.certificate_dto import (
 from src.certificate_repository import CertificateRepository
 from src.db import get_db
 from src.document_repository import DocumentRepository
-from src.domain.activity import ActivityEvent, EntityType
+from src.domain.activity import ActivityEvent, EntityType, TargetRole
 from src.domain.certificate import Certificate
 from src.domain.document import FileMetadata
 from src.domain.user import User, UserRole
@@ -168,6 +168,33 @@ async def update_certificate(
         target_market=body.target_market,
     )
     await repo.save(cert)
+    return certificate_to_response(cert)
+
+
+@router.post("/{cert_id}/approve", response_model=CertificateResponse)
+async def approve_certificate(
+    cert_id: str,
+    repo: CertRepoDep,
+    activity_repo: ActivityRepoDep,
+    current_user: User = require_role(UserRole.FREIGHT_MANAGER),
+) -> CertificateResponse:
+    cert = await repo.get_by_id(cert_id)
+    if cert is None:
+        raise HTTPException(status_code=404, detail="Certificate not found")
+
+    try:
+        cert.approve()
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    await repo.save(cert)
+    await activity_repo.append(
+        EntityType.CERTIFICATE,
+        cert.id,
+        ActivityEvent.CERT_APPROVED,
+        detail=cert.cert_number,
+        actor_id=current_user.id,
+    )
     return certificate_to_response(cert)
 
 
