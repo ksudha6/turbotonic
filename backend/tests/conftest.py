@@ -25,6 +25,7 @@ from src.milestone_repository import MilestoneRepository
 from src.repository import PurchaseOrderRepository
 from src.shipment_repository import ShipmentRepository
 from src.routers.activity import get_activity_repo as activity_get_activity_repo
+from src.routers.auth import get_activity_repo as auth_get_activity_repo
 from src.routers.auth import get_user_repo as auth_get_user_repo
 from src.routers.certificate import get_activity_repo_for_cert as cert_get_activity_repo
 from src.routers.certificate import get_cert_repo
@@ -250,6 +251,7 @@ async def _setup_overrides(
     app.dependency_overrides[cert_get_file_storage] = override_get_file_storage
     app.dependency_overrides[qt_get_qt_repo] = override_get_qt_repo
     app.dependency_overrides[auth_get_user_repo] = override_get_user_repo
+    app.dependency_overrides[auth_get_activity_repo] = override_get_activity_repo
     app.dependency_overrides[document_get_document_repo] = override_get_document_repo
     app.dependency_overrides[document_get_file_storage] = override_get_file_storage
     app.dependency_overrides[get_shipment_repo] = override_get_shipment_repo

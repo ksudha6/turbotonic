@@ -6,6 +6,7 @@ from typing import Annotated, AsyncIterator
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 
+from src.activity_repository import ActivityLogRepository
 from src.auth.session import COOKIE_NAME, create_session_cookie
 from src.auth.webauthn_service import (
     create_authentication_options,
@@ -14,6 +15,7 @@ from src.auth.webauthn_service import (
     verify_registration,
 )
 from src.db import get_db
+from src.domain.activity import ActivityEvent, EntityType
 from src.domain.user import User, UserRole, UserStatus
 from src.user_repository import UserRepository
 from webauthn.helpers import bytes_to_base64url, base64url_to_bytes
@@ -33,7 +35,13 @@ async def get_user_repo() -> AsyncIterator[UserRepository]:
         yield UserRepository(conn)
 
 
+async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
+    async with get_db() as conn:
+        yield ActivityLogRepository(conn)
+
+
 UserRepoDep = Annotated[UserRepository, Depends(get_user_repo)]
+ActivityRepoDep = Annotated[ActivityLogRepository, Depends(get_activity_repo)]
 
 
 # Challenge stored in a signed cookie
@@ -340,9 +348,13 @@ async def get_user(user_id: str, request: Request, repo: UserRepoDep):
 
 @invite_router.patch("/{user_id}")
 async def update_user(
-    user_id: str, body: UserUpdateRequest, request: Request, repo: UserRepoDep
+    user_id: str,
+    body: UserUpdateRequest,
+    request: Request,
+    repo: UserRepoDep,
+    activity_repo: ActivityRepoDep,
 ):
-    _require_admin(request)
+    current_user = _require_admin(request)
     target = await repo.get_by_id(user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -360,11 +372,23 @@ async def update_user(
     if "email" in body.model_fields_set:
         target.email = body.email
     await repo.save(target)
+    await activity_repo.append(
+        entity_type=EntityType.USER,
+        entity_id=target.id,
+        event=ActivityEvent.USER_UPDATED,
+        detail=f"{target.username} profile updated",
+        actor_id=current_user.id,
+    )
     return {"user": _user_to_dict(target)}
 
 
 @invite_router.post("/{user_id}/deactivate")
-async def deactivate_user(user_id: str, request: Request, repo: UserRepoDep):
+async def deactivate_user(
+    user_id: str,
+    request: Request,
+    repo: UserRepoDep,
+    activity_repo: ActivityRepoDep,
+):
     current_user = _require_admin(request)
     target = await repo.get_by_id(user_id)
     if target is None:
@@ -387,12 +411,24 @@ async def deactivate_user(user_id: str, request: Request, repo: UserRepoDep):
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await repo.save(target)
+    await activity_repo.append(
+        entity_type=EntityType.USER,
+        entity_id=target.id,
+        event=ActivityEvent.USER_DEACTIVATED,
+        detail=f"{target.username} deactivated",
+        actor_id=current_user.id,
+    )
     return {"user": _user_to_dict(target)}
 
 
 @invite_router.post("/{user_id}/reactivate")
-async def reactivate_user(user_id: str, request: Request, repo: UserRepoDep):
-    _require_admin(request)
+async def reactivate_user(
+    user_id: str,
+    request: Request,
+    repo: UserRepoDep,
+    activity_repo: ActivityRepoDep,
+):
+    current_user = _require_admin(request)
     target = await repo.get_by_id(user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -401,12 +437,24 @@ async def reactivate_user(user_id: str, request: Request, repo: UserRepoDep):
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await repo.save(target)
+    await activity_repo.append(
+        entity_type=EntityType.USER,
+        entity_id=target.id,
+        event=ActivityEvent.USER_REACTIVATED,
+        detail=f"{target.username} reactivated",
+        actor_id=current_user.id,
+    )
     return {"user": _user_to_dict(target)}
 
 
 @invite_router.post("/{user_id}/reset-credentials")
-async def reset_credentials(user_id: str, request: Request, repo: UserRepoDep):
-    _require_admin(request)
+async def reset_credentials(
+    user_id: str,
+    request: Request,
+    repo: UserRepoDep,
+    activity_repo: ActivityRepoDep,
+):
+    current_user = _require_admin(request)
     target = await repo.get_by_id(user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -430,12 +478,24 @@ async def reset_credentials(user_id: str, request: Request, repo: UserRepoDep):
     # credentials, breaking login with no signal of why.
     await repo.save(target)
     await repo.delete_credentials_by_user_id(target.id)
+    await activity_repo.append(
+        entity_type=EntityType.USER,
+        entity_id=target.id,
+        event=ActivityEvent.USER_CREDENTIALS_RESET,
+        detail=f"{target.username} credentials reset; new invite issued",
+        actor_id=current_user.id,
+    )
     return {"user": _user_to_dict(target), "invite_token": target.invite_token}
 
 
 @invite_router.post("/{user_id}/reissue-invite")
-async def reissue_invite(user_id: str, request: Request, repo: UserRepoDep):
-    _require_admin(request)
+async def reissue_invite(
+    user_id: str,
+    request: Request,
+    repo: UserRepoDep,
+    activity_repo: ActivityRepoDep,
+):
+    current_user = _require_admin(request)
     target = await repo.get_by_id(user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -444,4 +504,11 @@ async def reissue_invite(user_id: str, request: Request, repo: UserRepoDep):
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     await repo.save(target)
+    await activity_repo.append(
+        entity_type=EntityType.USER,
+        entity_id=target.id,
+        event=ActivityEvent.USER_INVITE_REISSUED,
+        detail=f"{target.username} invite reissued",
+        actor_id=current_user.id,
+    )
     return {"user": _user_to_dict(target), "invite_token": target.invite_token}

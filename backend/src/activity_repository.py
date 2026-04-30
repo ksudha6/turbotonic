@@ -46,6 +46,7 @@ class ActivityLogRepository:
         event: ActivityEvent,
         detail: str | None = None,
         target_role: TargetRole | None | _Unset = _UNSET,
+        actor_id: str | None = None,
     ) -> None:
         category, default_target = EVENT_METADATA[event]
         # target_role defaults to EVENT_METADATA; explicit None and explicit value both override.
@@ -56,7 +57,7 @@ class ActivityLogRepository:
             """
             INSERT INTO activity_log
                 (id, entity_type, entity_id, event, category, target_role, actor_id, detail, read_at, created_at)
-            VALUES ($1, $2, $3, $4, $5, $6, NULL, $7, NULL, $8)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, $9)
             """,
             str(uuid4()),
             entity_type.value,
@@ -64,6 +65,7 @@ class ActivityLogRepository:
             event.value,
             category.value,
             resolved_target.value if resolved_target is not None else None,
+            actor_id,
             detail,
             _iso(now),
         )

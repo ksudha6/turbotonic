@@ -45,6 +45,14 @@ class ActivityEvent(Enum):
     # Iter 074: shipment booking lifecycle. FM records carrier + booking; SM observes.
     SHIPMENT_BOOKED = "SHIPMENT_BOOKED"
     SHIPMENT_SHIPPED = "SHIPMENT_SHIPPED"
+    # Iter 099: ADMIN user-lifecycle audit events. target_role=None broadcasts to all roles since
+    # TargetRole has no ADMIN member; in practice only ADMINs view these. If user-event noise
+    # appears in non-ADMIN feeds, add TargetRole.ADMIN and narrow.
+    USER_UPDATED = "USER_UPDATED"
+    USER_DEACTIVATED = "USER_DEACTIVATED"
+    USER_REACTIVATED = "USER_REACTIVATED"
+    USER_CREDENTIALS_RESET = "USER_CREDENTIALS_RESET"
+    USER_INVITE_REISSUED = "USER_INVITE_REISSUED"
 
 
 class NotificationCategory(Enum):
@@ -59,6 +67,7 @@ class EntityType(Enum):
     CERTIFICATE = "CERTIFICATE"
     PACKAGING = "PACKAGING"
     SHIPMENT = "SHIPMENT"
+    USER = "USER"
 
 
 class TargetRole(Enum):
@@ -131,4 +140,10 @@ EVENT_METADATA: dict[ActivityEvent, tuple[NotificationCategory, TargetRole | Non
     # Iter 074: SM observes FM bookings and dispatches.
     ActivityEvent.SHIPMENT_BOOKED: (NotificationCategory.LIVE, TargetRole.SM),
     ActivityEvent.SHIPMENT_SHIPPED: (NotificationCategory.LIVE, TargetRole.SM),
+    # Iter 099: user-lifecycle audit events. target_role=None per Decisions in iter doc.
+    ActivityEvent.USER_UPDATED: (NotificationCategory.LIVE, None),
+    ActivityEvent.USER_DEACTIVATED: (NotificationCategory.LIVE, None),
+    ActivityEvent.USER_REACTIVATED: (NotificationCategory.LIVE, None),
+    ActivityEvent.USER_CREDENTIALS_RESET: (NotificationCategory.LIVE, None),
+    ActivityEvent.USER_INVITE_REISSUED: (NotificationCategory.LIVE, None),
 }
