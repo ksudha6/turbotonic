@@ -58,6 +58,14 @@ export const canMarkShipmentReady = (role: UserRole, status: ShipmentStatus): bo
 export const canViewShipmentReadiness = (role: UserRole): boolean =>
 	is(role, 'SM', 'FREIGHT_MANAGER');
 
+// Iter 103: SM and FM book the shipment (READY_TO_SHIP → BOOKED).
+export const canBookShipment = (role: UserRole, status: ShipmentStatus): boolean =>
+	is(role, 'SM', 'FREIGHT_MANAGER') && status === 'READY_TO_SHIP';
+
+// Iter 103: SM and FM mark the shipment as shipped (BOOKED → SHIPPED).
+export const canMarkShipmentShipped = (role: UserRole, status: ShipmentStatus): boolean =>
+	is(role, 'SM', 'FREIGHT_MANAGER') && status === 'BOOKED';
+
 export function canViewPOAttachments(
 	user: User,
 	po: { po_type: POType; vendor_id: string }
