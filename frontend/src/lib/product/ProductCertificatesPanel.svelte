@@ -7,10 +7,12 @@
 	import Select from '$lib/ui/Select.svelte';
 	import DateInput from '$lib/ui/DateInput.svelte';
 	import EmptyState from '$lib/ui/EmptyState.svelte';
+	import { canApproveCertificate } from '$lib/permissions';
 	import type {
 		CertificateListItem,
 		CertificateStatus,
-		QualificationTypeListItem
+		QualificationTypeListItem,
+		UserRole
 	} from '$lib/types';
 
 	const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -30,20 +32,24 @@
 		certs,
 		qualifications,
 		canManage,
+		role,
 		error = '',
 		addError = '',
 		adding = false,
 		on_add_cert,
-		on_upload_doc
+		on_upload_doc,
+		on_approve_cert
 	}: {
 		certs: CertificateListItem[];
 		qualifications: QualificationTypeListItem[];
 		canManage: boolean;
+		role: UserRole;
 		error?: string;
 		addError?: string;
 		adding?: boolean;
 		on_add_cert: (fields: CertificateAddFields) => Promise<void> | void;
 		on_upload_doc: (certId: string, file: File) => Promise<void> | void;
+		on_approve_cert: (certId: string) => Promise<void> | void;
 	} = $props();
 
 	let showAddForm: boolean = $state(false);
@@ -62,6 +68,8 @@
 	let issuerError: string = $state('');
 	let issueDateError: string = $state('');
 	let uploadErrors: Record<string, string> = $state({});
+	let approvingCerts: Record<string, boolean> = $state({});
+	let approveErrors: Record<string, string> = $state({});
 
 	const qualificationById = $derived(() => {
 		const map: Record<string, QualificationTypeListItem> = {};
@@ -95,6 +103,7 @@
 	type Tone = 'green' | 'gray' | 'blue' | 'orange' | 'red';
 	function statusTone(status: CertificateStatus): Tone {
 		if (status === 'VALID') return 'green';
+		if (status === 'APPROVED') return 'green';
 		if (status === 'EXPIRED') return 'red';
 		return 'gray';
 	}
@@ -215,6 +224,21 @@
 			`[data-testid="product-certificates-row-upload-input-${certId}"]`
 		);
 		el?.click();
+	}
+
+	async function handleApprove(certId: string) {
+		approvingCerts = { ...approvingCerts, [certId]: true };
+		approveErrors = { ...approveErrors, [certId]: '' };
+		try {
+			await on_approve_cert(certId);
+		} catch (err) {
+			approveErrors = {
+				...approveErrors,
+				[certId]: err instanceof Error ? err.message : 'Approve failed.'
+			};
+		} finally {
+			approvingCerts = { ...approvingCerts, [certId]: false };
+		}
 	}
 </script>
 
@@ -423,6 +447,25 @@
 											data-testid={`product-certificates-row-upload-input-${cert.id}`}
 										/>
 									{/if}
+									{#if canApproveCertificate(role, cert.status)}
+										<Button
+											variant="primary"
+											onclick={() => handleApprove(cert.id)}
+											disabled={approvingCerts[cert.id]}
+											data-testid={`cert-approve-${cert.id}`}
+										>
+											{approvingCerts[cert.id] ? 'Approving…' : 'Approve'}
+										</Button>
+									{/if}
+									{#if approveErrors[cert.id]}
+										<span
+											class="product-certificates-panel__approve-error"
+											role="alert"
+											data-testid={`cert-approve-error-${cert.id}`}
+										>
+											{approveErrors[cert.id]}
+										</span>
+									{/if}
 								</div>
 							</li>
 						{/each}
@@ -518,6 +561,10 @@
 		color: var(--gray-700);
 	}
 	.product-certificates-panel__upload-error {
+		font-size: var(--font-size-sm);
+		color: var(--red-700);
+	}
+	.product-certificates-panel__approve-error {
 		font-size: var(--font-size-sm);
 		color: var(--red-700);
 	}

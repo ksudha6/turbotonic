@@ -1,4 +1,4 @@
-import type { UserRole, User, POType, ShipmentStatus } from './types';
+import type { UserRole, User, POType, ShipmentStatus, CertificateStatus } from './types';
 
 function is(role: UserRole, ...allowed: UserRole[]): boolean {
 	return role === 'ADMIN' || allowed.includes(role);
@@ -66,6 +66,11 @@ export const canBookShipment = (role: UserRole, status: ShipmentStatus): boolean
 // Iter 103: SM and FM mark the shipment as shipped (BOOKED → SHIPPED).
 export const canMarkShipmentShipped = (role: UserRole, status: ShipmentStatus): boolean =>
 	is(role, 'SM', 'FREIGHT_MANAGER') && status === 'BOOKED';
+
+// Iter 105: FM approves a certificate after upload+validation (VALID → APPROVED).
+// is() bypasses on ADMIN; FREIGHT_MANAGER is the operational owner.
+export const canApproveCertificate = (role: UserRole, status: CertificateStatus): boolean =>
+	is(role, 'FREIGHT_MANAGER') && status === 'VALID';
 
 export function canViewPOAttachments(
 	user: User,

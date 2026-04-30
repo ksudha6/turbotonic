@@ -514,7 +514,8 @@ export interface PackagingSpecUpdate {
 
 // Iter 094: certificates (backend iter 038).
 // Status is a string union — EXPIRED is computed server-side when expiry_date < now.
-export type CertificateStatus = 'PENDING' | 'VALID' | 'EXPIRED';
+// Iter 105: APPROVED added — FREIGHT_MANAGER explicit sign-off after VALID.
+export type CertificateStatus = 'PENDING' | 'VALID' | 'EXPIRED' | 'APPROVED';
 
 export interface CertificateListItem {
 	id: string;

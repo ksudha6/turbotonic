@@ -14,7 +14,8 @@
 		deletePackagingSpec,
 		listCertificates,
 		createCertificate,
-		uploadCertificateDocument
+		uploadCertificateDocument,
+		approveCertificate
 	} from '$lib/api';
 	import { canManageProducts } from '$lib/permissions';
 	import type {
@@ -249,6 +250,29 @@
 			throw err instanceof Error ? err : new Error('Failed to upload certificate document.');
 		}
 	}
+
+	async function handleApproveCert(certId: string) {
+		try {
+			const updated = await approveCertificate(certId);
+			certs = certs.map((c) =>
+				c.id === certId
+					? {
+						id: updated.id,
+						product_id: updated.product_id,
+						qualification_type_id: updated.qualification_type_id,
+						cert_number: updated.cert_number,
+						issuer: updated.issuer,
+						target_market: updated.target_market,
+						status: updated.status,
+						expiry_date: updated.expiry_date,
+						document_id: updated.document_id
+					}
+					: c
+			);
+		} catch (err) {
+			throw err instanceof Error ? err : new Error('Failed to approve certificate.');
+		}
+	}
 </script>
 
 <svelte:head>
@@ -301,11 +325,13 @@
 				{certs}
 				qualifications={currentQualifications}
 				{canManage}
+				{role}
 				error={certsError}
 				addError={addCertError}
 				adding={addingCert}
 				on_add_cert={handleAddCert}
 				on_upload_doc={handleUploadCertDoc}
+				on_approve_cert={handleApproveCert}
 			/>
 		</div>
 	{/if}

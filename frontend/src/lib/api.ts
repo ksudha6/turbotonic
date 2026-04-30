@@ -536,6 +536,26 @@ export async function uploadCertificateDocument(certId: string, file: File): Pro
 	return res.json() as Promise<Certificate>;
 }
 
+// Iter 105: Certificate approve (FREIGHT_MANAGER only; VALID → APPROVED).
+export async function approveCertificate(certId: string): Promise<Certificate> {
+	const res = await fetch(`/api/v1/certificates/${certId}/approve`, {
+		method: 'POST',
+		credentials: 'include'
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail ?? `POST /api/v1/certificates/${certId}/approve failed: ${res.status}`);
+	}
+	return res.json() as Promise<Certificate>;
+}
+
 // Iter 044: Shipment API
 export function listShipments(params?: { po_id?: string }): Promise<Shipment[]> {
 	const query = new URLSearchParams();
