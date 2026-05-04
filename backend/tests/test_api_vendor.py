@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import itertools
+
 import pytest
 from httpx import AsyncClient
 
 from src.domain.vendor import VendorStatus
+
+_brand_counter = itertools.count(1)
 
 pytestmark = pytest.mark.asyncio
 
@@ -46,7 +50,15 @@ async def _create_vendor(client: AsyncClient, name: str = "Test Vendor", country
 
 
 async def _create_po(client: AsyncClient, vendor_id: str) -> dict:
-    payload = {**_PO_BASE, "vendor_id": vendor_id}
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post(
+        "/api/v1/brands/",
+        json={"name": f"VendorBrand-{brand_n}", "legal_name": "Vendor Brand LLC", "address": "1 VendorBrand Ave", "country": "US"},
+    )
+    assert brand_resp.status_code == 201
+    brand_id = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
+    payload = {**_PO_BASE, "vendor_id": vendor_id, "brand_id": brand_id}
     resp = await client.post("/api/v1/po/", json=payload)
     assert resp.status_code == 201
     return resp.json()

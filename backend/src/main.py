@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.auth.middleware import SessionMiddleware
 from src.db import close_pool, get_db, init_pool
-from src.routers import activity, certificate, dashboard, document, invoice, milestone, packaging, po_documents, product, purchase_order, qualification_type, reference_data, shipment, vendor
+from src.routers import activity, brands, certificate, dashboard, document, invoice, milestone, packaging, po_documents, product, purchase_order, qualification_type, reference_data, shipment, vendor
 from src.routers.auth import router as auth_router, invite_router
 from src.schema import init_db
 
@@ -49,6 +49,7 @@ app.include_router(qualification_type.router)
 app.include_router(packaging.router)
 app.include_router(certificate.router)
 app.include_router(shipment.router)
+app.include_router(brands.router)
 
 
 @app.get("/health")

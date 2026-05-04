@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import itertools
 import re
 from decimal import Decimal
 
@@ -11,6 +12,8 @@ from pypdf import PdfReader
 from src.domain.activity import ActivityEvent, EntityType
 from src.domain.shipment import ShipmentStatus
 from src.domain.shipment_document_requirement import DocumentRequirementStatus
+
+_brand_counter = itertools.count(1)
 
 
 def _extract_pdf_text(pdf_bytes: bytes) -> str:
@@ -62,18 +65,29 @@ _PO_BASE: dict[str, object] = {
 }
 
 
-async def _make_vendor(client: AsyncClient) -> str:
+async def _make_vendor(client: AsyncClient) -> tuple[str, str]:
+    """Create a vendor and brand, link them; return (vendor_id, brand_id)."""
     r = await client.post(
         "/api/v1/vendors/",
         json={"name": "ShipTest Vendor", "country": "CN", "vendor_type": "PROCUREMENT"},
     )
     assert r.status_code == 201
-    return r.json()["id"]
+    vendor_id = r.json()["id"]
+    brand_n = next(_brand_counter)
+    brand_r = await client.post(
+        "/api/v1/brands/",
+        json={"name": f"ShipBrand-{brand_n}", "legal_name": "Ship Brand LLC", "address": "1 Ship Ave", "country": "US"},
+    )
+    assert brand_r.status_code == 201
+    brand_id = brand_r.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
+    return vendor_id, brand_id
 
 
 async def _make_accepted_po(
     client: AsyncClient,
     vendor_id: str,
+    brand_id: str,
     line_items: list[dict[str, object]] | None = None,
     decisions: list[dict[str, str]] | None = None,
 ) -> dict[str, object]:
@@ -84,7 +98,7 @@ async def _make_accepted_po(
     and then submit-response to converge. Returns the final PO dict.
     """
     items = line_items or [_LINE_ITEM_A]
-    payload = {**_PO_BASE, "vendor_id": vendor_id, "line_items": items}
+    payload = {**_PO_BASE, "vendor_id": vendor_id, "brand_id": brand_id, "line_items": items}
     r = await client.post("/api/v1/po/", json=payload)
     assert r.status_code == 201
     po_id: str = r.json()["id"]
@@ -115,8 +129,8 @@ async def _make_accepted_po(
 # --- Create shipment ---
 
 async def test_create_shipment_returns_201(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     po_id: str = po["id"]
 
     r = await authenticated_client.post(
@@ -147,8 +161,8 @@ async def test_create_shipment_returns_201(authenticated_client: AsyncClient) ->
 
 
 async def test_create_shipment_marketplace_inherited_from_po(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     r = await authenticated_client.post(
         "/api/v1/shipments/",
         json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 1, "uom": "PCS"}]},
@@ -166,9 +180,9 @@ async def test_create_shipment_nonexistent_po_returns_404(authenticated_client: 
 
 
 async def test_create_shipment_non_accepted_po_returns_409(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
     # Draft PO only -- not submitted/accepted
-    payload = {**_PO_BASE, "vendor_id": vendor_id, "line_items": [_LINE_ITEM_A]}
+    payload = {**_PO_BASE, "vendor_id": vendor_id, "brand_id": brand_id, "line_items": [_LINE_ITEM_A]}
     r = await authenticated_client.post("/api/v1/po/", json=payload)
     assert r.status_code == 201
     po_id: str = r.json()["id"]
@@ -181,8 +195,8 @@ async def test_create_shipment_non_accepted_po_returns_409(authenticated_client:
 
 
 async def test_create_shipment_exceeding_accepted_qty_returns_422(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)  # PART-A qty=100
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)  # PART-A qty=100
 
     r = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -195,10 +209,11 @@ async def test_create_shipment_exceeding_accepted_qty_returns_422(authenticated_
 async def test_create_shipment_removed_line_item_returns_422(authenticated_client: AsyncClient) -> None:
     # Iter 056: line-level rejection is now called REMOVED; attempting to ship
     # a REMOVED line must return 422 with that status in the error detail.
-    vendor_id = await _make_vendor(authenticated_client)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
     po = await _make_accepted_po(
         authenticated_client,
         vendor_id,
+        brand_id,
         line_items=[_LINE_ITEM_A, _LINE_ITEM_B],
         decisions=[
             {"part_number": "PART-A", "status": "ACCEPTED"},
@@ -214,8 +229,8 @@ async def test_create_shipment_removed_line_item_returns_422(authenticated_clien
 
 
 async def test_create_shipment_empty_line_items_returns_422(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     r = await authenticated_client.post(
         "/api/v1/shipments/",
         json={"po_id": po["id"], "line_items": []},
@@ -224,8 +239,8 @@ async def test_create_shipment_empty_line_items_returns_422(authenticated_client
 
 
 async def test_create_two_shipments_second_uses_remaining(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)  # PART-A qty=100
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)  # PART-A qty=100
     po_id: str = po["id"]
 
     r1 = await authenticated_client.post(
@@ -242,8 +257,8 @@ async def test_create_two_shipments_second_uses_remaining(authenticated_client: 
 
 
 async def test_create_shipment_cumulative_over_ship_returns_422(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)  # PART-A qty=100
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)  # PART-A qty=100
     po_id: str = po["id"]
 
     r1 = await authenticated_client.post(
@@ -262,8 +277,8 @@ async def test_create_shipment_cumulative_over_ship_returns_422(authenticated_cl
 # --- Remaining quantities ---
 
 async def test_remaining_quantities_no_shipments(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)  # PART-A qty=100
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)  # PART-A qty=100
     po_id: str = po["id"]
 
     r = await authenticated_client.get(f"/api/v1/shipments/remaining-quantities/{po_id}")
@@ -281,8 +296,8 @@ async def test_remaining_quantities_no_shipments(authenticated_client: AsyncClie
 
 
 async def test_remaining_quantities_after_one_shipment(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     po_id: str = po["id"]
 
     await authenticated_client.post(
@@ -302,8 +317,8 @@ async def test_remaining_quantities_after_one_shipment(authenticated_client: Asy
 
 
 async def test_remaining_quantities_after_two_shipments(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     po_id: str = po["id"]
 
     await authenticated_client.post(
@@ -329,10 +344,11 @@ async def test_remaining_quantities_after_two_shipments(authenticated_client: As
 async def test_remaining_quantities_excludes_removed_lines(authenticated_client: AsyncClient) -> None:
     # Iter 056: REMOVED replaces REJECTED at the line level; remaining quantities
     # must still exclude non-ACCEPTED lines.
-    vendor_id = await _make_vendor(authenticated_client)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
     po = await _make_accepted_po(
         authenticated_client,
         vendor_id,
+        brand_id,
         line_items=[_LINE_ITEM_A, _LINE_ITEM_B],
         decisions=[
             {"part_number": "PART-A", "status": "ACCEPTED"},
@@ -354,8 +370,8 @@ async def test_remaining_quantities_nonexistent_po_returns_404(authenticated_cli
 # --- Submit for documents ---
 
 async def test_submit_for_documents_transitions_to_documents_pending(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -370,8 +386,8 @@ async def test_submit_for_documents_transitions_to_documents_pending(authenticat
 
 
 async def test_submit_for_documents_non_draft_returns_409(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -388,8 +404,8 @@ async def test_submit_for_documents_non_draft_returns_409(authenticated_client: 
 # --- List and get ---
 
 async def test_list_shipments_by_po_id(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     po_id: str = po["id"]
 
     await authenticated_client.post(
@@ -409,8 +425,8 @@ async def test_list_shipments_by_po_id(authenticated_client: AsyncClient) -> Non
 
 
 async def test_get_shipment_by_id_returns_correct_shipment(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -447,8 +463,8 @@ _PATCH_LINE_ITEM: dict[str, object] = {
 
 
 async def test_patch_shipment_persists_weights_and_returns_them(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -473,8 +489,8 @@ async def test_patch_shipment_persists_weights_and_returns_them(authenticated_cl
 
 
 async def test_patch_shipment_unknown_part_number_returns_422(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -493,8 +509,8 @@ async def test_patch_shipment_unknown_part_number_returns_422(authenticated_clie
 
 async def _ready_shipment_id(client: AsyncClient) -> str:
     """Helper: create a shipment, submit for documents, mark ready. Returns its id."""
-    vendor_id = await _make_vendor(client)
-    po = await _make_accepted_po(client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(client)
+    po = await _make_accepted_po(client, vendor_id, brand_id)
     r1 = await client.post(
         "/api/v1/shipments/",
         json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
@@ -523,8 +539,8 @@ async def test_book_shipment_transitions_to_booked(authenticated_client: AsyncCl
 
 
 async def test_book_shipment_from_draft_returns_409(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
         json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
@@ -567,8 +583,8 @@ async def test_mark_shipped_from_ready_returns_409(authenticated_client: AsyncCl
 
 
 async def test_patch_shipment_ready_to_ship_returns_409(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -591,8 +607,8 @@ async def test_patch_shipment_ready_to_ship_returns_409(authenticated_client: As
 
 
 async def test_patch_shipment_draft_works(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -610,8 +626,8 @@ async def test_patch_shipment_draft_works(authenticated_client: AsyncClient) -> 
 
 
 async def test_patch_shipment_documents_pending_works(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -635,8 +651,8 @@ async def test_patch_shipment_documents_pending_works(authenticated_client: Asyn
 
 
 async def test_packing_list_returns_200_pdf(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -657,8 +673,8 @@ async def test_packing_list_nonexistent_shipment_returns_404(authenticated_clien
 
 
 async def test_packing_list_contains_shipment_and_po_numbers(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     po_number: str = po["po_number"]
 
     r1 = await authenticated_client.post(
@@ -677,10 +693,11 @@ async def test_packing_list_contains_shipment_and_po_numbers(authenticated_clien
 
 
 async def test_packing_list_summary_totals_computed_correctly(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
     po = await _make_accepted_po(
         authenticated_client,
         vendor_id,
+        brand_id,
         line_items=[_LINE_ITEM_A, _LINE_ITEM_B],
     )
 
@@ -744,8 +761,8 @@ async def test_packing_list_summary_totals_computed_correctly(authenticated_clie
 
 
 async def test_commercial_invoice_returns_200_pdf(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -774,8 +791,8 @@ async def test_commercial_invoice_ci_number_format(authenticated_client: AsyncCl
 
 
 async def test_commercial_invoice_contains_identifiers(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     po_number: str = po["po_number"]
 
     r1 = await authenticated_client.post(
@@ -796,8 +813,8 @@ async def test_commercial_invoice_contains_identifiers(authenticated_client: Asy
 
 
 async def test_commercial_invoice_line_value_uses_po_unit_price(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     shipment_quantity = 7
     expected_line_value = shipment_quantity * Decimal(_LINE_ITEM_A["unit_price"])  # 7 * 10.00 = 70.00
@@ -816,8 +833,8 @@ async def test_commercial_invoice_line_value_uses_po_unit_price(authenticated_cl
 
 
 async def test_commercial_invoice_hs_code_from_po(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     expected_hs_code: str = _LINE_ITEM_A["hs_code"]
 
     r1 = await authenticated_client.post(
@@ -834,10 +851,11 @@ async def test_commercial_invoice_hs_code_from_po(authenticated_client: AsyncCli
 
 
 async def test_commercial_invoice_summary_totals(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
     po = await _make_accepted_po(
         authenticated_client,
         vendor_id,
+        brand_id,
         line_items=[_LINE_ITEM_A, _LINE_ITEM_B],
     )
 
@@ -891,8 +909,8 @@ async def _make_documents_pending_shipment(
 
     Returns (shipment_id, shipment_number).
     """
-    vendor_id = await _make_vendor(client)
-    po = await _make_accepted_po(client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(client)
+    po = await _make_accepted_po(client, vendor_id, brand_id)
     r = await client.post(
         "/api/v1/shipments/",
         json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
@@ -1172,8 +1190,8 @@ _EXPECTED_HS_CODE: str = str(_LINE_ITEM_A["hs_code"])
 
 
 async def test_packing_list_contains_ports(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -1190,8 +1208,8 @@ async def test_packing_list_contains_ports(authenticated_client: AsyncClient) ->
 
 
 async def test_packing_list_contains_country_of_origin_header(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -1207,8 +1225,8 @@ async def test_packing_list_contains_country_of_origin_header(authenticated_clie
 
 
 async def test_packing_list_contains_hs_code_per_line(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -1225,8 +1243,8 @@ async def test_packing_list_contains_hs_code_per_line(authenticated_client: Asyn
 
 
 async def test_packing_list_contains_manufacturer_block(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -1244,8 +1262,8 @@ async def test_packing_list_contains_manufacturer_block(authenticated_client: As
 
 
 async def test_commercial_invoice_contains_marketplace(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -1261,8 +1279,8 @@ async def test_commercial_invoice_contains_marketplace(authenticated_client: Asy
 
 
 async def test_commercial_invoice_contains_ports(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -1279,8 +1297,8 @@ async def test_commercial_invoice_contains_ports(authenticated_client: AsyncClie
 
 
 async def test_commercial_invoice_contains_declaration(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -1296,8 +1314,8 @@ async def test_commercial_invoice_contains_declaration(authenticated_client: Asy
 
 
 async def test_commercial_invoice_seller_contains_vendor_country(authenticated_client: AsyncClient) -> None:
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
 
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
@@ -1378,8 +1396,8 @@ async def test_set_transport_null_fields_accepted(authenticated_client: AsyncCli
 
 async def test_declare_happy_path(authenticated_client: AsyncClient) -> None:
     """POST /declare on a DOCUMENTS_PENDING shipment records signatory and declared_at."""
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
         json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
@@ -1405,8 +1423,8 @@ async def test_declare_happy_path(authenticated_client: AsyncClient) -> None:
 
 async def test_declare_on_draft_returns_409(authenticated_client: AsyncClient) -> None:
     """POST /declare on a DRAFT shipment returns 409."""
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
         json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
@@ -1452,8 +1470,8 @@ async def test_packing_list_contains_vessel_and_voyage(authenticated_client: Asy
 
 async def test_packing_list_no_vessel_voyage_when_not_set(authenticated_client: AsyncClient) -> None:
     """PL PDF generates without error when vessel + voyage are not set (pre-booking)."""
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
         json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
@@ -1468,8 +1486,8 @@ async def test_packing_list_no_vessel_voyage_when_not_set(authenticated_client: 
 
 async def test_commercial_invoice_contains_signatory_when_declared(authenticated_client: AsyncClient) -> None:
     """CI PDF contains signatory name and title when shipment is declared."""
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
         json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},
@@ -1495,8 +1513,8 @@ async def test_commercial_invoice_contains_signatory_when_declared(authenticated
 
 async def test_commercial_invoice_unsigned_when_not_declared(authenticated_client: AsyncClient) -> None:
     """CI PDF contains '[unsigned]' placeholder when signatory has not been declared."""
-    vendor_id = await _make_vendor(authenticated_client)
-    po = await _make_accepted_po(authenticated_client, vendor_id)
+    vendor_id, brand_id = await _make_vendor(authenticated_client)
+    po = await _make_accepted_po(authenticated_client, vendor_id, brand_id)
     r1 = await authenticated_client.post(
         "/api/v1/shipments/",
         json={"po_id": po["id"], "line_items": [{"part_number": "PART-A", "quantity": 10, "uom": "PCS"}]},

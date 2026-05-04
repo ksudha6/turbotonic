@@ -530,3 +530,86 @@ async def init_db(conn: asyncpg.Connection) -> None:
     await conn.execute(
         "ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_country TEXT NOT NULL DEFAULT ''"
     )
+
+    # Iter 108: Brand aggregate. The brands table is the source of truth for buyer
+    # identity on POs and customs documents. brand_vendors is the m2m join.
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brands (
+            id          TEXT PRIMARY KEY,
+            name        TEXT UNIQUE NOT NULL,
+            legal_name  TEXT NOT NULL,
+            address     TEXT NOT NULL DEFAULT '',
+            country     TEXT NOT NULL,
+            tax_id      TEXT NOT NULL DEFAULT '',
+            status      TEXT NOT NULL DEFAULT 'ACTIVE',
+            created_at  TEXT NOT NULL,
+            updated_at  TEXT NOT NULL
+        )
+        """
+    )
+
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS brand_vendors (
+            brand_id   TEXT NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+            vendor_id  TEXT NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+            PRIMARY KEY (brand_id, vendor_id)
+        )
+        """
+    )
+
+    # purchase_orders.brand_id is nullable initially; backfilled below.
+    # NOT NULL enforcement is left to the Pydantic layer until iter 109 wires
+    # brand_id into PO create forms (no migration tooling yet).
+    await conn.execute(
+        "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS brand_id TEXT REFERENCES brands(id)"
+    )
+
+    # Iter 108 backfill: seed a Default Brand and associate all existing vendors
+    # and POs with it so existing data continues to work after migration.
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    default_brand_id: str | None = await conn.fetchval(
+        "SELECT id FROM brands WHERE name = 'Default'"
+    )
+    if default_brand_id is None:
+        default_brand_id = str(uuid4())
+        now_iso = datetime.now(UTC).isoformat()
+        await conn.execute(
+            """
+            INSERT INTO brands (id, name, legal_name, address, country, tax_id, status, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (name) DO NOTHING
+            """,
+            default_brand_id,
+            "Default",
+            "Default Brand — please update",
+            "",
+            "US",
+            "",
+            "ACTIVE",
+            now_iso,
+            now_iso,
+        )
+        # Re-read in case the INSERT was a no-op due to a race
+        default_brand_id = await conn.fetchval(
+            "SELECT id FROM brands WHERE name = 'Default'"
+        )
+
+    # Link all existing vendors to the Default Brand
+    await conn.execute(
+        """
+        INSERT INTO brand_vendors (brand_id, vendor_id)
+        SELECT $1, id FROM vendors
+        ON CONFLICT DO NOTHING
+        """,
+        default_brand_id,
+    )
+
+    # Backfill all POs that lack a brand_id
+    await conn.execute(
+        "UPDATE purchase_orders SET brand_id = $1 WHERE brand_id IS NULL",
+        default_brand_id,
+    )

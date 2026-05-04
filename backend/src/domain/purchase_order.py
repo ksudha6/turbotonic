@@ -147,6 +147,12 @@ class PurchaseOrder:
         last_actor_role: UserRole | None = None,
         line_edit_history: list[LineEditHistoryEntry] | None = None,
         advance_paid_at: datetime | None = None,
+        brand_id: str | None = None,
+        brand_name: str | None = None,
+        brand_legal_name: str | None = None,
+        brand_address: str | None = None,
+        brand_country: str | None = None,
+        brand_tax_id: str | None = None,
     ) -> None:
         self._id = id
         self._po_number = po_number
@@ -175,6 +181,14 @@ class PurchaseOrder:
         self.last_actor_role = last_actor_role
         self.line_edit_history = line_edit_history if line_edit_history is not None else []
         self.advance_paid_at = advance_paid_at
+        # brand_id is set at create time; brand_* denormalised fields are populated by the
+        # repository JOIN query so callers do not need a separate brand fetch.
+        self.brand_id = brand_id
+        self.brand_name = brand_name
+        self.brand_legal_name = brand_legal_name
+        self.brand_address = brand_address
+        self.brand_country = brand_country
+        self.brand_tax_id = brand_tax_id
 
     @property
     def id(self) -> str:
@@ -254,6 +268,7 @@ class PurchaseOrder:
         line_items: list[LineItem],
         po_type: POType = POType.PROCUREMENT,
         marketplace: str | None = None,
+        brand_id: str | None = None,
     ) -> PurchaseOrder:
         cls._validate_reference_fields(
             currency=currency,
@@ -294,6 +309,7 @@ class PurchaseOrder:
             rejection_history=[],
             created_at=now,
             updated_at=now,
+            brand_id=brand_id,
         )
 
     def submit(self) -> None:

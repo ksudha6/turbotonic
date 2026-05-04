@@ -67,6 +67,8 @@ def generate_commercial_invoice_pdf(
     buyer_name: str,
     buyer_address: str,
     vendor_country: str = "",
+    buyer_country: str = "",
+    buyer_tax_id: str = "",
 ) -> bytes:
     """Build a commercial invoice PDF for the given Shipment and PurchaseOrder.
 
@@ -213,11 +215,16 @@ def generate_commercial_invoice_pdf(
         Paragraph(vendor_address, cell_style),
         Paragraph(vendor_country_display, cell_style),
     ]
-    buyer_content = [
+    buyer_country_display = country_label(buyer_country) if buyer_country else country_label(po.buyer_country)
+    buyer_content: list = [
         Paragraph("<b>Buyer</b>", cell_bold),
         Paragraph(buyer_name, cell_style),
         Paragraph(buyer_address, cell_style),
-        Paragraph(country_label(po.buyer_country), cell_style),
+        Paragraph(buyer_country_display, cell_style),
+    ]
+    if buyer_tax_id:
+        buyer_content.append(Paragraph(f"Tax ID: {buyer_tax_id}", cell_style))
+    buyer_content += [
         Paragraph("", cell_style),
         Paragraph("<b>Consignee</b>", cell_bold),
         Paragraph(po.ship_to_address, cell_style),

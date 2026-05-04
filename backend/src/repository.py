@@ -64,8 +64,8 @@ class PurchaseOrderRepository:
                         terms_and_conditions, incoterm, port_of_loading,
                         port_of_discharge, country_of_origin, country_of_destination,
                         marketplace, created_at, updated_at,
-                        round_count, last_actor_role, advance_paid_at
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+                        round_count, last_actor_role, advance_paid_at, brand_id
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
                     """,
                     po.id,
                     po.po_number,
@@ -91,6 +91,7 @@ class PurchaseOrderRepository:
                     po.round_count,
                     last_actor,
                     advance_paid_iso,
+                    po.brand_id,
                 )
 
                 for sort_order, item in enumerate(po.line_items):
@@ -159,8 +160,8 @@ class PurchaseOrderRepository:
                         country_of_origin = $16, country_of_destination = $17,
                         marketplace = $18, updated_at = $19,
                         round_count = $20, last_actor_role = $21,
-                        advance_paid_at = $22
-                    WHERE id = $23
+                        advance_paid_at = $22, brand_id = $23
+                    WHERE id = $24
                     """,
                     po.po_number,
                     po.status.value,
@@ -184,6 +185,7 @@ class PurchaseOrderRepository:
                     po.round_count,
                     last_actor,
                     advance_paid_iso,
+                    po.brand_id,
                     po.id,
                 )
 
@@ -255,8 +257,20 @@ class PurchaseOrderRepository:
                     )
 
     async def get(self, po_id: str) -> PurchaseOrder | None:
+        # Single JOIN query fetches brand fields alongside the PO — no N+1.
         po_row = await self._conn.fetchrow(
-            "SELECT * FROM purchase_orders WHERE id = $1", po_id
+            """
+            SELECT p.*,
+                   b.name       AS brand_name,
+                   b.legal_name AS brand_legal_name,
+                   b.address    AS brand_address,
+                   b.country    AS brand_country,
+                   b.tax_id     AS brand_tax_id
+            FROM purchase_orders p
+            LEFT JOIN brands b ON b.id = p.brand_id
+            WHERE p.id = $1
+            """,
+            po_id,
         )
 
         if po_row is None:
@@ -366,8 +380,10 @@ class PurchaseOrderRepository:
                 p.po_type,
                 p.marketplace,
                 p.round_count,
+                p.brand_id,
                 v.name AS vendor_name,
                 v.country AS vendor_country,
+                b.name AS brand_name,
                 p.issued_date,
                 p.required_delivery_date,
                 p.currency,
@@ -378,6 +394,7 @@ class PurchaseOrderRepository:
                         WHERE po_id = p.id AND status = 'REMOVED')) AS has_removed_line
             FROM purchase_orders p
             LEFT JOIN vendors v ON v.id = p.vendor_id
+            LEFT JOIN brands b ON b.id = p.brand_id
             {latest_milestones_subquery}
             {where_sql}
         """
@@ -582,4 +599,10 @@ def _reconstruct(
         last_actor_role=UserRole(last_actor) if last_actor else None,
         line_edit_history=line_edit_history,
         advance_paid_at=advance_paid_at,
+        brand_id=po_row.get("brand_id"),
+        brand_name=po_row.get("brand_name"),
+        brand_legal_name=po_row.get("brand_legal_name"),
+        brand_address=po_row.get("brand_address"),
+        brand_country=po_row.get("brand_country"),
+        brand_tax_id=po_row.get("brand_tax_id"),
     )

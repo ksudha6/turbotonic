@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 from datetime import UTC, datetime, timedelta
 
 import asyncpg
@@ -10,6 +11,8 @@ from src.routers.dashboard import get_milestone_repo as dash_get_milestone_repo
 from src.main import app
 
 pytestmark = pytest.mark.asyncio
+
+_brand_counter = itertools.count(1)
 
 _LINE_ITEM = {
     "part_number": "PN-001",
@@ -40,14 +43,34 @@ _PO_PAYLOAD = {
 }
 
 
+async def _make_brand_and_vendor(client: AsyncClient, vendor_name: str = "Test Vendor") -> tuple[str, str]:
+    """Create a vendor + brand + link; return (vendor_id, brand_id)."""
+    vendor = await client.post("/api/v1/vendors/", json={"name": vendor_name, "country": "US", "vendor_type": "PROCUREMENT"})
+    assert vendor.status_code == 201
+    vendor_id = vendor.json()["id"]
+    brand_n = next(_brand_counter)
+    brand = await client.post("/api/v1/brands/", json={"name": f"ActBrand-{brand_n}", "legal_name": "Act Brand LLC", "address": "1 Act Ave", "country": "US"})
+    assert brand.status_code == 201
+    brand_id = brand.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
+    return vendor_id, brand_id
+
+
 async def _create_accepted_procurement_po(client: AsyncClient) -> dict:
     vendor = await client.post(
         "/api/v1/vendors/",
         json={"name": "Test Vendor", "country": "US", "vendor_type": "PROCUREMENT"},
     )
     assert vendor.status_code == 201
+    vendor_id = vendor.json()["id"]
+    brand_n = next(_brand_counter)
+    brand = await client.post("/api/v1/brands/", json={"name": f"AccProcBrand-{brand_n}", "legal_name": "AccProc Brand LLC", "address": "1 AccProc Ave", "country": "US"})
+    assert brand.status_code == 201
+    brand_id = brand.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
     payload = dict(_PO_PAYLOAD)
-    payload["vendor_id"] = vendor.json()["id"]
+    payload["vendor_id"] = vendor_id
+    payload["brand_id"] = brand_id
     payload["po_type"] = "PROCUREMENT"
     po = await client.post("/api/v1/po/", json=payload)
     assert po.status_code == 201
@@ -72,13 +95,10 @@ async def _get_conn(client: AsyncClient) -> asyncpg.Connection:
 async def test_po_submit_creates_activity_entry(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
     # Submitting a PO must produce both PO_CREATED and PO_SUBMITTED entries in the activity log.
-    vendor = await client.post(
-        "/api/v1/vendors/",
-        json={"name": "Submit Vendor", "country": "US", "vendor_type": "PROCUREMENT"},
-    )
-    assert vendor.status_code == 201
+    vendor_id, brand_id = await _make_brand_and_vendor(client, "Submit Vendor")
     payload = dict(_PO_PAYLOAD)
-    payload["vendor_id"] = vendor.json()["id"]
+    payload["vendor_id"] = vendor_id
+    payload["brand_id"] = brand_id
     payload["po_type"] = "PROCUREMENT"
     po = await client.post("/api/v1/po/", json=payload)
     assert po.status_code == 201
@@ -118,13 +138,10 @@ async def test_po_rejected_via_all_lines_removed_emits_line_removed_and_converge
     # legacy PO_REJECTED event is no longer emitted by submit_response.
     client = authenticated_client
 
-    vendor = await client.post(
-        "/api/v1/vendors/",
-        json={"name": "Reject Vendor", "country": "US", "vendor_type": "PROCUREMENT"},
-    )
-    assert vendor.status_code == 201
+    vendor_id, brand_id = await _make_brand_and_vendor(client, "Reject Vendor")
     payload = dict(_PO_PAYLOAD)
-    payload["vendor_id"] = vendor.json()["id"]
+    payload["vendor_id"] = vendor_id
+    payload["brand_id"] = brand_id
     payload["po_type"] = "PROCUREMENT"
     po = await client.post("/api/v1/po/", json=payload)
     assert po.status_code == 201
@@ -318,13 +335,10 @@ async def test_overdue_notification_is_idempotent(authenticated_client: AsyncCli
 async def test_activity_list_returns_reverse_chronological(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
     # After CREATED, SUBMITTED, ACCEPTED a PO, the list endpoint must return entries newest-first.
-    vendor = await client.post(
-        "/api/v1/vendors/",
-        json={"name": "Chrono Vendor", "country": "US", "vendor_type": "PROCUREMENT"},
-    )
-    assert vendor.status_code == 201
+    vendor_id, brand_id = await _make_brand_and_vendor(client, "Chrono Vendor")
     payload = dict(_PO_PAYLOAD)
-    payload["vendor_id"] = vendor.json()["id"]
+    payload["vendor_id"] = vendor_id
+    payload["brand_id"] = brand_id
     payload["po_type"] = "PROCUREMENT"
     po = await client.post("/api/v1/po/", json=payload)
     assert po.status_code == 201
@@ -359,13 +373,10 @@ async def test_activity_list_returns_reverse_chronological(authenticated_client:
 async def test_unread_count_and_mark_read(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
     # After creating and submitting a PO, unread count must be >= 2; after mark-all-read, count must be 0.
-    vendor = await client.post(
-        "/api/v1/vendors/",
-        json={"name": "Unread Vendor", "country": "US", "vendor_type": "PROCUREMENT"},
-    )
-    assert vendor.status_code == 201
+    vendor_id, brand_id = await _make_brand_and_vendor(client, "Unread Vendor")
     payload = dict(_PO_PAYLOAD)
-    payload["vendor_id"] = vendor.json()["id"]
+    payload["vendor_id"] = vendor_id
+    payload["brand_id"] = brand_id
     payload["po_type"] = "PROCUREMENT"
     po = await client.post("/api/v1/po/", json=payload)
     assert po.status_code == 201
@@ -392,13 +403,10 @@ async def test_unread_count_and_mark_read(authenticated_client: AsyncClient) -> 
 async def test_mark_read_specific_ids(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
     # Marking one specific entry as read must reduce unread count by exactly 1.
-    vendor = await client.post(
-        "/api/v1/vendors/",
-        json={"name": "Specific Read Vendor", "country": "US", "vendor_type": "PROCUREMENT"},
-    )
-    assert vendor.status_code == 201
+    vendor_id, brand_id = await _make_brand_and_vendor(client, "Specific Read Vendor")
     payload = dict(_PO_PAYLOAD)
-    payload["vendor_id"] = vendor.json()["id"]
+    payload["vendor_id"] = vendor_id
+    payload["brand_id"] = brand_id
     payload["po_type"] = "PROCUREMENT"
     po = await client.post("/api/v1/po/", json=payload)
     assert po.status_code == 201
@@ -451,13 +459,10 @@ _LINE_ITEM_2 = {
 
 
 async def _create_pending_po(client: AsyncClient, two_lines: bool = False) -> str:
-    vendor = await client.post(
-        "/api/v1/vendors/",
-        json={"name": "Negotiation Vendor", "country": "US", "vendor_type": "PROCUREMENT"},
-    )
-    assert vendor.status_code == 201
+    vendor_id, brand_id = await _make_brand_and_vendor(client, "Negotiation Vendor")
     payload = dict(_PO_PAYLOAD)
-    payload["vendor_id"] = vendor.json()["id"]
+    payload["vendor_id"] = vendor_id
+    payload["brand_id"] = brand_id
     payload["po_type"] = "PROCUREMENT"
     if two_lines:
         payload["line_items"] = [_LINE_ITEM, _LINE_ITEM_2]

@@ -7,6 +7,7 @@ on so are always is_overdue=False / days_overdue=None.
 
 from __future__ import annotations
 
+import itertools
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -16,6 +17,8 @@ from src.main import app
 from src.routers.dashboard import get_milestone_repo as dash_get_milestone_repo
 
 pytestmark = pytest.mark.asyncio
+
+_brand_counter = itertools.count(1)
 
 
 _LINE_ITEM = {
@@ -54,8 +57,15 @@ async def _create_accepted_procurement_po(client: AsyncClient) -> str:
         json={"name": "Test Vendor", "country": "US", "vendor_type": "PROCUREMENT"},
     )
     assert vendor.status_code == 201
+    vendor_id = vendor.json()["id"]
+    brand_n = next(_brand_counter)
+    brand = await client.post("/api/v1/brands/", json={"name": f"MsrBrand-{brand_n}", "legal_name": "Msr Brand LLC", "address": "1 Msr Ave", "country": "US"})
+    assert brand.status_code == 201
+    brand_id = brand.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
     payload = dict(_PO_PAYLOAD)
-    payload["vendor_id"] = vendor.json()["id"]
+    payload["vendor_id"] = vendor_id
+    payload["brand_id"] = brand_id
     po = await client.post("/api/v1/po/", json=payload)
     assert po.status_code == 201
     po_id: str = po.json()["id"]

@@ -287,3 +287,17 @@ stateDiagram-v2
 | ShipmentBookingPayload | Client-side DTO for the book transition: `{ carrier: string, booking_reference: string, pickup_date: string }`. Mirrors the backend `ShipmentBookRequest`. carrier and booking_reference are validated non-empty/whitespace-only client-side before the POST. | Shipment |
 | ShipmentTransportPayload | Client-side DTO for PATCH /transport: `{ vessel_name: string | null, voyage_number: string | null }`. Both fields nullable; passing null clears a previously set value. Non-null values must not be whitespace-only. | Shipment |
 | ShipmentDeclarePayload | Client-side DTO for POST /declare: `{ signatory_name: string, signatory_title: string }`. Both fields required and validated non-empty/whitespace-only before send. | Shipment |
+
+## Brand
+
+| Term | Definition | Bounded Context |
+|------|-----------|-----------------|
+| Brand | The buyer-principal aggregate on whose behalf an operator runs procurement, invoicing, and shipment. Carries `legal_name`, `address`, `country` (validated against reference data), and `tax_id`. Vendor↔Brand many-to-many via `brand_vendors`. Every PO carries `brand_id` (required at the Pydantic create body, immutable on update). | Procurement |
+| Brand Status | ACTIVE or INACTIVE. ACTIVE brands accept new POs; INACTIVE brands reject new POs. Deactivate is blocked when any non-terminal PO references the brand. Symmetric guards mirror `VendorStatus`. | Procurement |
+| Default Brand | A single brand seeded by `init_db` carrying `legal_name="Default Brand — please update"` so existing rows can be backfilled in the absence of a migration tool. ADMIN edits the placeholder fields on first login. | Procurement |
+| Brand Vendor Assignment | The m2m relationship in `brand_vendors`. A vendor can serve multiple brands; a brand can use multiple vendors. PO create asserts the chosen `vendor_id` is assigned to the chosen `brand_id`; assignment is idempotent on conflict. Unassign is blocked when any non-terminal PO references the pair. | Procurement |
+| Brand Importer-of-Record Model | The decision in iter 108 that Brand IS the importer of record on customs documents. `Brand.tax_id` is what appears on the CI Seller-side declaration. An operator-as-IOR singleton is deferred and added separately if a future workflow needs the operator to take title. | Trade |
+| Brand Buyer Block | The buyer / consignee identity block rendered on the auto-generated Packing List and Commercial Invoice. Sourced from `po.brand.legal_name`, `po.brand.address`, and `po.brand.country`. The CI additionally renders a `Tax ID:` line from `po.brand.tax_id` when non-empty. Replaces the hardcoded operator constants in the PDF generators. | Trade |
+| Vendor-Belongs-To-Brand Validation | The PO-create check that `brand_repo.is_vendor_assigned_to_brand(brand_id, vendor_id)` returns true. 422 with message naming the brand on mismatch. Mirrors the existing field-immutability and reference-data validation patterns. | Procurement |
+| BRAND_CREATED / BRAND_UPDATED / BRAND_DEACTIVATED / BRAND_REACTIVATED / BRAND_VENDOR_ASSIGNED / BRAND_VENDOR_UNASSIGNED | Six brand-lifecycle ActivityEvents. All carry `(NotificationCategory.LIVE, TargetRole.ADMIN)` so rows surface only in ADMIN feeds. Vendor-assignment events use `entity_type=BRAND`, `entity_id=brand_id`, with `metadata={"vendor_id": <id>}`. | Notifications |
+| EntityType.BRAND | New `EntityType` enum value. Tags `activity_log` rows scoped to a brand aggregate. | Notifications |

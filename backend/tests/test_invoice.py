@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import datetime
+import itertools
 
 import pytest
 from httpx import AsyncClient
 
 pytestmark = pytest.mark.asyncio
+
+_brand_counter = itertools.count(1)
 
 _LINE_ITEM = {
     "part_number": "PN-001",
@@ -51,8 +54,14 @@ async def _create_accepted_po(client: AsyncClient, po_type: str = "PROCUREMENT")
         "/api/v1/vendors/",
         json={"name": "Test Vendor", "country": "US", "vendor_type": po_type},
     )
+    vendor_id = vendor.json()["id"]
+    brand_n = next(_brand_counter)
+    brand = await client.post("/api/v1/brands/", json={"name": f"InvBrand-{brand_n}", "legal_name": "Inv Brand LLC", "address": "1 Inv Ave", "country": "US"})
+    brand_id = brand.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
     payload = dict(_PO_PAYLOAD)
-    payload["vendor_id"] = vendor.json()["id"]
+    payload["vendor_id"] = vendor_id
+    payload["brand_id"] = brand_id
     payload["po_type"] = po_type
     po = await client.post("/api/v1/po/", json=payload)
     po_id = po.json()["id"]
@@ -420,17 +429,28 @@ async def test_list_invoices_filter_by_vendor_name(authenticated_client: AsyncCl
     assert beta_vendor.status_code == 201
     beta_vendor_id = beta_vendor.json()["id"]
 
-    async def _make_po_for_vendor(vendor_id: str) -> dict:
+    brand_alpha_n = next(_brand_counter)
+    brand_alpha = await client.post("/api/v1/brands/", json={"name": f"AlphaBrand-{brand_alpha_n}", "legal_name": "Alpha Brand LLC", "address": "1 Alpha Ave", "country": "US"})
+    brand_alpha_id = brand_alpha.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_alpha_id}/vendors", json={"vendor_id": alpha_vendor_id})
+
+    brand_beta_n = next(_brand_counter)
+    brand_beta = await client.post("/api/v1/brands/", json={"name": f"BetaBrand-{brand_beta_n}", "legal_name": "Beta Brand LLC", "address": "1 Beta Ave", "country": "GB"})
+    brand_beta_id = brand_beta.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_beta_id}/vendors", json={"vendor_id": beta_vendor_id})
+
+    async def _make_po_for_vendor(vendor_id: str, brand_id: str) -> dict:
         payload = dict(_PO_PAYLOAD)
         payload["vendor_id"] = vendor_id
+        payload["brand_id"] = brand_id
         po = await client.post("/api/v1/po/", json=payload)
         po_id = po.json()["id"]
         await client.post(f"/api/v1/po/{po_id}/submit")
         await client.post(f"/api/v1/po/{po_id}/accept")
         return (await client.get(f"/api/v1/po/{po_id}")).json()
 
-    alpha_po = await _make_po_for_vendor(alpha_vendor_id)
-    beta_po = await _make_po_for_vendor(beta_vendor_id)
+    alpha_po = await _make_po_for_vendor(alpha_vendor_id, brand_alpha_id)
+    beta_po = await _make_po_for_vendor(beta_vendor_id, brand_beta_id)
 
     alpha_inv = await client.post(
         "/api/v1/invoices/",

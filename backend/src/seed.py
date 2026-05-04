@@ -142,6 +142,50 @@ def _make_vendors() -> list[dict[str, object]]:
     return rows
 
 
+def _make_brands(
+    vendors: list[dict[str, object]],
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """Create two seed brands and assign vendors across them.
+
+    Acme Brands (US): first three vendors (indices 0-2).
+    Beacon Goods (GB): remaining vendors (indices 3+).
+
+    Returns (brands, brand_vendors).
+    """
+    created = _offset(-60)
+    acme_id = str(uuid4())
+    beacon_id = str(uuid4())
+    brands: list[dict[str, object]] = [
+        {
+            "id": acme_id,
+            "name": "Acme Brands",
+            "legal_name": "Acme Brands Inc.",
+            "address": "500 Commerce Drive, New York, NY 10001",
+            "country": "US",
+            "tax_id": "EIN-12-3456789",
+            "status": "ACTIVE",
+            "created_at": created,
+            "updated_at": created,
+        },
+        {
+            "id": beacon_id,
+            "name": "Beacon Goods",
+            "legal_name": "Beacon Goods Ltd",
+            "address": "14 Warehouse Lane, London, EC1A 1BB",
+            "country": "GB",
+            "tax_id": "GB123456789",
+            "status": "ACTIVE",
+            "created_at": created,
+            "updated_at": created,
+        },
+    ]
+    brand_vendors: list[dict[str, object]] = []
+    for i, vendor in enumerate(vendors):
+        brand_id = acme_id if i < 3 else beacon_id
+        brand_vendors.append({"brand_id": brand_id, "vendor_id": vendor["id"]})
+    return brands, brand_vendors
+
+
 def _make_products(vendors: list[dict[str, object]]) -> list[dict[str, object]]:
     # Two products per vendor; every third product requires certification.
     created = _offset(-40)
@@ -190,8 +234,13 @@ _PORT_CYCLE: tuple[tuple[str, str], ...] = (
 
 def _make_purchase_orders(
     vendors: list[dict[str, object]],
+    brand_vendors: list[dict[str, object]],
 ) -> list[dict[str, object]]:
     # 18 POs spread across vendors and every POStatus value.
+    # Each PO is assigned the brand that the vendor belongs to via brand_vendors.
+    vendor_to_brand: dict[str, str] = {
+        str(bv["vendor_id"]): str(bv["brand_id"]) for bv in brand_vendors
+    }
     rows: list[dict[str, object]] = []
     for i in range(18):
         vendor = vendors[i % len(vendors)]
@@ -209,12 +258,14 @@ def _make_purchase_orders(
         # Advance-required, ACCEPTED POs get advance_paid_at so production can flow.
         has_advance = payment_terms in ("ADV", "CIA", "50_PCT_ADVANCE_50_PCT_BL", "100_PCT_ADVANCE")
         advance_paid_at = issued if (status is POStatus.ACCEPTED and has_advance) else None
+        brand_id: str | None = vendor_to_brand.get(str(vendor["id"]))
         rows.append(
             {
                 "id": str(uuid4()),
                 "po_number": f"PO-2026-{1000 + i:04d}",
                 "status": status.value,
                 "vendor_id": vendor["id"],
+                "brand_id": brand_id,
                 "po_type": po_type.value,
                 "ship_to_address": "1 Warehouse Way, Long Beach, CA 90802",
                 "payment_terms": payment_terms,
@@ -608,9 +659,10 @@ async def seed(conn: asyncpg.Connection) -> None:
         return
 
     vendors = _make_vendors()
+    brands, brand_vendors = _make_brands(vendors)
     products = _make_products(vendors)
     users = _make_users([str(v["id"]) for v in vendors])
-    pos = _make_purchase_orders(vendors)
+    pos = _make_purchase_orders(vendors, brand_vendors)
     line_items = _make_line_items(pos, products)
     shipments = _make_shipments(pos)
     shipment_lines = _make_shipment_line_items(shipments, line_items)
@@ -631,6 +683,28 @@ async def seed(conn: asyncpg.Connection) -> None:
             """,
             vendors,
             ("id", "name", "country", "status", "vendor_type", "address", "account_details", "created_at", "updated_at"),
+        )
+
+        await _insert(
+            conn,
+            """
+            INSERT INTO brands (id, name, legal_name, address, country, tax_id, status, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            ON CONFLICT (name) DO NOTHING
+            """,
+            brands,
+            ("id", "name", "legal_name", "address", "country", "tax_id", "status", "created_at", "updated_at"),
+        )
+
+        await _insert(
+            conn,
+            """
+            INSERT INTO brand_vendors (brand_id, vendor_id)
+            VALUES ($1, $2)
+            ON CONFLICT DO NOTHING
+            """,
+            brand_vendors,
+            ("brand_id", "vendor_id"),
         )
 
         await _insert(
@@ -674,18 +748,18 @@ async def seed(conn: asyncpg.Connection) -> None:
             conn,
             """
             INSERT INTO purchase_orders (
-                id, po_number, status, vendor_id, po_type, ship_to_address, payment_terms,
+                id, po_number, status, vendor_id, brand_id, po_type, ship_to_address, payment_terms,
                 currency, issued_date, required_delivery_date, terms_and_conditions, incoterm,
                 port_of_loading, port_of_discharge, country_of_origin, country_of_destination,
                 buyer_name, buyer_country, marketplace, round_count, last_actor_role,
                 advance_paid_at, created_at, updated_at
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                    $17, $18, $19, $20, $21, $22, $23, $24)
+                    $17, $18, $19, $20, $21, $22, $23, $24, $25)
             """,
             pos,
             (
-                "id", "po_number", "status", "vendor_id", "po_type", "ship_to_address",
+                "id", "po_number", "status", "vendor_id", "brand_id", "po_type", "ship_to_address",
                 "payment_terms", "currency", "issued_date", "required_delivery_date",
                 "terms_and_conditions", "incoterm", "port_of_loading", "port_of_discharge",
                 "country_of_origin", "country_of_destination", "buyer_name", "buyer_country",
@@ -821,7 +895,7 @@ async def seed(conn: asyncpg.Connection) -> None:
 
     print(
         "seed: inserted "
-        f"{len(vendors)} vendors, {len(users)} users, {len(products)} products, "
+        f"{len(brands)} brands, {len(vendors)} vendors, {len(users)} users, {len(products)} products, "
         f"{len(pos)} POs, {len(line_items)} line items, {len(shipments)} shipments, "
         f"{len(shipment_lines)} shipment lines, {len(invoices)} invoices, "
         f"{len(invoice_lines)} invoice lines, {len(milestones)} milestones, "

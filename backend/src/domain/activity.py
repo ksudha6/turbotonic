@@ -55,6 +55,13 @@ class ActivityEvent(Enum):
     USER_REACTIVATED = "USER_REACTIVATED"
     USER_CREDENTIALS_RESET = "USER_CREDENTIALS_RESET"
     USER_INVITE_REISSUED = "USER_INVITE_REISSUED"
+    # Iter 108: brand-lifecycle events scoped to ADMIN.
+    BRAND_CREATED = "BRAND_CREATED"
+    BRAND_UPDATED = "BRAND_UPDATED"
+    BRAND_DEACTIVATED = "BRAND_DEACTIVATED"
+    BRAND_REACTIVATED = "BRAND_REACTIVATED"
+    BRAND_VENDOR_ASSIGNED = "BRAND_VENDOR_ASSIGNED"
+    BRAND_VENDOR_UNASSIGNED = "BRAND_VENDOR_UNASSIGNED"
 
 
 class NotificationCategory(Enum):
@@ -70,6 +77,7 @@ class EntityType(Enum):
     PACKAGING = "PACKAGING"
     SHIPMENT = "SHIPMENT"
     USER = "USER"
+    BRAND = "BRAND"
 
 
 class TargetRole(Enum):
@@ -156,4 +164,11 @@ EVENT_METADATA: dict[ActivityEvent, tuple[NotificationCategory, TargetRole | Non
     ActivityEvent.USER_REACTIVATED: (NotificationCategory.LIVE, TargetRole.ADMIN),
     ActivityEvent.USER_CREDENTIALS_RESET: (NotificationCategory.LIVE, TargetRole.ADMIN),
     ActivityEvent.USER_INVITE_REISSUED: (NotificationCategory.LIVE, TargetRole.ADMIN),
+    # Iter 108: brand-lifecycle events scoped to ADMIN.
+    ActivityEvent.BRAND_CREATED: (NotificationCategory.LIVE, TargetRole.ADMIN),
+    ActivityEvent.BRAND_UPDATED: (NotificationCategory.LIVE, TargetRole.ADMIN),
+    ActivityEvent.BRAND_DEACTIVATED: (NotificationCategory.LIVE, TargetRole.ADMIN),
+    ActivityEvent.BRAND_REACTIVATED: (NotificationCategory.LIVE, TargetRole.ADMIN),
+    ActivityEvent.BRAND_VENDOR_ASSIGNED: (NotificationCategory.LIVE, TargetRole.ADMIN),
+    ActivityEvent.BRAND_VENDOR_UNASSIGNED: (NotificationCategory.LIVE, TargetRole.ADMIN),
 }

@@ -15,9 +15,11 @@ from httpx import ASGITransport, AsyncClient
 
 from src.activity_repository import ActivityLogRepository
 from src.auth.session import COOKIE_NAME, create_session_cookie
+from src.brand_repository import BrandRepository
 from src.certificate_repository import CertificateRepository
 from src.db import get_db
 from src.document_repository import DocumentRepository
+from src.domain.brand import Brand
 from src.domain.user import User, UserRole
 from src.invoice_repository import InvoiceRepository
 from src.main import app
@@ -51,6 +53,7 @@ from src.routers.milestone import get_po_repo as milestone_get_po_repo
 from src.routers.milestone import get_product_repo as milestone_get_product_repo
 from src.routers.milestone import get_qualification_repo as milestone_get_qualification_repo
 from src.routers.purchase_order import get_activity_repo as po_get_activity_repo
+from src.routers.purchase_order import get_brand_repo as po_get_brand_repo
 from src.routers.purchase_order import get_cert_repo as po_get_cert_repo
 from src.routers.purchase_order import get_email_service as po_get_email_service
 from src.routers.purchase_order import get_invoice_repo as po_get_invoice_repo
@@ -78,6 +81,11 @@ from src.routers.shipment import (
     get_document_repo_for_shipment as shipment_get_document_repo,
     get_file_storage_for_shipment as shipment_get_file_storage,
     get_product_repo_for_shipment as shipment_get_product_repo,
+)
+from src.routers.brands import (
+    get_brand_repo as brands_get_brand_repo,
+    get_vendor_repo_for_brands as brands_get_vendor_repo,
+    get_activity_repo_for_brands as brands_get_activity_repo,
 )
 from src.routers.vendor import get_vendor_repo as vendor_get_vendor_repo
 from src.schema import init_db
@@ -210,11 +218,15 @@ async def _setup_overrides(
     async def override_get_shipment_repo() -> AsyncIterator[ShipmentRepository]:
         yield ShipmentRepository(conn)
 
+    async def override_get_brand_repo() -> AsyncIterator[BrandRepository]:
+        yield BrandRepository(conn)
+
     def override_get_file_storage() -> FileStorageService:
         return FileStorageService(upload_dir)
 
     app.dependency_overrides[get_repo] = override_get_repo
     app.dependency_overrides[po_get_vendor_repo] = override_get_vendor_repo
+    app.dependency_overrides[po_get_brand_repo] = override_get_brand_repo
     app.dependency_overrides[po_get_invoice_repo] = override_get_invoice_repo
     app.dependency_overrides[po_get_activity_repo] = override_get_activity_repo
     app.dependency_overrides[po_get_product_repo] = override_get_product_repo
@@ -265,6 +277,9 @@ async def _setup_overrides(
     app.dependency_overrides[shipment_get_document_repo] = override_get_document_repo
     app.dependency_overrides[shipment_get_file_storage] = override_get_file_storage
     app.dependency_overrides[shipment_get_product_repo] = override_get_product_repo
+    app.dependency_overrides[brands_get_brand_repo] = override_get_brand_repo
+    app.dependency_overrides[brands_get_vendor_repo] = override_get_vendor_repo
+    app.dependency_overrides[brands_get_activity_repo] = override_get_activity_repo
 
     # Iter 060: route EmailService and NotificationDispatcher DI to the fake so
     # no test hits the network. Dispatcher is built here because it binds the
@@ -375,3 +390,115 @@ def fake_email_service() -> FakeEmailService:
         "to have initialised the shared FakeEmailService first"
     )
     return _current_fake_email
+
+
+async def make_test_brand(
+    client,
+    *,
+    name: str = "Test Brand",
+    legal_name: str = "Test Brand Legal Name",
+    address: str = "123 Test St",
+    country: str = "US",
+    tax_id: str = "",
+) -> dict:
+    """Create a brand via the API and return the response dict.
+
+    Requires `client` to be an authenticated_client with ADMIN access.
+    """
+    resp = await client.post(
+        "/api/v1/brands/",
+        json={
+            "name": name,
+            "legal_name": legal_name,
+            "address": address,
+            "country": country,
+            "tax_id": tax_id,
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+async def make_test_vendor(
+    client,
+    *,
+    name: str = "Test Vendor",
+    country: str = "US",
+    vendor_type: str = "PROCUREMENT",
+) -> dict:
+    """Create a vendor via the API and return the response dict."""
+    resp = await client.post(
+        "/api/v1/vendors/",
+        json={"name": name, "country": country, "vendor_type": vendor_type},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+_PO_BASE_PAYLOAD: dict = {
+    "buyer_name": "TurboTonic Ltd",
+    "buyer_country": "US",
+    "ship_to_address": "123 Main St",
+    "payment_terms": "TT",
+    "currency": "USD",
+    "issued_date": "2026-03-16T00:00:00Z",
+    "required_delivery_date": "2026-04-01T00:00:00Z",
+    "terms_and_conditions": "Standard T&C",
+    "incoterm": "FOB",
+    "port_of_loading": "USLAX",
+    "port_of_discharge": "CNSHA",
+    "country_of_origin": "US",
+    "country_of_destination": "CN",
+    "line_items": [
+        {
+            "part_number": "PN-001",
+            "description": "Widget A",
+            "quantity": 10,
+            "uom": "EA",
+            "unit_price": "5.00",
+            "hs_code": "8471.30",
+            "country_of_origin": "US",
+        }
+    ],
+}
+
+
+async def make_test_po(
+    client,
+    *,
+    brand_id: str | None = None,
+    vendor_id: str | None = None,
+    vendor_type: str = "PROCUREMENT",
+    extra: dict | None = None,
+) -> dict:
+    """Create a brand (if needed), vendor (if needed), link them, and POST a PO.
+
+    Returns the PO response dict. Requires authenticated_client with SM/ADMIN access.
+    The brand and vendor are linked before the PO is created, satisfying the
+    vendor-in-brand validation.
+    """
+    if brand_id is None:
+        brand = await make_test_brand(client, name=f"AutoBrand-{id(client)}")
+        brand_id = brand["id"]
+
+    if vendor_id is None:
+        vendor = await make_test_vendor(client, vendor_type=vendor_type)
+        vendor_id = vendor["id"]
+
+    # Link vendor to brand (idempotent).
+    link_resp = await client.post(
+        f"/api/v1/brands/{brand_id}/vendors",
+        json={"vendor_id": vendor_id},
+    )
+    assert link_resp.status_code in (200, 201), link_resp.text
+
+    payload = {
+        **_PO_BASE_PAYLOAD,
+        "vendor_id": vendor_id,
+        "brand_id": brand_id,
+        "po_type": vendor_type,
+        **(extra or {}),
+    }
+    resp = await client.post("/api/v1/po/", json=payload)
+    assert resp.status_code == 201, resp.text
+    return resp.json()

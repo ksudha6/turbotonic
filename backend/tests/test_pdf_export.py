@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import itertools
 import uuid
 
 import pytest
@@ -17,6 +18,8 @@ def _extract_pdf_text(pdf_bytes: bytes) -> str:
     return "\n".join(page.extract_text() or "" for page in reader.pages)
 
 pytestmark = pytest.mark.asyncio
+
+_brand_counter = itertools.count(1)
 
 # ---------------------------------------------------------------------------
 # Test data
@@ -55,7 +58,14 @@ async def _create_po(client: AsyncClient, payload: dict | None = None) -> dict:
     p = dict(payload or _PO_PAYLOAD)
     vendor_resp = await client.post("/api/v1/vendors/", json={"name": "Test Vendor", "country": "US", "vendor_type": "PROCUREMENT"})
     assert vendor_resp.status_code == 201
-    p["vendor_id"] = vendor_resp.json()["id"]
+    vendor_id = vendor_resp.json()["id"]
+    p["vendor_id"] = vendor_id
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post("/api/v1/brands/", json={"name": f"PDFBrand-{brand_n}", "legal_name": "PDF Brand LLC", "address": "1 PDF Ave", "country": "US"})
+    assert brand_resp.status_code == 201
+    brand_id = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
+    p["brand_id"] = brand_id
     resp = await client.post("/api/v1/po/", json=p)
     assert resp.status_code == 201
     return resp.json()
@@ -257,7 +267,13 @@ async def _create_two_line_po(client: AsyncClient) -> dict:
         "/api/v1/vendors/", json={"name": "Two Line Vendor", "country": "US", "vendor_type": "PROCUREMENT"}
     )
     assert vendor_resp.status_code == 201
-    payload = {**_PO_PAYLOAD, "vendor_id": vendor_resp.json()["id"]}
+    vendor_id = vendor_resp.json()["id"]
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post("/api/v1/brands/", json={"name": f"TwoLinePDFBrand-{brand_n}", "legal_name": "TwoLine PDF Brand LLC", "address": "2 PDF Ave", "country": "US"})
+    assert brand_resp.status_code == 201
+    brand_id = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "brand_id": brand_id}
     payload["line_items"] = [_LINE_ITEM_KEEP, _LINE_ITEM_DROP]
     resp = await client.post("/api/v1/po/", json=payload)
     assert resp.status_code == 201

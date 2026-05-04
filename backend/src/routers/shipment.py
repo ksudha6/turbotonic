@@ -595,9 +595,11 @@ async def get_packing_list(
     vendor_address = vendor.address if vendor is not None else ""
     vendor_country = vendor.country if vendor is not None else ""
 
-    # Buyer info is owned by the PO; no standalone Buyer entity exists yet
-    buyer_name = po.buyer_name
-    buyer_address = po.ship_to_address
+    # Consignee (buyer) block reads from the Brand associated with the PO.
+    # Falls back to po.buyer_name / po.ship_to_address when brand data is absent
+    # (legacy POs that pre-date the Brand migration).
+    buyer_name = po.brand_legal_name or po.buyer_name
+    buyer_address = po.brand_address or po.ship_to_address
 
     # Iter 106: build manufacturer lookup from products linked to shipment line items.
     # Falls back to vendor data for any line where product has no manufacturer_name.
@@ -654,8 +656,10 @@ async def get_commercial_invoice(
     vendor_address = vendor.address if vendor is not None else ""
     vendor_country = vendor.country if vendor is not None else ""
 
-    buyer_name = po.buyer_name
-    buyer_address = po.ship_to_address
+    # Consignee (buyer) block reads from the Brand associated with the PO.
+    buyer_name = po.brand_legal_name or po.buyer_name
+    buyer_address = po.brand_address or po.ship_to_address
+    buyer_country = po.brand_country or vendor_country
 
     pdf_bytes = generate_commercial_invoice_pdf(
         shipment=shipment,
@@ -665,6 +669,8 @@ async def get_commercial_invoice(
         buyer_name=buyer_name,
         buyer_address=buyer_address,
         vendor_country=vendor_country,
+        buyer_country=buyer_country,
+        buyer_tax_id=po.brand_tax_id or "",
     )
 
     filename = f"commercial-invoice-{shipment.shipment_number}.pdf"

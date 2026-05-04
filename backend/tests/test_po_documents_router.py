@@ -32,8 +32,10 @@ from httpx import ASGITransport, AsyncClient
 
 from src.activity_repository import ActivityLogRepository
 from src.auth.session import COOKIE_NAME, create_session_cookie
+from src.brand_repository import BrandRepository
 from src.document_repository import DocumentRepository
 from src.domain.activity import ActivityEvent, EntityType, TargetRole
+from src.domain.brand import Brand
 from src.domain.purchase_order import POType
 from src.domain.user import User, UserRole
 from src.domain.vendor import Vendor, VendorType
@@ -108,8 +110,11 @@ _PO_PAYLOAD_TEMPLATE: dict = {
 # ---------------------------------------------------------------------------
 
 
-def _po_payload(vendor_id: str, po_type: str = "PROCUREMENT") -> dict:
-    return {**_PO_PAYLOAD_TEMPLATE, "vendor_id": vendor_id, "po_type": po_type}
+def _po_payload(vendor_id: str, po_type: str = "PROCUREMENT", brand_id: str | None = None) -> dict:
+    payload = {**_PO_PAYLOAD_TEMPLATE, "vendor_id": vendor_id, "po_type": po_type}
+    if brand_id is not None:
+        payload["brand_id"] = brand_id
+    return payload
 
 
 async def _create_vendor(
@@ -213,6 +218,15 @@ async def env():
     vendor_a = await _create_vendor(conn, "VendorA PROCUREMENT", "PROCUREMENT")
     vendor_b = await _create_vendor(conn, "VendorB OPEX", "OPEX")
 
+    # Brands (created directly via domain + repo)
+    brand_a = Brand.create(name="DocBrand A", legal_name="DocBrand A LLC", address="1 DocBrand Ave", country="US")
+    brand_b = Brand.create(name="DocBrand B", legal_name="DocBrand B LLC", address="2 DocBrand Ave", country="US")
+    brand_repo = BrandRepository(conn)
+    await brand_repo.save(brand_a)
+    await brand_repo.save(brand_b)
+    await brand_repo.assign_vendor(brand_a.id, vendor_a.id)
+    await brand_repo.assign_vendor(brand_b.id, vendor_b.id)
+
     # Users
     admin = await _create_user(conn, "admin-doc", UserRole.ADMIN)
     sm = await _create_user(conn, "sm-doc", UserRole.SM)
@@ -247,13 +261,13 @@ async def env():
             transport=transport, base_url="http://test", cookies=admin_cookies
         ) as setup_client:
             proc_resp = await setup_client.post(
-                "/api/v1/po/", json=_po_payload(vendor_a.id, "PROCUREMENT")
+                "/api/v1/po/", json=_po_payload(vendor_a.id, "PROCUREMENT", brand_a.id)
             )
             assert proc_resp.status_code == 201, proc_resp.text
             procurement_po = proc_resp.json()
 
             opex_resp = await setup_client.post(
-                "/api/v1/po/", json=_po_payload(vendor_b.id, "OPEX")
+                "/api/v1/po/", json=_po_payload(vendor_b.id, "OPEX", brand_b.id)
             )
             assert opex_resp.status_code == 201, opex_resp.text
             opex_po = opex_resp.json()

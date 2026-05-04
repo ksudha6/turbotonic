@@ -65,6 +65,7 @@ class LineItemCreate(BaseModel):
 
 class PurchaseOrderCreate(BaseModel):
     vendor_id: str
+    brand_id: str
     buyer_name: str
     buyer_country: str
     ship_to_address: str
@@ -115,6 +116,8 @@ class PurchaseOrderUpdate(BaseModel):
     country_of_destination: str
     line_items: list[LineItemCreate]
     marketplace: str | None = None
+    # brand_id is present only to reject mutation attempts; the value on the PO is immutable.
+    brand_id: str | None = None
 
     @field_validator("line_items")
     @classmethod
@@ -280,6 +283,13 @@ class PurchaseOrderResponse(BaseModel):
     # Iter 059: null when no advance recorded. UI uses this plus the reference
     # metadata's has_advance flag to decide when to show the "Mark Advance Paid" button.
     advance_paid_at: datetime | None = None
+    # Iter 108: brand fields — id/name always present; full block on detail response.
+    brand_id: str | None = None
+    brand_name: str | None = None
+    brand_legal_name: str | None = None
+    brand_address: str | None = None
+    brand_country: str | None = None
+    brand_tax_id: str | None = None
 
 
 class PurchaseOrderListItem(BaseModel):
@@ -303,6 +313,9 @@ class PurchaseOrderListItem(BaseModel):
     # one or more REMOVED lines is partial, because some originally-ordered scope
     # was agreed-out during negotiation.
     has_removed_line: bool = False
+    # Iter 108: brand fields on list items.
+    brand_id: str | None = None
+    brand_name: str | None = None
 
 
 class PaginatedPOList(BaseModel):
@@ -379,6 +392,12 @@ def po_to_response(po: PurchaseOrder, vendor_name: str = "", vendor_country: str
         round_count=po.round_count,
         last_actor_role=po.last_actor_role.value if po.last_actor_role else None,
         advance_paid_at=po.advance_paid_at,
+        brand_id=po.brand_id,
+        brand_name=po.brand_name,
+        brand_legal_name=po.brand_legal_name,
+        brand_address=po.brand_address,
+        brand_country=po.brand_country,
+        brand_tax_id=po.brand_tax_id,
     )
 
 
@@ -399,6 +418,8 @@ def po_to_list_item(po: PurchaseOrder, vendor_name: str = "", vendor_country: st
         currency=po.currency,
         marketplace=po.marketplace,
         round_count=po.round_count,
+        brand_id=po.brand_id,
+        brand_name=po.brand_name,
     )
 
 

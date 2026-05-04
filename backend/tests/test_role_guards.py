@@ -34,7 +34,15 @@ from src.routers.milestone import get_activity_repo as milestone_get_activity_re
 from src.routers.milestone import get_milestone_repo as milestone_get_milestone_repo
 from src.routers.milestone import get_po_repo as milestone_get_po_repo
 from src.routers.product import get_product_repo as product_get_product_repo
+from src.brand_repository import BrandRepository
+from src.domain.brand import Brand
+from src.routers.brands import (
+    get_brand_repo as brands_get_brand_repo,
+    get_vendor_repo_for_brands as brands_get_vendor_repo,
+    get_activity_repo_for_brands as brands_get_activity_repo,
+)
 from src.routers.purchase_order import get_activity_repo as po_get_activity_repo
+from src.routers.purchase_order import get_brand_repo as po_get_brand_repo
 from src.routers.purchase_order import get_invoice_repo as po_get_invoice_repo
 from src.routers.purchase_order import get_repo
 from src.routers.purchase_order import get_vendor_repo as po_get_vendor_repo
@@ -137,12 +145,19 @@ async def _make_client_with_role(
     async def override_get_user_repo() -> AsyncIterator[UserRepository]:
         yield UserRepository(conn)
 
+    async def override_get_brand_repo() -> AsyncIterator[BrandRepository]:
+        yield BrandRepository(conn)
+
     @asynccontextmanager
     async def _test_get_db() -> AsyncIterator[asyncpg.Connection]:
         yield conn
 
     app.dependency_overrides[get_repo] = override_get_repo
+    app.dependency_overrides[po_get_brand_repo] = override_get_brand_repo
     app.dependency_overrides[po_get_vendor_repo] = override_get_vendor_repo
+    app.dependency_overrides[brands_get_brand_repo] = override_get_brand_repo
+    app.dependency_overrides[brands_get_vendor_repo] = override_get_vendor_repo
+    app.dependency_overrides[brands_get_activity_repo] = override_get_activity_repo
     app.dependency_overrides[po_get_invoice_repo] = override_get_invoice_repo
     app.dependency_overrides[po_get_activity_repo] = override_get_activity_repo
     app.dependency_overrides[vendor_get_vendor_repo] = override_get_vendor_repo
@@ -215,7 +230,11 @@ async def test_sm_can_create_po() -> None:
         )
         assert v.status_code == 201
         vid = v.json()["id"]
-        payload = {**_PO_PAYLOAD, "vendor_id": vid}
+        # Brand creation requires ADMIN role; use domain+repository directly.
+        brand = Brand.create(name="RoleGuardBrand", legal_name="RoleGuard Brand LLC", address="1 Guard Ave", country="US")
+        await BrandRepository(conn).save(brand)
+        await BrandRepository(conn).assign_vendor(brand.id, vid)
+        payload = {**_PO_PAYLOAD, "vendor_id": vid, "brand_id": brand.id}
         resp = await ac.post("/api/v1/po/", json=payload)
         assert resp.status_code == 201
 
