@@ -1,18 +1,33 @@
 from __future__ import annotations
 
+import itertools
+
 import pytest
 from httpx import AsyncClient
 
+_brand_counter = itertools.count(1)
 
-async def _create_vendor(client: AsyncClient, name: str = "Test Vendor", country: str = "CN") -> dict:
+
+async def _create_vendor(client: AsyncClient, name: str = "Test Vendor", country: str = "CN") -> tuple[dict, str]:
+    """Create vendor + brand, link them; return (vendor_dict, brand_id)."""
     resp = await client.post("/api/v1/vendors/", json={"name": name, "country": country, "vendor_type": "PROCUREMENT"})
     assert resp.status_code == 201
-    return resp.json()
+    vendor = resp.json()
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post(
+        "/api/v1/brands/",
+        json={"name": f"DashTestBrand-{brand_n}", "legal_name": "DashTest Brand LLC", "address": "1 DashTest Ave", "country": "US"},
+    )
+    assert brand_resp.status_code == 201
+    brand_id = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor["id"]})
+    return vendor, brand_id
 
 
 async def _create_po(
     client: AsyncClient,
     vendor_id: str,
+    brand_id: str,
     currency: str = "USD",
     line_items: list[dict] | None = None,
 ) -> dict:
@@ -30,6 +45,7 @@ async def _create_po(
         ]
     body = {
         "vendor_id": vendor_id,
+        "brand_id": brand_id,
         "buyer_name": "TurboTonic Ltd",
         "buyer_country": "US",
         "ship_to_address": "123 Main St",
@@ -64,15 +80,15 @@ async def test_dashboard_empty_state(authenticated_client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_dashboard_po_counts_by_status(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
-    vendor = await _create_vendor(client)
+    vendor, brand_id = await _create_vendor(client)
     vendor_id = vendor["id"]
 
     # Create 2 DRAFT POs
-    await _create_po(client, vendor_id)
-    await _create_po(client, vendor_id)
+    await _create_po(client, vendor_id, brand_id)
+    await _create_po(client, vendor_id, brand_id)
 
     # Create 1 PENDING PO (submit it)
-    po = await _create_po(client, vendor_id)
+    po = await _create_po(client, vendor_id, brand_id)
     submit_resp = await client.post(f"/api/v1/po/{po['id']}/submit")
     assert submit_resp.status_code == 200
 
@@ -90,7 +106,7 @@ async def test_dashboard_po_counts_by_status(authenticated_client: AsyncClient) 
 @pytest.mark.asyncio
 async def test_dashboard_usd_conversion(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
-    vendor = await _create_vendor(client)
+    vendor, brand_id = await _create_vendor(client)
     vendor_id = vendor["id"]
 
     # 10 units at 100.00 EUR = 1000 EUR total
@@ -105,7 +121,7 @@ async def test_dashboard_usd_conversion(authenticated_client: AsyncClient) -> No
             "country_of_origin": "CN",
         }
     ]
-    await _create_po(client, vendor_id, currency="EUR", line_items=line_items)
+    await _create_po(client, vendor_id, brand_id, currency="EUR", line_items=line_items)
 
     resp = await client.get("/api/v1/dashboard/")
     assert resp.status_code == 200
@@ -119,7 +135,7 @@ async def test_dashboard_usd_conversion(authenticated_client: AsyncClient) -> No
 @pytest.mark.asyncio
 async def test_dashboard_multi_currency_same_status(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
-    vendor = await _create_vendor(client)
+    vendor, brand_id = await _create_vendor(client)
     vendor_id = vendor["id"]
 
     # USD PO: 5 units at 100.00 = 500 USD
@@ -134,7 +150,7 @@ async def test_dashboard_multi_currency_same_status(authenticated_client: AsyncC
             "country_of_origin": "CN",
         }
     ]
-    await _create_po(client, vendor_id, currency="USD", line_items=usd_items)
+    await _create_po(client, vendor_id, brand_id, currency="USD", line_items=usd_items)
 
     # EUR PO: 10 units at 100.00 = 1000 EUR
     eur_items = [
@@ -148,7 +164,7 @@ async def test_dashboard_multi_currency_same_status(authenticated_client: AsyncC
             "country_of_origin": "CN",
         }
     ]
-    await _create_po(client, vendor_id, currency="EUR", line_items=eur_items)
+    await _create_po(client, vendor_id, brand_id, currency="EUR", line_items=eur_items)
 
     resp = await client.get("/api/v1/dashboard/")
     assert resp.status_code == 200
@@ -163,8 +179,8 @@ async def test_dashboard_multi_currency_same_status(authenticated_client: AsyncC
 async def test_dashboard_vendor_counts(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
     # Create 2 active vendors
-    v1 = await _create_vendor(client, name="Vendor One")
-    v2 = await _create_vendor(client, name="Vendor Two")
+    v1, _b1 = await _create_vendor(client, name="Vendor One")
+    v2, _b2 = await _create_vendor(client, name="Vendor Two")
 
     # Deactivate one vendor
     deactivate_resp = await client.post(f"/api/v1/vendors/{v2['id']}/deactivate")
@@ -181,12 +197,12 @@ async def test_dashboard_vendor_counts(authenticated_client: AsyncClient) -> Non
 @pytest.mark.asyncio
 async def test_dashboard_recent_pos_limit(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
-    vendor = await _create_vendor(client)
+    vendor, brand_id = await _create_vendor(client)
     vendor_id = vendor["id"]
 
     # Create 12 POs
     for _ in range(12):
-        await _create_po(client, vendor_id)
+        await _create_po(client, vendor_id, brand_id)
 
     resp = await client.get("/api/v1/dashboard/")
     assert resp.status_code == 200
@@ -198,11 +214,11 @@ async def test_dashboard_recent_pos_limit(authenticated_client: AsyncClient) -> 
 @pytest.mark.asyncio
 async def test_dashboard_recent_pos_order(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
-    vendor = await _create_vendor(client)
+    vendor, brand_id = await _create_vendor(client)
     vendor_id = vendor["id"]
 
-    po1 = await _create_po(client, vendor_id)
-    po2 = await _create_po(client, vendor_id)
+    po1 = await _create_po(client, vendor_id, brand_id)
+    po2 = await _create_po(client, vendor_id, brand_id)
 
     # Submit po2 to update its updated_at timestamp more recently
     submit_resp = await client.post(f"/api/v1/po/{po2['id']}/submit")
@@ -221,10 +237,10 @@ async def test_dashboard_recent_pos_order(authenticated_client: AsyncClient) -> 
 async def test_dashboard_recent_pos_has_vendor_name(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
     vendor_name = "Acme Corp"
-    vendor = await _create_vendor(client, name=vendor_name)
+    vendor, brand_id = await _create_vendor(client, name=vendor_name)
     vendor_id = vendor["id"]
 
-    await _create_po(client, vendor_id)
+    await _create_po(client, vendor_id, brand_id)
 
     resp = await client.get("/api/v1/dashboard/")
     assert resp.status_code == 200

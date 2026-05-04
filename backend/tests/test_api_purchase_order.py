@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 from datetime import UTC, datetime
 
 import pytest
@@ -16,6 +17,9 @@ pytestmark = pytest.mark.asyncio
 # ---------------------------------------------------------------------------
 # Test data helpers
 # ---------------------------------------------------------------------------
+
+_brand_counter = itertools.count(1)
+
 
 _LINE_ITEM: dict = {
     "part_number": "PN-001",
@@ -60,7 +64,16 @@ async def _create_po(client: AsyncClient, payload: dict | None = None) -> dict:
     p = dict(payload or _PO_PAYLOAD)
     vendor_resp = await client.post("/api/v1/vendors/", json={"name": "Test Vendor", "country": "US", "vendor_type": "PROCUREMENT"})
     assert vendor_resp.status_code == 201
-    p["vendor_id"] = vendor_resp.json()["id"]
+    vendor_id = vendor_resp.json()["id"]
+    p["vendor_id"] = vendor_id
+    # Create uniquely-named brand and link vendor so the vendor-in-brand validation passes.
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post("/api/v1/brands/", json={"name": f"TestBrand-{brand_n}", "legal_name": "Test Brand LLC", "address": "1 Test Ave", "country": "US"})
+    assert brand_resp.status_code == 201
+    brand_id = brand_resp.json()["id"]
+    link_resp = await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
+    assert link_resp.status_code in (200, 201)
+    p["brand_id"] = brand_id
     resp = await client.post("/api/v1/po/", json=p)
     assert resp.status_code == 201
     return resp.json()
@@ -72,7 +85,12 @@ async def _create_two_line_po(client: AsyncClient) -> dict:
     )
     assert vendor_resp.status_code == 201
     vendor_id = vendor_resp.json()["id"]
-    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "line_items": [_LINE_ITEM, _LINE_ITEM_2]}
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post("/api/v1/brands/", json={"name": f"TwoLineBrand-{brand_n}", "legal_name": "TwoLine Brand LLC", "address": "2 Test Ave", "country": "US"})
+    assert brand_resp.status_code == 201
+    brand_id = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "brand_id": brand_id, "line_items": [_LINE_ITEM, _LINE_ITEM_2]}
     resp = await client.post("/api/v1/po/", json=payload)
     assert resp.status_code == 201
     return resp.json()
@@ -138,7 +156,13 @@ async def _create_vendor(client: AsyncClient, name: str, country: str = "US", ve
 
 
 async def _create_po_for_vendor(client: AsyncClient, vendor_id: str, overrides: dict | None = None) -> dict:
-    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, **(overrides or {})}
+    # Create a uniquely-named brand (counter avoids name collisions on repeated calls) and link vendor.
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post("/api/v1/brands/", json={"name": f"VendorBrand-{brand_n}", "legal_name": "Vendor Brand LLC", "address": "3 Test Ave", "country": "US"})
+    assert brand_resp.status_code == 201
+    brand_id = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "brand_id": brand_id, **(overrides or {})}
     resp = await client.post("/api/v1/po/", json=payload)
     assert resp.status_code == 201
     return resp.json()
@@ -460,8 +484,12 @@ async def _make_payload_with_hs_code(client: AsyncClient, hs_code: str) -> tuple
         "/api/v1/vendors/", json={"name": "HS Vendor", "country": "US", "vendor_type": "PROCUREMENT"}
     )
     vendor_id = vendor_resp.json()["id"]
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post("/api/v1/brands/", json={"name": f"HSBrand-{brand_n}", "legal_name": "HS Brand LLC", "address": "4 Test Ave", "country": "US"})
+    brand_id = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
     line_item = {**_LINE_ITEM, "hs_code": hs_code}
-    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "line_items": [line_item]}
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "brand_id": brand_id, "line_items": [line_item]}
     resp = await client.post("/api/v1/po/", json=payload)
     return resp.json(), resp.status_code
 
@@ -929,8 +957,16 @@ async def _create_marketplace_po_with_product(
     )
     assert vendor_resp.status_code == 201
     vendor_id: str = vendor_resp.json()["id"]
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post(
+        "/api/v1/brands/",
+        json={"name": f"CertBrand-{brand_n}", "legal_name": "Cert Brand LLC", "address": "1 Cert Ave", "country": "US"},
+    )
+    assert brand_resp.status_code == 201
+    brand_id: str = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
     line = {**_LINE_WITH_PRODUCT, "product_id": product_id}
-    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "line_items": [line], "marketplace": _MARKETPLACE}
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "brand_id": brand_id, "line_items": [line], "marketplace": _MARKETPLACE}
     resp = await client.post("/api/v1/po/", json=payload)
     assert resp.status_code == 201
     return resp.json()
@@ -953,10 +989,14 @@ async def test_submit_po_with_valid_cert_returns_empty_warnings(authenticated_cl
         "/api/v1/vendors/", json={"name": "VendorV", "country": "US", "vendor_type": "PROCUREMENT"}
     )
     vendor_id: str = vendor_resp.json()["id"]
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post("/api/v1/brands/", json={"name": f"VendorVBrand-{brand_n}", "legal_name": "VendorV Brand LLC", "address": "1 VendorV Ave", "country": "US"})
+    brand_id: str = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
     product_id, qt_id = await _setup_product_with_qual(client, vendor_id)
     await _create_valid_cert(client, product_id, qt_id)
     line = {**_LINE_WITH_PRODUCT, "product_id": product_id}
-    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "line_items": [line], "marketplace": _MARKETPLACE}
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "brand_id": brand_id, "line_items": [line], "marketplace": _MARKETPLACE}
     po_resp = await client.post("/api/v1/po/", json=payload)
     po_id: str = po_resp.json()["id"]
 
@@ -972,10 +1012,14 @@ async def test_submit_po_with_missing_cert_returns_warning(authenticated_client:
         "/api/v1/vendors/", json={"name": "VendorM", "country": "US", "vendor_type": "PROCUREMENT"}
     )
     vendor_id: str = vendor_resp.json()["id"]
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post("/api/v1/brands/", json={"name": f"VendorMBrand-{brand_n}", "legal_name": "VendorM Brand LLC", "address": "1 VendorM Ave", "country": "US"})
+    brand_id: str = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
     product_id, qt_id = await _setup_product_with_qual(client, vendor_id)
     # No cert created.
     line = {**_LINE_WITH_PRODUCT, "product_id": product_id}
-    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "line_items": [line], "marketplace": _MARKETPLACE}
+    payload = {**_PO_PAYLOAD, "vendor_id": vendor_id, "brand_id": brand_id, "line_items": [line], "marketplace": _MARKETPLACE}
     po_resp = await client.post("/api/v1/po/", json=payload)
     po_id: str = po_resp.json()["id"]
 

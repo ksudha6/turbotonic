@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import itertools
+
 import pytest
 from httpx import AsyncClient
 
 from src.domain.user import User, UserRole, UserStatus
+
+_brand_counter = itertools.count(1)
 
 pytestmark = pytest.mark.asyncio
 
@@ -68,6 +72,17 @@ async def _create_po_with_vendor_user(
     assert vendor_resp.status_code == 201
     vendor_id = vendor_resp.json()["id"]
     p["vendor_id"] = vendor_id
+
+    # Create brand and link vendor.
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post(
+        "/api/v1/brands/",
+        json={"name": f"NotifBrand-{brand_n}", "legal_name": "Notif Brand LLC", "address": "1 Notif Ave", "country": "US"},
+    )
+    assert brand_resp.status_code == 201
+    brand_id = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
+    p["brand_id"] = brand_id
 
     # Seed a VENDOR user directly via the shared test connection so the
     # dispatcher's recipient resolver has a row to match against.

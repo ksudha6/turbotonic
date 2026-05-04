@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import itertools
+
 import pytest
 from httpx import AsyncClient
 
 pytestmark = pytest.mark.asyncio
+
+_brand_counter = itertools.count(1)
 
 _LINE_ITEM = {
     "part_number": "PN-001",
@@ -49,8 +53,14 @@ async def _create_accepted_po(client: AsyncClient) -> dict:
         "/api/v1/vendors/",
         json={"name": "Test Vendor", "country": "US", "vendor_type": "PROCUREMENT"},
     )
+    vendor_id = vendor.json()["id"]
+    brand_n = next(_brand_counter)
+    brand = await client.post("/api/v1/brands/", json={"name": f"InvPDFBrand-{brand_n}", "legal_name": "InvPDF Brand LLC", "address": "1 Inv Ave", "country": "US"})
+    brand_id = brand.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
     payload = dict(_PO_PAYLOAD)
-    payload["vendor_id"] = vendor.json()["id"]
+    payload["vendor_id"] = vendor_id
+    payload["brand_id"] = brand_id
     po = await client.post("/api/v1/po/", json=payload)
     po_id = po.json()["id"]
     await client.post(f"/api/v1/po/{po_id}/submit")

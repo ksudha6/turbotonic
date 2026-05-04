@@ -19,9 +19,21 @@ async def test_full_po_lifecycle(authenticated_client: AsyncClient):
     assert vendor_resp.status_code == 201
     vendor_id = vendor_resp.json()["id"]
 
+    # 1b. Create brand and link vendor.
+    brand_resp = await client.post("/api/v1/brands/", json={
+        "name": "Lifecycle Brand",
+        "legal_name": "Lifecycle Brand LLC",
+        "address": "1 Lifecycle Ave",
+        "country": "US",
+    })
+    assert brand_resp.status_code == 201
+    brand_id = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
+
     # 2. Create PO with line items
     po_resp = await client.post("/api/v1/po/", json={
         "vendor_id": vendor_id,
+        "brand_id": brand_id,
         "po_type": "PROCUREMENT",
         "buyer_name": "Test Buyer",
         "buyer_country": "US",

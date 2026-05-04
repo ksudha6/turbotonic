@@ -7,6 +7,7 @@ from fastapi.responses import Response
 
 from src.activity_repository import ActivityLogRepository
 from src.auth.dependencies import check_vendor_access, require_auth, require_role
+from src.brand_repository import BrandRepository
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType, TargetRole
 from src.domain.purchase_order import (
@@ -75,6 +76,14 @@ async def get_vendor_repo() -> AsyncIterator[VendorRepository]:
 
 
 VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
+
+
+async def get_brand_repo() -> AsyncIterator[BrandRepository]:
+    async with get_db() as conn:
+        yield BrandRepository(conn)
+
+
+BrandRepoDep = Annotated[BrandRepository, Depends(get_brand_repo)]
 
 
 async def get_invoice_repo() -> AsyncIterator[InvoiceRepository]:
@@ -171,7 +180,7 @@ def _build_line_items(data: PurchaseOrderCreate | PurchaseOrderUpdate) -> list[L
 
 
 @router.post("/", response_model=PurchaseOrderResponse, status_code=201)
-async def create_po(body: PurchaseOrderCreate, repo: RepoDep, vendor_repo: VendorRepoDep, activity_repo: ActivityRepoDep, _user: User = require_role(UserRole.SM)) -> PurchaseOrderResponse:
+async def create_po(body: PurchaseOrderCreate, repo: RepoDep, vendor_repo: VendorRepoDep, brand_repo: BrandRepoDep, activity_repo: ActivityRepoDep, _user: User = require_role(UserRole.SM)) -> PurchaseOrderResponse:
     vendor = await vendor_repo.get_by_id(body.vendor_id)
     if vendor is None:
         raise HTTPException(status_code=422, detail="Vendor not found")
@@ -182,6 +191,15 @@ async def create_po(body: PurchaseOrderCreate, repo: RepoDep, vendor_repo: Vendo
         raise HTTPException(
             status_code=422,
             detail=f"Vendor type {vendor.vendor_type.value} does not match PO type {po_type.value}",
+        )
+    brand = await brand_repo.get(body.brand_id)
+    if brand is None:
+        raise HTTPException(status_code=422, detail="Brand not found")
+    vendor_in_brand = await brand_repo.is_vendor_assigned_to_brand(body.brand_id, body.vendor_id)
+    if not vendor_in_brand:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Vendor is not assigned to brand {brand.name}",
         )
     po_number = await repo.next_po_number()
     line_items = _build_line_items(body)
@@ -205,12 +223,16 @@ async def create_po(body: PurchaseOrderCreate, repo: RepoDep, vendor_repo: Vendo
             line_items=line_items,
             po_type=po_type,
             marketplace=body.marketplace,
+            brand_id=body.brand_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await repo.save(po)
     await activity_repo.append(EntityType.PO, po.id, ActivityEvent.PO_CREATED)
-    return po_to_response(po, vendor_name=vendor.name, vendor_country=vendor.country)
+    # Reload to get brand JOIN fields populated.
+    po_full = await repo.get(po.id)
+    assert po_full is not None
+    return po_to_response(po_full, vendor_name=vendor.name, vendor_country=vendor.country)
 
 
 @router.get("/", response_model=PaginatedPOList)
@@ -287,6 +309,8 @@ async def list_pos(
             marketplace=row.get("marketplace"),
             round_count=row.get("round_count") or 0,
             has_removed_line=bool(row.get("has_removed_line")),
+            brand_id=row.get("brand_id"),
+            brand_name=row.get("brand_name"),
         )
         for row in rows
     ]
@@ -846,6 +870,9 @@ async def update_po(po_id: str, body: PurchaseOrderUpdate, repo: RepoDep, vendor
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
     check_vendor_access(user, po.vendor_id)
+    # brand_id is immutable on update; reject if caller attempts to change it.
+    if body.brand_id is not None and body.brand_id != po.brand_id:
+        raise HTTPException(status_code=422, detail="brand_id is immutable on update")
     vendor = await vendor_repo.get_by_id(body.vendor_id)
     if vendor is None:
         raise HTTPException(status_code=422, detail="Vendor not found")

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncpg
+import itertools
+
 import pytest
 from httpx import AsyncClient
 
@@ -8,6 +10,8 @@ from src.routers.dashboard import get_milestone_repo as dash_get_milestone_repo
 from src.main import app
 
 pytestmark = pytest.mark.asyncio
+
+_brand_counter = itertools.count(1)
 
 _LINE_ITEM = {
     "part_number": "PN-001",
@@ -44,8 +48,15 @@ async def _create_accepted_procurement_po(client: AsyncClient) -> dict:
         json={"name": "Test Vendor", "country": "US", "vendor_type": "PROCUREMENT"},
     )
     assert vendor.status_code == 201
+    vendor_id = vendor.json()["id"]
+    brand_n = next(_brand_counter)
+    brand = await client.post("/api/v1/brands/", json={"name": f"MsBrand-{brand_n}", "legal_name": "Ms Brand LLC", "address": "1 Ms Ave", "country": "US"})
+    assert brand.status_code == 201
+    brand_id = brand.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
     payload = dict(_PO_PAYLOAD)
-    payload["vendor_id"] = vendor.json()["id"]
+    payload["vendor_id"] = vendor_id
+    payload["brand_id"] = brand_id
     payload["po_type"] = "PROCUREMENT"
     po = await client.post("/api/v1/po/", json=payload)
     assert po.status_code == 201
@@ -61,8 +72,15 @@ async def _create_accepted_opex_po(client: AsyncClient) -> dict:
         json={"name": "OPEX Vendor", "country": "US", "vendor_type": "OPEX"},
     )
     assert vendor.status_code == 201
+    vendor_id = vendor.json()["id"]
+    brand_n = next(_brand_counter)
+    brand = await client.post("/api/v1/brands/", json={"name": f"MsOpexBrand-{brand_n}", "legal_name": "Ms Opex Brand LLC", "address": "1 OpexMs Ave", "country": "US"})
+    assert brand.status_code == 201
+    brand_id = brand.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
     payload = dict(_PO_PAYLOAD)
-    payload["vendor_id"] = vendor.json()["id"]
+    payload["vendor_id"] = vendor_id
+    payload["brand_id"] = brand_id
     payload["po_type"] = "OPEX"
     po = await client.post("/api/v1/po/", json=payload)
     assert po.status_code == 201
@@ -95,8 +113,14 @@ async def test_reject_milestone_on_non_accepted_po(authenticated_client: AsyncCl
         "/api/v1/vendors/",
         json={"name": "Draft Vendor", "country": "US", "vendor_type": "PROCUREMENT"},
     )
+    vendor_id = vendor.json()["id"]
+    brand_n = next(_brand_counter)
+    brand = await client.post("/api/v1/brands/", json={"name": f"DraftBrand-{brand_n}", "legal_name": "Draft Brand LLC", "address": "1 Draft Ave", "country": "US"})
+    brand_id = brand.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
     payload = dict(_PO_PAYLOAD)
-    payload["vendor_id"] = vendor.json()["id"]
+    payload["vendor_id"] = vendor_id
+    payload["brand_id"] = brand_id
     payload["po_type"] = "PROCUREMENT"
     po = await client.post("/api/v1/po/", json=payload)
     po_id = po.json()["id"]

@@ -10,8 +10,11 @@ import asyncpg
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+import itertools
+
 from src.activity_repository import ActivityLogRepository
 from src.auth.session import COOKIE_NAME, create_session_cookie
+from src.brand_repository import BrandRepository
 from src.certificate_repository import CertificateRepository
 from src.domain.user import User, UserRole
 from src.domain.vendor import Vendor, VendorType
@@ -23,6 +26,11 @@ from src.product_repository import ProductRepository
 from src.repository import PurchaseOrderRepository
 from src.routers.activity import get_activity_repo as activity_get_activity_repo
 from src.routers.auth import get_user_repo as auth_get_user_repo
+from src.routers.brands import (
+    get_brand_repo as brands_get_brand_repo,
+    get_vendor_repo_for_brands as brands_get_vendor_repo,
+    get_activity_repo_for_brands as brands_get_activity_repo,
+)
 from src.routers.dashboard import get_activity_repo as dash_get_activity_repo
 from src.routers.dashboard import get_invoice_repo as dash_get_invoice_repo
 from src.routers.dashboard import get_milestone_repo as dash_get_milestone_repo
@@ -36,6 +44,7 @@ from src.routers.milestone import get_activity_repo as milestone_get_activity_re
 from src.routers.milestone import get_milestone_repo as milestone_get_milestone_repo
 from src.routers.milestone import get_po_repo as milestone_get_po_repo
 from src.routers.purchase_order import get_activity_repo as po_get_activity_repo
+from src.routers.purchase_order import get_brand_repo as po_get_brand_repo
 from src.routers.purchase_order import get_cert_repo as po_get_cert_repo
 from src.routers.purchase_order import get_email_service as po_get_email_service
 from src.routers.purchase_order import get_invoice_repo as po_get_invoice_repo
@@ -45,6 +54,8 @@ from src.routers.purchase_order import get_qualification_repo as po_get_qualific
 from src.routers.purchase_order import get_repo
 from src.routers.purchase_order import get_vendor_repo as po_get_vendor_repo
 from src.routers.vendor import get_vendor_repo as vendor_get_vendor_repo
+
+_brand_counter = itertools.count(1)
 from src.schema import init_db
 from src.services.email import RenderedEmail, render_email
 from src.services.notifications import NotificationDispatcher
@@ -108,6 +119,9 @@ def _setup_overrides(conn: asyncpg.Connection) -> None:
     async def override_get_user_repo() -> AsyncIterator[UserRepository]:
         yield UserRepository(conn)
 
+    async def override_get_brand_repo() -> AsyncIterator[BrandRepository]:
+        yield BrandRepository(conn)
+
     def override_get_email_service() -> _FakeEmailService:
         return fake_email
 
@@ -119,7 +133,11 @@ def _setup_overrides(conn: asyncpg.Connection) -> None:
         )
 
     app.dependency_overrides[get_repo] = override_get_repo
+    app.dependency_overrides[po_get_brand_repo] = override_get_brand_repo
     app.dependency_overrides[po_get_vendor_repo] = override_get_vendor_repo
+    app.dependency_overrides[brands_get_brand_repo] = override_get_brand_repo
+    app.dependency_overrides[brands_get_vendor_repo] = override_get_vendor_repo
+    app.dependency_overrides[brands_get_activity_repo] = override_get_activity_repo
     app.dependency_overrides[po_get_invoice_repo] = override_get_invoice_repo
     app.dependency_overrides[po_get_activity_repo] = override_get_activity_repo
     app.dependency_overrides[po_get_product_repo] = override_get_product_repo
@@ -194,18 +212,29 @@ async def _client_ctx(
     app.dependency_overrides.clear()
 
 
-async def _seed_vendor(client: AsyncClient, name: str = "Test Vendor") -> dict:
+async def _seed_vendor(client: AsyncClient, name: str = "Test Vendor") -> tuple[dict, str]:
+    """Create vendor + brand, link them; return (vendor_dict, brand_id)."""
     resp = await client.post(
         "/api/v1/vendors/",
         json={"name": name, "country": "CN", "vendor_type": "PROCUREMENT"},
     )
     assert resp.status_code == 201
-    return resp.json()
+    vendor = resp.json()
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post(
+        "/api/v1/brands/",
+        json={"name": f"DashBrand-{brand_n}", "legal_name": "Dash Brand LLC", "address": "1 Dash Ave", "country": "US"},
+    )
+    assert brand_resp.status_code == 201
+    brand_id = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor["id"]})
+    return vendor, brand_id
 
 
-async def _seed_procurement_po(client: AsyncClient, vendor_id: str) -> dict:
+async def _seed_procurement_po(client: AsyncClient, vendor_id: str, brand_id: str) -> dict:
     body = {
         "vendor_id": vendor_id,
+        "brand_id": brand_id,
         "po_type": "PROCUREMENT",
         "buyer_name": "TurboTonic Ltd",
         "buyer_country": "US",
@@ -237,20 +266,30 @@ async def _seed_procurement_po(client: AsyncClient, vendor_id: str) -> dict:
     return resp.json()
 
 
-async def _seed_opex_vendor(client: AsyncClient, name: str = "Opex Vendor") -> dict:
-    """Create an OPEX vendor."""
+async def _seed_opex_vendor(client: AsyncClient, name: str = "Opex Vendor") -> tuple[dict, str]:
+    """Create an OPEX vendor + brand, link them; return (vendor_dict, brand_id)."""
     resp = await client.post(
         "/api/v1/vendors/",
         json={"name": name, "country": "CN", "vendor_type": "OPEX"},
     )
     assert resp.status_code == 201
-    return resp.json()
+    vendor = resp.json()
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post(
+        "/api/v1/brands/",
+        json={"name": f"DashOpexBrand-{brand_n}", "legal_name": "Dash Opex Brand LLC", "address": "1 DashOpex Ave", "country": "US"},
+    )
+    assert brand_resp.status_code == 201
+    brand_id = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor["id"]})
+    return vendor, brand_id
 
 
-async def _seed_opex_po(client: AsyncClient, vendor_id: str) -> dict:
+async def _seed_opex_po(client: AsyncClient, vendor_id: str, brand_id: str) -> dict:
     """Create an OPEX PO. vendor_id must belong to an OPEX vendor."""
     body = {
         "vendor_id": vendor_id,
+        "brand_id": brand_id,
         "po_type": "OPEX",
         "buyer_name": "TurboTonic Ltd",
         "buyer_country": "US",
@@ -336,12 +375,12 @@ async def _create_and_submit_invoice(
 
 async def test_admin_sees_global_kpis_and_activity() -> None:
     async with _client_ctx(UserRole.ADMIN) as (ac, _conn):
-        vendor = await _seed_vendor(ac, "AdminVendor")
+        vendor, brand_id = await _seed_vendor(ac, "AdminVendor")
         vendor_id = vendor["id"]
 
         # Create procurement POs so pending_pos >= 1
-        await _seed_procurement_po(ac, vendor_id)
-        await _seed_procurement_po(ac, vendor_id)
+        await _seed_procurement_po(ac, vendor_id, brand_id)
+        await _seed_procurement_po(ac, vendor_id, brand_id)
 
         resp = await ac.get(SUMMARY_URL)
         assert resp.status_code == 200
@@ -401,8 +440,8 @@ async def test_admin_sees_global_kpis_and_activity() -> None:
 
 async def test_sm_scopes_to_procurement() -> None:
     async with _client_ctx(UserRole.SM) as (sm_ac, conn):
-        # Also create an ADMIN user in the same transaction so the admin request
-        # sees the same seeded data.
+        # ADMIN user seeds brands/vendors (brand creation requires ADMIN role).
+        # SM client only creates POs and queries the summary.
         admin_user = User.create(
             username="test-admin-summary-scoping",
             display_name="Test Admin",
@@ -411,20 +450,6 @@ async def test_sm_scopes_to_procurement() -> None:
         await UserRepository(conn).save(admin_user)
         admin_cookie = create_session_cookie(admin_user.id)
 
-        proc_vendor = await _seed_vendor(sm_ac, "ScopingProcurementVendor")
-        proc_vendor_id = proc_vendor["id"]
-        opex_vendor = await _seed_opex_vendor(sm_ac, "ScopingOpexVendor")
-        opex_vendor_id = opex_vendor["id"]
-
-        # One PROCUREMENT PO and one OPEX PO (vendor types must match PO types)
-        await _seed_procurement_po(sm_ac, proc_vendor_id)
-        await _seed_opex_po(sm_ac, opex_vendor_id)
-
-        sm_resp = await sm_ac.get(SUMMARY_URL)
-        assert sm_resp.status_code == 200
-        sm_data = sm_resp.json()
-
-        # Make an admin request reusing the same transport/conn/overrides
         @asynccontextmanager
         async def _test_get_db() -> AsyncIterator[asyncpg.Connection]:
             yield conn
@@ -438,7 +463,22 @@ async def test_sm_scopes_to_procurement() -> None:
                 base_url="http://test",
                 cookies={COOKIE_NAME: admin_cookie},
             ) as admin_ac:
+                # Seed brands and vendors via admin (ADMIN role required for brand creation).
+                proc_vendor, proc_brand_id = await _seed_vendor(admin_ac, "ScopingProcurementVendor")
+                proc_vendor_id = proc_vendor["id"]
+                opex_vendor, opex_brand_id = await _seed_opex_vendor(admin_ac, "ScopingOpexVendor")
+                opex_vendor_id = opex_vendor["id"]
+
+                # One PROCUREMENT PO and one OPEX PO (vendor types must match PO types).
+                # SM creates POs — SM has permission to create POs.
+                await _seed_procurement_po(sm_ac, proc_vendor_id, proc_brand_id)
+                await _seed_opex_po(sm_ac, opex_vendor_id, opex_brand_id)
+
                 admin_resp = await admin_ac.get(SUMMARY_URL)
+
+        sm_resp = await sm_ac.get(SUMMARY_URL)
+        assert sm_resp.status_code == 200
+        sm_data = sm_resp.json()
 
         assert admin_resp.status_code == 200
         admin_data = admin_resp.json()
@@ -525,14 +565,14 @@ async def test_pm_sees_procurement_scoped_summary() -> None:
                 cookies={COOKIE_NAME: admin_cookie},
             ) as admin_ac:
                 # Seed vendors and POs via ADMIN (PM cannot create vendors).
-                proc_vendor = await _seed_vendor(admin_ac, "PMScopingProcVendor")
+                proc_vendor, proc_brand_id = await _seed_vendor(admin_ac, "PMScopingProcVendor")
                 proc_vendor_id = proc_vendor["id"]
-                opex_vendor = await _seed_opex_vendor(admin_ac, "PMScopingOpexVendor")
+                opex_vendor, opex_brand_id = await _seed_opex_vendor(admin_ac, "PMScopingOpexVendor")
                 opex_vendor_id = opex_vendor["id"]
 
                 # One PROCUREMENT PO and one OPEX PO, both in DRAFT state.
-                await _seed_procurement_po(admin_ac, proc_vendor_id)
-                await _seed_opex_po(admin_ac, opex_vendor_id)
+                await _seed_procurement_po(admin_ac, proc_vendor_id, proc_brand_id)
+                await _seed_opex_po(admin_ac, opex_vendor_id, opex_brand_id)
 
                 admin_resp = await admin_ac.get(SUMMARY_URL)
 

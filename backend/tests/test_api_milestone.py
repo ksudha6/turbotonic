@@ -6,6 +6,8 @@ activity emission on QC_PASSED.
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 from httpx import AsyncClient
 
@@ -13,6 +15,8 @@ from src.domain.activity import ActivityEvent
 from src.domain.milestone import ProductionMilestone, MILESTONE_ORDER
 
 pytestmark = pytest.mark.asyncio
+
+_brand_counter = itertools.count(1)
 
 # ---------------------------------------------------------------------------
 # Shared payloads
@@ -54,15 +58,26 @@ _MARKETPLACE = "AMZ"
 # ---------------------------------------------------------------------------
 
 
-async def _create_vendor(client: AsyncClient) -> str:
+async def _create_vendor(client: AsyncClient) -> tuple[str, str]:
+    """Create vendor + brand, link them; return (vendor_id, brand_id)."""
     resp = await client.post("/api/v1/vendors/", json=_VENDOR_PAYLOAD)
     assert resp.status_code == 201
-    return resp.json()["id"]
+    vendor_id = resp.json()["id"]
+    brand_n = next(_brand_counter)
+    brand_resp = await client.post(
+        "/api/v1/brands/",
+        json={"name": f"MsBrand-{brand_n}", "legal_name": "Ms Brand LLC", "address": "1 Ms Ave", "country": "US"},
+    )
+    assert brand_resp.status_code == 201
+    brand_id = brand_resp.json()["id"]
+    await client.post(f"/api/v1/brands/{brand_id}/vendors", json={"vendor_id": vendor_id})
+    return vendor_id, brand_id
 
 
 async def _create_accepted_po(
     client: AsyncClient,
     vendor_id: str,
+    brand_id: str,
     marketplace: str | None = None,
     product_id: str | None = None,
 ) -> str:
@@ -72,6 +87,7 @@ async def _create_accepted_po(
     payload = {
         **_PO_BASE,
         "vendor_id": vendor_id,
+        "brand_id": brand_id,
         "line_items": [line],
     }
     if marketplace is not None:
@@ -147,8 +163,8 @@ async def _create_valid_cert(client: AsyncClient, product_id: str, qt_id: str) -
 
 async def test_post_first_milestone_returns_201(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
-    vendor_id = await _create_vendor(client)
-    po_id = await _create_accepted_po(client, vendor_id)
+    vendor_id, brand_id = await _create_vendor(client)
+    po_id = await _create_accepted_po(client, vendor_id, brand_id)
     resp = await client.post(f"/api/v1/po/{po_id}/milestones", json={"milestone": "RAW_MATERIALS"})
     assert resp.status_code == 201
     assert resp.json()["milestone"] == ProductionMilestone.RAW_MATERIALS.value
@@ -156,16 +172,16 @@ async def test_post_first_milestone_returns_201(authenticated_client: AsyncClien
 
 async def test_post_out_of_order_milestone_returns_409(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
-    vendor_id = await _create_vendor(client)
-    po_id = await _create_accepted_po(client, vendor_id)
+    vendor_id, brand_id = await _create_vendor(client)
+    po_id = await _create_accepted_po(client, vendor_id, brand_id)
     resp = await client.post(f"/api/v1/po/{po_id}/milestones", json={"milestone": "QC_PASSED"})
     assert resp.status_code == 409
 
 
 async def test_post_milestone_on_draft_po_returns_409(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
-    vendor_id = await _create_vendor(client)
-    payload = {**_PO_BASE, "vendor_id": vendor_id, "line_items": [_LINE]}
+    vendor_id, brand_id = await _create_vendor(client)
+    payload = {**_PO_BASE, "vendor_id": vendor_id, "brand_id": brand_id, "line_items": [_LINE]}
     po_resp = await client.post("/api/v1/po/", json=payload)
     po_id: str = po_resp.json()["id"]
     resp = await client.post(f"/api/v1/po/{po_id}/milestones", json={"milestone": "RAW_MATERIALS"})
@@ -174,8 +190,8 @@ async def test_post_milestone_on_draft_po_returns_409(authenticated_client: Asyn
 
 async def test_list_milestones_returns_posted_milestones(authenticated_client: AsyncClient) -> None:
     client = authenticated_client
-    vendor_id = await _create_vendor(client)
-    po_id = await _create_accepted_po(client, vendor_id)
+    vendor_id, brand_id = await _create_vendor(client)
+    po_id = await _create_accepted_po(client, vendor_id, brand_id)
     await client.post(f"/api/v1/po/{po_id}/milestones", json={"milestone": "RAW_MATERIALS"})
     resp = await client.get(f"/api/v1/po/{po_id}/milestones")
     assert resp.status_code == 200
@@ -192,10 +208,10 @@ async def test_qc_passed_with_missing_cert_emits_cert_requested_activity(
     authenticated_client: AsyncClient,
 ) -> None:
     client = authenticated_client
-    vendor_id = await _create_vendor(client)
+    vendor_id, brand_id = await _create_vendor(client)
     product_id, _ = await _create_product_with_qual(client, vendor_id)
     # No cert created.
-    po_id = await _create_accepted_po(client, vendor_id, marketplace=_MARKETPLACE, product_id=product_id)
+    po_id = await _create_accepted_po(client, vendor_id, brand_id, marketplace=_MARKETPLACE, product_id=product_id)
     await _post_milestones_up_to(client, po_id, ProductionMilestone.QC_PASSED)
 
     # Verify CERT_REQUESTED activity was created via activity feed (list_recent, large limit).
@@ -215,10 +231,10 @@ async def test_qc_passed_with_valid_cert_does_not_emit_cert_requested(
     authenticated_client: AsyncClient,
 ) -> None:
     client = authenticated_client
-    vendor_id = await _create_vendor(client)
+    vendor_id, brand_id = await _create_vendor(client)
     product_id, qt_id = await _create_product_with_qual(client, vendor_id)
     await _create_valid_cert(client, product_id, qt_id)
-    po_id = await _create_accepted_po(client, vendor_id, marketplace=_MARKETPLACE, product_id=product_id)
+    po_id = await _create_accepted_po(client, vendor_id, brand_id, marketplace=_MARKETPLACE, product_id=product_id)
     await _post_milestones_up_to(client, po_id, ProductionMilestone.QC_PASSED)
 
     activity_resp = await client.get("/api/v1/activity/?limit=50")
@@ -235,9 +251,9 @@ async def test_qc_passed_with_no_product_id_does_not_emit_cert_requested(
     authenticated_client: AsyncClient,
 ) -> None:
     client = authenticated_client
-    vendor_id = await _create_vendor(client)
+    vendor_id, brand_id = await _create_vendor(client)
     # PO with line items that have no product_id link.
-    po_id = await _create_accepted_po(client, vendor_id, marketplace=_MARKETPLACE, product_id=None)
+    po_id = await _create_accepted_po(client, vendor_id, brand_id, marketplace=_MARKETPLACE, product_id=None)
     await _post_milestones_up_to(client, po_id, ProductionMilestone.QC_PASSED)
 
     activity_resp = await client.get("/api/v1/activity/?limit=50")

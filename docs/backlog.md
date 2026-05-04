@@ -11,7 +11,7 @@
 - [ ] Dedicated `/api/v1/po/ids` endpoint (cross-page selection beyond 200)
 - [ ] Live/historical exchange rates for dashboard
 - [ ] Field-level mutability rules tied to lifecycle status
-- [ ] Buyer as first-class entity (currently hardcoded)
+- [x] Buyer as first-class entity (resolved iter 108: Brand aggregate; backend-only — frontend follows in iter 109)
 - [ ] Partial PO acceptance (accept/reject at line-item level)
 - [x] Notifications (in-app alerts for status changes, assignments, deadlines) (iterations 23-24)
 
@@ -40,3 +40,86 @@
 ## Type-hardening (deferred from iter 085)
 
 - [ ] 29 svelte-check errors carried since iter 085 close. Splits: 13 in test fixtures (`tests/po-detail.spec.ts`, `po-documents.spec.ts`, `po-negotiation.spec.ts`, `nexus-dashboard.spec.ts`) — same root cause `typeof SM_USER` narrows literal `vendor_id: null` (folds into G-29). 2 in `(nexus)/po/[id]/+page.svelte:330,432` — same `let po: T \| null = $state(null)` narrowing pattern fixed on the edit page in iter 085 (fix: `let po = $state<PurchaseOrder \| null>(null)`). 6 in `(nexus)/dashboard/+page.svelte` — `summary` possibly null. 2 in `routes/shipments/[id]/+page.svelte:53` — same `$state(null)` narrowing. 1 in `routes/products/+page.svelte:78` — orphaned `requires_certification` from iter 036a. 4 in `tests/po-documents.spec.ts` — `Buffer` not found, missing `@types/node`. 1 in `tests/po-lifecycle.spec.ts:545` — null → Record cast (incorrectly noted as fixed in iter 085 summary).
+
+## Multi-brand / multi-entity foundation
+
+Surfaced 2026-05-02 during iter 108 brainstorming. Recorded so future iters do not re-derive them.
+
+- [x] **Brand entity** (the missing buyer principal). Backend done in iter 108 (closed 2026-05-03; see `work-log/2026-05-02/iteration-108.md`). Frontend `/brands` admin pages + PO create-form `BrandSelect` cascade pending in iter 109.
+- [ ] **Brand-scoped marketplace accounts**: today marketplace is a PO enum (AMZ, 3PL_1, ...). For multi-brand operators, Brand A's AMZ seller account is not Brand B's. Folds in the parked FBA-specific fields (FBA Shipment ID, FNSKU, ASIN, fulfilment-centre code). Becomes blocking when a second brand uses the same marketplace with a different account.
+- [ ] **Brand-scoped user access**: parallels VENDOR-scoping. Brand A's ops manager sees only Brand A's POs / invoices / shipments. ADMIN/SM at the operator level remain unscoped. Blocks first hire of brand-specific ops staff.
+- [ ] **VendorParty (multi-entity vendor)**: today `Vendor` is a single flat row. Trade reality has up to four legal/physical parties under one vendor relationship: Manufacturer (CoO + per-line manufacturer block), Seller (CI Seller + tax_id + payment recipient), Shipper (PL Shipper + BoL Consignor), Remit-to (banking destination). Polymorphic `VendorParty` row with `role` enum, plus per-product / per-shipment / per-PO override fields. Closes the customs-doc identity gap on the seller side. Becomes blocking on first vendor with split factory + billing entity.
+
+## Invoicing depth
+
+Surfaced 2026-05-02. Not on prior backlog.
+
+- [ ] **Vendor-uploaded invoice file**: replicate iter 084 PO-documents pattern on `Invoice` (`/api/v1/invoices/{id}/documents`, VENDOR upload, INVOICE_DOCUMENT_UPLOADED activity). Roadmap item 4. Builds the corpus the invoice-validation agent (roadmap item 5) will consume.
+- [ ] **Payment record entity**: today PAID is a status flip with no payment date / method / reference / amount. No partial payments, no advance offsets, no AP aging foundation. `payments(invoice_id, date, method, reference, amount, fx_rate)` plus repointed Invoice status logic.
+- [ ] **Invoice tax / VAT line items**: today line is `qty × unit_price`, flat. Multi-jurisdiction shipments will fail invoice-vs-customs reconciliation without tax fields on the line.
+- [ ] **Brand-scoped invoice numbering** + **due-date computation from payment_terms** (today: global numbering; due-date not derived). Both small once Brand exists.
+
+## Logistics depth
+
+Surfaced 2026-05-02. Not on prior backlog.
+
+- [ ] **Carrier as first-class entity**: today free-text `carrier` string on Shipment. Real model: Carrier with rate cards, contract numbers, account credentials. Prerequisite for tracking integration.
+- [ ] **Mode of transport** (sea / air / road): today vessel/voyage assumes sea. Becomes blocking on first air shipment.
+- [ ] **Customs broker as entity**: receives CHB invoices, signs declarations on behalf. Today not modeled.
+- [ ] **Container number + equipment type + seal numbers**: customs requirement for FCL / LCL shipments.
+- [ ] **Cut-off date / VGM (Verified Gross Mass)**: sea-shipping concept. Customs houses require VGM declaration before vessel cut-off.
+- [ ] **Multi-leg routing / transhipment**: today single port_of_loading + port_of_discharge. Real shipments often go via a hub.
+- [ ] **Booking confirmation document upload**: today only metadata captured. The carrier's booking confirmation PDF should attach to the shipment.
+- [ ] **Pickup confirmation / driver / truck** for the SHIPPED transition. Today shipped_at timestamp only.
+
+## Compliance depth
+
+Surfaced 2026-05-02. Not on prior backlog.
+
+- [ ] **Trade preference / FTA classification** (USMCA, EUR.1, GSP, etc.): duty-impacting; absent today. Required for preference-claim shipments.
+- [ ] **Restricted-party / denied-parties screening**: vendor + brand + consignee screened against OFAC / EU / UK sanctions lists. Compliance requirement in many jurisdictions.
+- [ ] **License / permit per HS code per destination**: dual-use, dangerous goods, country-specific permits. Not modeled.
+- [ ] **BoL / CoO / Insurance Certificate / EEI as first-class typed documents** (vs today's free-form `document_type` strings). Roadmap item 2. Per-doc-type required-field validation hangs off this.
+- [ ] **Brand-specific document-requirement matrix**: Brand A always requires CoO for shipments to certain destinations; Brand B does not. Folded into typed-docs work.
+
+## Finance / analytics
+
+Surfaced 2026-05-02. Not on prior backlog. Read-model layer; depends on payment record and customs paper being correct.
+
+- [ ] **Landed cost** (vendor cost + freight + duty + insurance + brokerage). Read model over PO + Shipment + carrier invoices + CHB invoices.
+- [ ] **Per-brand / per-PO / per-shipment profitability**.
+- [ ] **FX gain / loss** between PO date and payment date. Requires FX snapshot pinned at PO acceptance.
+- [ ] **AR aging / AP aging** views.
+- [ ] **Approval chains by amount**: today actions are role-gated only. Scales with team size.
+
+## Quality + production depth
+
+Surfaced 2026-05-02. Not on prior backlog.
+
+- [ ] **QC inspection record**: today QC_PASSED is a single milestone with no inspector identity, no pass/fail detail, no photos, no rework loop.
+- [ ] **Rework / rejection loop on QC fail**: not modeled. Today QC_PASSED is mandatory to proceed.
+- [ ] **Sample-approval gate before production starts**: not modeled.
+
+## Procurement upstream (RFQ)
+
+Surfaced 2026-05-02. The system today starts at PO. Upstream is offline.
+
+- [ ] **RFQ aggregate**: brand, requested_by, response_deadline, status (sent / responded / awarded / lost). Multi-vendor invitation list.
+- [ ] **Quote aggregate** (vendor's response): per-line price, lead time, validity period.
+- [ ] **Quote comparison view** + **award flow** (creates PO from winning quote). Activity events: RFQ_SENT, QUOTE_RECEIVED, RFQ_AWARDED.
+
+## Tracking (post-shipment)
+
+Surfaced 2026-05-02. SHIPPED is currently terminal.
+
+- [ ] **Tracking events model**: in-transit, port-arrival, customs-cleared, out-for-delivery, delivered.
+- [ ] **Carrier API integration / EDI / AIS feed**: at least one carrier first.
+- [ ] **ETA / ETD / ATA / ATD** + **demurrage / detention tracking**.
+- [ ] **POD upload** + customs clearance status at destination.
+- [ ] **Brand notification on arrival** + deep-link to carrier portal.
+- [ ] **Final-invoice trigger off delivery**.
+
+## Cross-cutting
+
+- [ ] **Data-change audit on entity edits** (vendor address etc.). ActivityLog covers domain events; data changes have no old→new trail.
+- [ ] **Operator legal entity** as a real model element (today: hardcoded constants in PDF generators). Becomes a real entity only if Operator is the importer of record or charges sub-tenant fees.
