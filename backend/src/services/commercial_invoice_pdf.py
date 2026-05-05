@@ -69,6 +69,7 @@ def generate_commercial_invoice_pdf(
     vendor_country: str = "",
     buyer_country: str = "",
     buyer_tax_id: str = "",
+    vendor_tax_id: str = "",
 ) -> bytes:
     """Build a commercial invoice PDF for the given Shipment and PurchaseOrder.
 
@@ -209,12 +210,14 @@ def generate_commercial_invoice_pdf(
     story.append(Paragraph("Parties", heading_style))
 
     vendor_country_display = country_label(vendor_country) if vendor_country else ""
-    seller_content = [
+    seller_content: list = [
         Paragraph("<b>Seller</b>", cell_bold),
         Paragraph(vendor_name, cell_style),
         Paragraph(vendor_address, cell_style),
         Paragraph(vendor_country_display, cell_style),
     ]
+    if vendor_tax_id:
+        seller_content.append(Paragraph(f"Tax ID: {vendor_tax_id}", cell_style))
     buyer_country_display = country_label(buyer_country) if buyer_country else country_label(po.buyer_country)
     buyer_content: list = [
         Paragraph("<b>Buyer</b>", cell_bold),
@@ -364,6 +367,9 @@ def generate_commercial_invoice_pdf(
     label_width = 1.80 * inch
     value_width = _PAGE_WIDTH - label_width
 
+    # Iter 110: export_reason defaults to "Sale" on render when empty.
+    export_reason_display = shipment.export_reason if shipment.export_reason else "Sale"
+
     summary_rows = [
         ["Total Quantity", str(total_quantity)],
         ["Total Value", f"{_money(total_value)} {po.currency}"],
@@ -371,6 +377,7 @@ def generate_commercial_invoice_pdf(
         ["Total Gross Weight", _weight_str(total_gross_weight)],
         ["Total Packages", str(total_packages)],
         ["Marks and Numbers", shipment.shipment_number],
+        ["Reason for Export", export_reason_display],
     ]
 
     summary_data = [

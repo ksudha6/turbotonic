@@ -62,6 +62,9 @@ class Shipment:
         signatory_name: str | None = None,
         signatory_title: str | None = None,
         declared_at: datetime | None = None,
+        # Iter 110: logistics details — pallet count on PL header; export reason on CI.
+        pallet_count: int | None = None,
+        export_reason: str = "",
     ) -> None:
         self._id = id
         self.po_id = po_id
@@ -80,6 +83,8 @@ class Shipment:
         self.signatory_name = signatory_name
         self.signatory_title = signatory_title
         self.declared_at = declared_at
+        self.pallet_count = pallet_count
+        self.export_reason = export_reason
 
     @property
     def id(self) -> str:
@@ -213,6 +218,22 @@ class Shipment:
         self.signatory_title = signatory_title.strip()
         self.declared_at = now
         self.updated_at = now
+
+    def set_logistics(
+        self,
+        *,
+        pallet_count: int | None,
+        export_reason: str,
+    ) -> None:
+        # pallet_count is optional (nullable); export_reason defaults to "" when not yet set.
+        # Both fields are informational and can be set in any status after creation.
+        if pallet_count is not None and pallet_count < 0:
+            raise ValueError("pallet_count must not be negative")
+        if export_reason != export_reason.strip():
+            export_reason = export_reason.strip()
+        self.pallet_count = pallet_count
+        self.export_reason = export_reason
+        self.updated_at = datetime.now(UTC)
 
     def update_line_items(self, updates: list[dict[str, object]]) -> None:
         # Only DRAFT and DOCUMENTS_PENDING shipments accept line item edits

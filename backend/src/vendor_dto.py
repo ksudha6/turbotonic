@@ -14,6 +14,7 @@ class VendorCreate(BaseModel):
     vendor_type: str
     address: str = ""
     account_details: str = ""
+    tax_id: str = ""
 
     @field_validator("name")
     @classmethod
@@ -40,6 +41,11 @@ class VendorCreate(BaseModel):
         return upper
 
 
+class VendorPatch(BaseModel):
+    """Iter 110: partial update for vendor fields that can change post-creation."""
+    tax_id: str | None = None
+
+
 class VendorResponse(BaseModel):
     id: str
     name: str
@@ -48,6 +54,7 @@ class VendorResponse(BaseModel):
     vendor_type: str
     address: str
     account_details: str
+    tax_id: str
     created_at: datetime
     updated_at: datetime
 
@@ -60,6 +67,7 @@ class VendorListItem(BaseModel):
     vendor_type: str
     address: str
     account_details: str
+    tax_id: str
 
 
 def vendor_to_response(vendor: Vendor) -> VendorResponse:
@@ -71,6 +79,7 @@ def vendor_to_response(vendor: Vendor) -> VendorResponse:
         vendor_type=vendor.vendor_type.value,
         address=vendor.address,
         account_details=vendor.account_details,
+        tax_id=vendor.tax_id,
         created_at=vendor.created_at,
         updated_at=vendor.updated_at,
     )
@@ -85,4 +94,5 @@ def vendor_to_list_item(vendor: Vendor) -> VendorListItem:
         vendor_type=vendor.vendor_type.value,
         address=vendor.address,
         account_details=vendor.account_details,
+        tax_id=vendor.tax_id,
     )

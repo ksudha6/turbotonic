@@ -61,6 +61,7 @@ def generate_packing_list_pdf(
     buyer_address: str,
     vendor_country: str = "",
     manufacturer_lookup: dict[str, dict[str, str]] | None = None,
+    vendor_tax_id: str = "",
 ) -> bytes:
     """Build a packing list PDF for the given Shipment and return it as raw bytes.
 
@@ -156,6 +157,13 @@ def generate_packing_list_pdf(
         header_data.append([
             Paragraph(f"<b>Vessel:</b> {vessel_str}", body_style),
             Paragraph(f"<b>Voyage:</b> {voyage_str}", body_style),
+        ])
+
+    # Pallet count row only appears when populated (iter 110)
+    if shipment.pallet_count is not None:
+        header_data.append([
+            Paragraph(f"<b>Pallet Count:</b> {shipment.pallet_count}", body_style),
+            Paragraph("", body_style),
         ])
     header_table = Table(header_data, colWidths=[_PAGE_WIDTH / 2, _PAGE_WIDTH / 2])
     header_table.setStyle(

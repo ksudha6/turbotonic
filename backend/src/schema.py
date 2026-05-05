@@ -613,3 +613,21 @@ async def init_db(conn: asyncpg.Connection) -> None:
         "UPDATE purchase_orders SET brand_id = $1 WHERE brand_id IS NULL",
         default_brand_id,
     )
+
+    # Iter 110: vendor tax identifier — appears on CI Seller block.
+    # NOT NULL with DEFAULT '' so existing rows are not violated.
+    await conn.execute(
+        "ALTER TABLE vendors ADD COLUMN IF NOT EXISTS tax_id TEXT NOT NULL DEFAULT ''"
+    )
+
+    # Iter 110: shipment pallet count — appears on PL header summary.
+    # Nullable; set via PATCH /logistics.
+    await conn.execute(
+        "ALTER TABLE shipments ADD COLUMN IF NOT EXISTS pallet_count INTEGER"
+    )
+
+    # Iter 110: reason for export — appears on CI below Summary.
+    # NOT NULL with DEFAULT '' so existing rows are not violated.
+    await conn.execute(
+        "ALTER TABLE shipments ADD COLUMN IF NOT EXISTS export_reason TEXT NOT NULL DEFAULT ''"
+    )

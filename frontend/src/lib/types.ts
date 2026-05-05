@@ -41,6 +41,9 @@ export interface Shipment {
 	signatory_name: string | null;
 	signatory_title: string | null;
 	declared_at: string | null;
+	// Iter 110: logistics details — pallet count on PL; export reason on CI.
+	pallet_count: number | null;
+	export_reason: string;
 }
 
 // Iter 103: payload for POST /{id}/book. Mirrors backend ShipmentBookRequest exactly.
@@ -55,6 +58,12 @@ export interface ShipmentBookingPayload {
 export interface ShipmentTransportPayload {
 	vessel_name: string | null;
 	voyage_number: string | null;
+}
+
+// Iter 110: payload for PATCH /{id}/logistics. pallet_count is nullable; export_reason defaults to "".
+export interface ShipmentLogisticsPayload {
+	pallet_count: number | null;
+	export_reason: string;
 }
 
 // Iter 106: payload for POST /{id}/declare. signatory_name is required; signatory_title is required.
@@ -113,6 +122,7 @@ export interface VendorListItem {
 	vendor_type: VendorType;
 	address: string;
 	account_details: string;
+	tax_id: string;
 }
 
 export interface Vendor {
@@ -123,6 +133,7 @@ export interface Vendor {
 	vendor_type: VendorType;
 	address: string;
 	account_details: string;
+	tax_id: string;
 	created_at: string;
 	updated_at: string;
 }
@@ -133,6 +144,7 @@ export interface VendorInput {
 	vendor_type: VendorType;
 	address: string;
 	account_details: string;
+	tax_id: string;
 }
 
 export type LineItemStatus =

@@ -34,6 +34,7 @@ from src.shipment_dto import (
     ShipmentBookRequest,
     ShipmentCreate,
     ShipmentDeclareRequest,
+    ShipmentLogisticsRequest,
     ShipmentResponse,
     ShipmentTransportRequest,
     ShipmentUpdate,
@@ -371,6 +372,29 @@ async def declare_shipment(
     return shipment_to_response(shipment, rows)
 
 
+@router.patch("/{shipment_id}/logistics", response_model=ShipmentResponse)
+async def set_logistics(
+    shipment_id: str,
+    body: ShipmentLogisticsRequest,
+    repo: ShipmentRepoDep,
+    _user: User = require_role(UserRole.ADMIN, UserRole.SM, UserRole.FREIGHT_MANAGER),
+) -> ShipmentResponse:
+    """Iter 110: record pallet count + export reason for the customs paper trail."""
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+    try:
+        shipment.set_logistics(
+            pallet_count=body.pallet_count,
+            export_reason=body.export_reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await repo.save(shipment)
+    rows = await repo.get_line_item_rows(shipment_id)
+    return shipment_to_response(shipment, rows)
+
+
 @router.post("/{shipment_id}/ship", response_model=ShipmentResponse)
 async def mark_shipped(
     shipment_id: str,
@@ -655,6 +679,7 @@ async def get_commercial_invoice(
     vendor_name = vendor.name if vendor is not None else ""
     vendor_address = vendor.address if vendor is not None else ""
     vendor_country = vendor.country if vendor is not None else ""
+    vendor_tax_id = vendor.tax_id if vendor is not None else ""
 
     # Consignee (buyer) block reads from the Brand associated with the PO.
     buyer_name = po.brand_legal_name or po.buyer_name
@@ -671,6 +696,7 @@ async def get_commercial_invoice(
         vendor_country=vendor_country,
         buyer_country=buyer_country,
         buyer_tax_id=po.brand_tax_id or "",
+        vendor_tax_id=vendor_tax_id,
     )
 
     filename = f"commercial-invoice-{shipment.shipment_number}.pdf"
