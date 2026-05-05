@@ -2,21 +2,21 @@
 
 ## Context
 
-`/shipments/[id]` is the last legacy aggregate-detail page. Every other detail surface (`/po/[id]`, `/invoice/[id]`, `/products/[id]/edit`) has been ported under the `(nexus)` AppShell layout group and rebuilt on Phase 4.0 primitives. The shipments page still renders against the pre-revamp tree: no AppShell, no Sidebar, no TopBar, raw `<table>` + inline `<input>` cells, hand-rolled `.status-badge` colors keyed on `status-{lower}` class, save state communicated by a transient `<span class="save-ok">`.
+`/shipments/[id]` is the last legacy aggregate-detail page. Every other detail surface (`/po/[id]`, `/invoice/[id]`, `/products/[id]/edit`) has been ported under `(nexus)`. The shipments page still renders pre-revamp: no AppShell/Sidebar/TopBar, raw `<table>` + inline `<input>` cells, hand-rolled `.status-badge` class colors, save state via `<span class="save-ok">`.
 
-Current page at [frontend/src/routes/shipments/[id]/+page.svelte](frontend/src/routes/shipments/[id]/+page.svelte) is 313 lines and exercises a small surface:
-- `getShipment(id)` on mount → renders header + meta card + line items table.
+Current page ([frontend/src/routes/shipments/[id]/+page.svelte](frontend/src/routes/shipments/[id]/+page.svelte), 313 lines):
+- `getShipment(id)` on mount → header + meta card + line items table.
 - Inline-edit drafts indexed by `part_number` for `net_weight` / `gross_weight` / `package_count` / `dimensions` / `country_of_origin`. Edit gated on `status === 'DRAFT' || status === 'DOCUMENTS_PENDING'` (iter 044).
-- `updateShipmentLineItems(id, {line_items})` Save → re-init drafts, transient "Saved" pill (3s setTimeout).
-- `downloadPackingListPdf(id, shipment_number)` and `downloadCommercialInvoicePdf(id, shipment_number)` browser-download buttons.
+- `updateShipmentLineItems(id, {line_items})` Save → re-init drafts, 3s transient "Saved" pill.
+- `downloadPackingListPdf` and `downloadCommercialInvoicePdf` browser-download buttons.
 
-Backend surface beyond what the current page consumes (per iter 046 / iter 074) is **out of scope here** and lives in iter 098 (A2 — docs panel + readiness + mark-ready) and a follow-up iter (booking + mark-shipped). This iter is the structural shell port plus a clean line items panel extraction. No new functionality.
+Backend beyond what the current page consumes (iter 046 / iter 074) is out of scope here; iter 098 handles docs panel + readiness + mark-ready.
 
-There is no `/shipments` list page, no Sidebar entry, no deep link from PO detail today. The page is reachable by direct URL only; iter 097 preserves that — adding navigation surface is a separate concern.
+No `/shipments` list page, no Sidebar entry, no deep link from PO detail exist. The page is reachable by direct URL only; iter 097 preserves that.
 
-There is no existing Playwright spec for the shipments page (`frontend/tests/shipment*.spec.ts` does not exist), so the iter creates the file from scratch and selects on testid from day one. No test migration.
+No existing Playwright spec for the shipments page; the spec file is created from scratch and uses testid selectors from day one.
 
-The pattern to follow is the [`/products/[id]/edit`](frontend/src/routes/(nexus)/products/[id]/edit/+page.svelte) shape (iter 092 → 094): page-level state + onMount fetch, Phase 4.0 `DetailHeader` + `StatusPill` for the header, panels rendered as components from a new `frontend/src/lib/shipment/` directory. Header download buttons mirror the existing pattern but use Phase 4.0 `Button variant="secondary"`. Status pill tone covers all five `ShipmentStatus` values (`DRAFT`/`DOCUMENTS_PENDING`/`READY_TO_SHIP`/`BOOKED`/`SHIPPED` since iter 074) so the mapping is correct on first port even though only `DRAFT`/`DOCUMENTS_PENDING`/`READY_TO_SHIP` are reachable from the current edit-only flow.
+Pattern: [`/products/[id]/edit`](frontend/src/routes/(nexus)/products/[id]/edit/+page.svelte) shape (iters 092-094): page-level state + onMount fetch, Phase 4.0 `DetailHeader` + `StatusPill` for the header, panels as components in a new `frontend/src/lib/shipment/` directory. Status pill tone covers all five `ShipmentStatus` values (`DRAFT`/`DOCUMENTS_PENDING`/`READY_TO_SHIP`/`BOOKED`/`SHIPPED` since iter 074).
 
 ## JTBD
 

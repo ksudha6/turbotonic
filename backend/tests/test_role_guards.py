@@ -180,6 +180,7 @@ async def _make_client_with_role(
 
     transport = ASGITransport(app=app)
     with patch("src.routers.purchase_order.get_db", _test_get_db), \
+         patch("src.routers.product.get_db", _test_get_db), \
          patch("src.auth.middleware.get_db", _test_get_db):
         async with AsyncClient(transport=transport, base_url="http://test", cookies=cookies) as ac:
             yield ac, conn

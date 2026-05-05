@@ -2,13 +2,13 @@
 
 ## Context
 
-User management has been a single-endpoint surface since iter 031: `POST /api/v1/users/invite` (ADMIN-only, creates a PENDING user). No list, get, update, deactivate, or reactivate endpoints exist. Every other slice of user management on the backlog (frontend `/users` page, multi-passkey, invite-token-as-UUID, reset-credentials, vendor-deactivation read-only mode) presumes a working CRUD surface underneath.
+User management has been a single-endpoint surface since iter 031: `POST /api/v1/users/invite` (ADMIN-only, creates a PENDING user). No list, get, update, deactivate, or reactivate endpoints exist. Every downstream backlog item (frontend `/users` page, multi-passkey, invite-token-as-UUID, reset-credentials, vendor-deactivation read-only mode) requires a working CRUD surface.
 
-This iter runs in parallel to Phase 4.5 (which is sequencing iters 091-094 on `/products` and cert UI). Backend user CRUD has zero overlap with the revamp routes — it is purely additive on `/api/v1/users` and lives in `backend/src/routers/auth.py` which Phase 4 is not touching. The frontend `/users` page is intentionally deferred; without it, the only consumer of these endpoints is Playwright/pytest. That is acceptable: the cost of staging the API ahead of the UI is one ADMIN-bearing test fixture and a small router file.
+This iter is backend-only and runs in parallel to Phase 4.5 (iters 091-094 on `/products` and cert UI). It is purely additive on `/api/v1/users` in `backend/src/routers/auth.py`. The frontend `/users` page is deferred; the only consumer of these endpoints until then is pytest.
 
-The domain layer is already complete. `User.deactivate()` and `User.reactivate()` enforce the lifecycle (ACTIVE/PENDING → INACTIVE → ACTIVE). `UserRepository.count_active_admins()` exists and is the right primitive for the last-admin guard. `auth/middleware.py` already rejects requests from non-ACTIVE users on the next request after deactivation, so no notification dance is needed.
+The domain layer is complete. `User.deactivate()` and `User.reactivate()` enforce the lifecycle (ACTIVE/PENDING → INACTIVE → ACTIVE). `UserRepository.count_active_admins()` exists for the last-admin guard. `auth/middleware.py` rejects non-ACTIVE users on the next request after deactivation.
 
-Out of scope (deliberately): role mutation, vendor_id mutation, username mutation. Each is a bigger semantic change with downstream implications (role mutation invalidates permission caches; vendor_id mutation fights with vendor-scoped data access; username is the business reference and is immutable by design). Defer to follow-up iters when the use case is clear.
+Out of scope: role mutation, vendor_id mutation, username mutation. Each carries downstream implications and is deferred when the use case is clear.
 
 ## JTBD
 

@@ -2,17 +2,17 @@
 
 ## Context
 
-Phase 4.2 PO surface (list + detail + create + edit) is feature-complete after iter 085. Phase 4.3 close-out items G-28 (role-coverage matrix audit) and G-29 (99-spec Playwright migration plan) are deferred to backlog as not-critical-now (per user 2026-04-29). Phase 4.3 begins now.
+Phase 4.2 PO surface (list + detail + create + edit) closed at iter 085. Phase 4.3 close-out items G-28 (role-coverage matrix audit) and G-29 (99-spec Playwright migration plan) are deferred to backlog. This iter opens Phase 4.3 with the `/invoices` list page.
 
-Per [docs/superpowers/specs/2026-04-24-ui-revamp-v2-design.md L196-202](docs/superpowers/specs/2026-04-24-ui-revamp-v2-design.md), Phase 4.3 replaces `/invoices` (list) and `/invoice/:id` (detail). The detail page carries mock-clarity gaps (OPEX vs PROCUREMENT branching on create, dispute reason flow, remaining-quantity guard UI, action rail per status); list does not. This iter ports the list page only — Tier 1 of Phase 4.3, mirroring iter 076 for `/po`.
+Phase 4.3 replaces `/invoices` (list) and `/invoice/:id` (detail). The detail page carries mock-clarity gaps (OPEX vs PROCUREMENT branching on create, dispute reason flow, remaining-quantity guard UI, action rail per status); the list does not. This iter ports the list page only, mirroring iter 076 for `/po`.
 
-**Pre-revamp state ([frontend/src/routes/invoices/+page.svelte](frontend/src/routes/invoices/+page.svelte), 359 lines):** inline `<select class="select filter-select">` × 4 + `<input type="date">` × 2 + `<table class="table">` + inline `.bulk-toolbar` + inline pagination + checkbox header + checkbox rows + Download PDFs button + Status / Invoice# / PO# / Vendor / DateFrom / DateTo / Clear filters. `StatusPill` from `frontend/src/lib/components/StatusPill.svelte` (legacy, last-consumer here + `/invoice/:id`). API: `listAllInvoices(params)` returns `PaginatedInvoiceList` of `InvoiceListItemWithContext`. Bulk: `downloadBulkInvoicePdf(ids)`. Role guard: `+page.ts` redirects to `/dashboard` if `!canViewInvoices(user.role)` (SM, VENDOR, PROCUREMENT_MANAGER, FREIGHT_MANAGER, ADMIN).
+Pre-revamp state ([frontend/src/routes/invoices/+page.svelte](frontend/src/routes/invoices/+page.svelte), 359 lines): inline `<select class="select filter-select">` × 4 + `<input type="date">` × 2 + `<table class="table">` + inline `.bulk-toolbar` + inline pagination + checkbox rows + Download PDFs button. `StatusPill` from `frontend/src/lib/components/StatusPill.svelte` (last consumer here + `/invoice/:id`). API: `listAllInvoices(params)` returns `PaginatedInvoiceList` of `InvoiceListItemWithContext`. Role guard: `+page.ts` redirects to `/dashboard` for non-`canViewInvoices` roles.
 
-**Target state:** `(nexus)/invoices/+page.svelte` mounts AppShell + UserMenu + PageHeader, drives new components in `frontend/src/lib/invoice/`: `InvoiceListFilters`, `InvoiceListBulkBar`, `InvoiceListTable`, `InvoiceListPagination`. Same surface as PO list components (testid contract, `LoadingState` overlay on filter-refetch, dashboard-grade empty / loading / error states). Vendor filter hidden for VENDOR users (vendor-scoped data already). No header CTA — invoices are created from PO detail, not the list. Pre-revamp `frontend/src/routes/invoices/{+page.svelte,+page.ts}` deleted; `frontend/src/routes/+layout.svelte` `isRevampRoute` extended with `/invoices` exact match (the detail page `/invoice/:id` stays pre-revamp until Phase 4.3 Tier 2).
+Target state: `(nexus)/invoices/+page.svelte` mounts AppShell + UserMenu + PageHeader, drives new components in `frontend/src/lib/invoice/`: `InvoiceListFilters`, `InvoiceListBulkBar`, `InvoiceListTable`, `InvoiceListPagination`. Vendor filter hidden for VENDOR users. No header CTA — invoices are created from PO detail. `isRevampRoute` extended with `/invoices` exact match; `/invoice/:id` stays pre-revamp until Tier 2.
 
-**Out of scope (Phase 4.3 Tier 2+):** invoice detail page (`/invoice/:id`), invoice create form, dispute reason flow, action rails per status. Legacy `frontend/src/lib/components/StatusPill.svelte` and `frontend/src/lib/components/ActivityTimeline.svelte` remain — both last-consumer-on-`/invoice/:id`.
+Out of scope: invoice detail, invoice create form, dispute reason flow, action rails per status. Legacy `StatusPill` and `ActivityTimeline` remain as last-consumers on `/invoice/:id`.
 
-**Test state at iter 085 close (verified):** 696 backend + 275 Playwright green. svelte-check carries 29 latent type errors deferred to backlog.
+Test state at iter 085 close: 696 backend + 275 Playwright green. svelte-check carries 29 latent type errors deferred to backlog.
 
 ## JTBD
 

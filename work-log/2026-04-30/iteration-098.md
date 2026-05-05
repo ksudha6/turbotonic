@@ -2,15 +2,15 @@
 
 ## Context
 
-Two operational gaps remain on the user-management surface after iters 095 and 096:
+Two operational gaps remain after iters 095 and 096:
 
-1. **Lost device.** A user whose only passkey is on a broken laptop has no recovery path. Today an ADMIN can `deactivate` the user but cannot revoke their passkey rows, so the same `invite + register` two-step they used originally won't work — the username is taken, the user row is INACTIVE rather than PENDING, and `webauthn_credentials` rows still point at the broken device. The crude workaround is "manually delete the user row in psql" which is the kind of thing this codebase exists to avoid.
+1. **Lost device.** A user whose only passkey is on a broken laptop has no recovery path. ADMIN can `deactivate` but cannot revoke passkey rows, so the `invite + register` two-step won't work — the user row is INACTIVE (not PENDING) and `webauthn_credentials` rows still point at the broken device.
 
-2. **Lost invite link.** ADMIN runs `POST /invite` for a new user, copies the link, accidentally closes the tab. The token is in the response only — there is no surface that re-renders it. Today ADMIN's only option is `deactivate` + drop a duplicate-username invite, which is unnecessary churn (and impossible if any non-trivial state has accrued under the original user row).
+2. **Lost invite link.** If ADMIN closes the tab after `POST /invite`, the token is gone. The only option today is `deactivate` + a duplicate-username invite, which is impossible if state has accrued under the original user row.
 
-Both are recoveries on the consume-once `invite_token` machinery from iter 096. The first effectively reverses activation: revoke credentials, drop status back to PENDING, mint a fresh token. The second only mints a fresh token. The endpoint pair is the smallest closed set that turns iter 095 + iter 096 into a complete ADMIN ops console: invite, list, get, patch, deactivate, reactivate, reset-credentials, reissue-invite. No frontend in this iter — the `/users` page remains backlogged, and the only consumer in the meantime is pytest plus ad-hoc curl from ADMIN.
+Both use the consume-once `invite_token` machinery from iter 096. The first reverses activation: revoke credentials, drop status to PENDING, mint a fresh token. The second mints a fresh token only. Together these complete the ADMIN ops console (invite, list, get, patch, deactivate, reactivate, reset-credentials, reissue-invite). No frontend in this iter; the only consumer until the `/users` page ships is pytest.
 
-This iter runs in parallel to iter 097 (Phase 4.6 Tier 1 `/shipments/[id]` shell port) on a separate session. Backend-only, zero overlap with `/shipments/*`.
+This iter runs in parallel to iter 097 (Phase 4.6 Tier 1 `/shipments/[id]` shell port). Backend-only, no overlap with `/shipments/*`.
 
 ## JTBD
 

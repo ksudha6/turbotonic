@@ -2,23 +2,21 @@
 
 ## Context
 
-Phase 4.2 PO detail has shipped Tier 2 (header + action rail + advance panel + cert banner — iter 077), Tier 3 (line negotiation cards + sticky submit-response bar — iter 081), Tier 4 (post-acceptance dialogs + production timeline — iter 082), and Tier 5 (metadata + invoices + rejection + activity — iter 083). The remaining Phase 4.2 PO-detail backlog item is G-22: a Documents panel that lets the negotiating parties attach signed/countersigned PO copies (and amendments/addendums) to the PO so the artifact lives next to the data.
+Phase 4.2 PO detail shipped Tier 2 (iter 077), Tier 3 (iter 081), Tier 4 (iter 082), and Tier 5 (iter 083). The remaining Phase 4.2 PO-detail item is G-22: a Documents panel for attaching signed/countersigned PO copies, amendments, and addendums so the artifact lives next to the data.
 
-The iter 035 file storage layer already supports the mechanics: `files` table with entity_type/entity_id index, multipart upload (PDF-only, 10MB, filename sanitization, path traversal protection), download with Content-Disposition, delete, and list-by-entity. Three earlier features wire it for their own entity types (Certificate iter 038, PackagingSpec iter 042, ShipmentDocumentRequirement iter 046). G-22 wires it for `entity_type='PO'` for the first time.
+The iter 035 file storage layer supports the mechanics: `files` table with entity_type/entity_id index, multipart upload (PDF-only, 10MB, filename sanitization, path traversal protection), download with Content-Disposition, delete, and list-by-entity. Certificate (iter 038), PackagingSpec (iter 042), and ShipmentDocumentRequirement (iter 046) wire it for their entity types. This iter wires it for `entity_type='PO'` for the first time.
 
-Iter 035's generic endpoints (`/api/v1/files/...`) are still any-authed (a known backlog item). This iter does NOT widen those guards. Instead, four new PO-scoped endpoints under `/api/v1/po/{po_id}/documents/...` wrap `FileStorageService` with PO-aware role + ownership + PO-type checks. Generic file endpoints remain untouched.
+Iter 035's generic endpoints (`/api/v1/files/...`) are still any-authed. This iter does not widen those guards. Four new PO-scoped endpoints under `/api/v1/po/{po_id}/documents/...` wrap `FileStorageService` with PO-aware role + ownership + PO-type checks.
 
-The vocabulary is locked at five values, partitioned by PO type:
-- PROCUREMENT POs accept `SIGNED_PO`, `COUNTERSIGNED_PO`, `AMENDMENT`, `ADDENDUM`.
-- OPEX POs accept `SIGNED_AGREEMENT`, `AMENDMENT`, `ADDENDUM`.
+Attachment types by PO type:
+- PROCUREMENT: `SIGNED_PO`, `COUNTERSIGNED_PO`, `AMENDMENT`, `ADDENDUM`.
+- OPEX: `SIGNED_AGREEMENT`, `AMENDMENT`, `ADDENDUM`.
 
-The permission matrix is locked:
+Permission matrix:
 - **PROCUREMENT** — view: ADMIN / SM / VENDOR (own) / PROCUREMENT_MANAGER / FREIGHT_MANAGER / QUALITY_LAB. Manage: ADMIN / SM / VENDOR (own).
 - **OPEX** — view: ADMIN / FREIGHT_MANAGER / VENDOR (own, read-only). Manage: ADMIN / FREIGHT_MANAGER. SM / PM / QL hidden entirely.
 
-Rationale: countersigned PO is a two-party artifact and the procurement fan-out (FM for shipping, QL for cert traceability) needs read access. OPEX has no shipment/quality fan-out, and FM owns OPEX/FREIGHT operational flow per the iter 073 dashboard split — so SM/PM/QL drop out and FM steps into the manage role.
-
-After this iter the entire `(nexus)/po/[id]` page reaches feature parity with the legacy shape on Phase 4.0 primitives, plus a net-new artifact attachment surface.
+Rationale: the procurement fan-out (FM for shipping, QL for cert traceability) needs read access. OPEX has no shipment/quality fan-out, and FM owns OPEX/FREIGHT operational flow per the iter 073 dashboard split.
 
 ## JTBD
 

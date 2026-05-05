@@ -2,22 +2,17 @@
 
 ## Context
 
-These three pre-revamp routes are the last ones outside the Phase 4 surface. After this iter,
-every page that the user sees on the way through the product is on the Phase 4.0 primitive
-set — closing a ~12-iter long migration arc that started with iter 071 (dashboard) and ran
-through iters 076 (PO list), 077 (PO detail), 086 (invoice list), 087 (invoice detail), 089
-(vendors), 090–094 (products), and 097 (shipment detail).
+These three pre-revamp routes are the last ones outside the Phase 4 surface. The migration
+covered iter 071 (dashboard), iters 076 (PO list), 077 (PO detail), 086 (invoice list),
+087 (invoice detail), 089 (vendors), 090-094 (products), and 097 (shipment detail).
 
-Auth routes are deliberately kept OUTSIDE the `(nexus)` group: they have no AppShell, no
-Sidebar, no TopBar, because there is no session yet. They render as bare centered cards on
-plain backgrounds. The Phase 4 surface for auth is therefore narrower than the in-app surface
-— `PanelCard` + `FormField` + `Input` + `Button` are the only primitives that apply, and
-they replace the existing class-selector layout (`.page`, `.card.login-card`, `.btn-primary`)
-without adding shell chrome.
+Auth routes stay outside the `(nexus)` group: no AppShell, Sidebar, or TopBar because there
+is no session yet. They render as bare centered cards. The only applicable primitives are
+`PanelCard` + `FormField` + `Input` + `Button`, replacing the existing class-selector layout
+(`.page`, `.card.login-card`, `.btn-primary`) without adding shell chrome.
 
-This is iter C in `parallel-slate-plan.md`. Disjoint from iter 100 (`/users` page) — only
-overlap is `frontend/src/lib/types.ts`, which 101 may not need to touch at all (auth.ts is
-the auth-side helper file; types.ts updates land with iter 100 only).
+Iter C in `parallel-slate-plan.md`. Disjoint from iter 100 (`/users` page); `types.ts`
+updates land with iter 100 only.
 
 ## JTBD
 

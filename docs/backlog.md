@@ -14,6 +14,19 @@
 - [x] Buyer as first-class entity (resolved iter 108: Brand aggregate; backend-only — frontend follows in iter 109)
 - [ ] Partial PO acceptance (accept/reject at line-item level)
 - [x] Notifications (in-app alerts for status changes, assignments, deadlines) (iterations 23-24)
+- [ ] Shipping country missing on PO create form (no field for destination country distinct from buyer/vendor country)
+- [ ] Part number dropdown scoped by PO type: filter line-item product/part picker on PO create by selected PO type (Procurement / OPEX / Freight / Misc)
+- [ ] Currency field missing on PO create form (currency is implicit/inherited; needs an explicit field at create time)
+- [ ] Trade Details country-of-origin must match line-item country-of-origin: validate at submit and reject mismatches between PO-level Trade Details country-of-origin and per-line `country_of_origin`
+- [ ] Payment cannot be initiated on an invoice until parent PO is confirmed (ACCEPTED): guard pay-invoice action against parent PO status
+- [ ] Milestone timeline as top-of-page ruler/slider on `/po/[id]`: render 5-stage production milestone sequence as a horizontal ruler with target dates, surfaced at the top of PO detail for vendor + SM
+- [ ] PROCUREMENT_MANAGER milestone ruler: same 5-stage ruler aggregated across PM's PO portfolio — each marker shows roll-up value (count or summed PO value at that stage)
+- [ ] PO PDF should not display "Modified" label/watermark: remove the "Modified" text from the generated PO PDF export
+- [ ] Rename the "post milestone" verb across the codebase: "POST" is HTTP-layer vocabulary leaking into the domain. Pick a DDD-aligned verb (candidates: `Report` — vendor reports stage completion; `Record`; `Advance`; `Achieve`) and rename `canPostMilestone`, `POST_MILESTONE` event type, domain methods, route handlers, frontend copy, and ddd-vocab.md in one iteration
+- [ ] `/po/[id]` density pass: page scrolls too much for the information shown. Compact the layout — tighter panel padding, denser AttributeList rows, two-column metadata on desktop, collapse low-signal panels by default — so above-the-fold carries header + status + line items + primary actions on a typical desktop viewport
+- [ ] Stamp + watermark on PO and invoice PDFs: render a status-derived stamp (e.g. ACCEPTED / REJECTED / PAID / DISPUTED) and a faint background watermark (buyer name or "ORIGINAL" / "DUPLICATE") on both `PODocumentExport` and `InvoiceDocumentExport` outputs. Stamp text + colour map per status; watermark is diagonal, low-opacity, repeated across the page
+- [ ] QUALITY_LAB needs a "certificate-required products" view: today Quality Lab lands on the generic `/products` list with no certificate-required scoping or status surface. Build an internal page (e.g. `/products?requires_cert=true` filter or a dedicated `/quality-lab/certificates` route) that lists products with `requires_certification=true`, surfaces qualification status (PENDING / VALID / EXPIRED), and lets QL act on PENDING → VALID approval (folds into the iter 040 cert metadata edit + approve workflow already in "Phase 4 UI revamp")
+- [ ] Vendor identifier in UI should always render as vendor name, never the raw UUID `vendor_id`: audit every surface (filter dropdowns, table rows, detail panels, activity feed entries, PDF exports) for places that print the UUID. Backend list/detail endpoints should join the vendor name into the response, or the frontend should resolve via the cached vendor list before rendering
 
 ## Post-confirmation modules
 
@@ -24,6 +37,45 @@
 
 - [x] Vendor country should be a dropdown from reference data (iteration 20)
 - [x] HS code format validation (iteration 20)
+
+## Auth and user management
+
+- [ ] Multiple passkeys per user (register backup device for recovery)
+- [ ] VENDOR user's vendor gets deactivated: make vendor-scoped data read-only
+- [ ] Stale PENDING user cleanup (invited but never registered)
+- [ ] Proxy access for internal leave coverage (delegation table, time-bounded, audit trail)
+- [ ] Email/notification for invite links (manual link sharing works for small teams)
+- [ ] PROCUREMENT_MANAGER role permissions: enum value exists from iter 030, no endpoint guards wired. Define and wire access (read-only PO/vendor/invoice visibility, pay/dispute invoices). Frontend: define redirect behavior for PM on non-dashboard pages.
+- [ ] User management for PROCUREMENT_MANAGER: extend the iter 100 `/users` page so PM can manage users (likely scoped — invite/deactivate VENDOR users they own, or full parity with ADMIN). Decide scope, wire `canManageUsers(role)` to include PM, gate the user-lifecycle endpoints, expose Users in the PM sidebar
+- [ ] PROCUREMENT_MANAGER dashboard fixes: iter 075 gave PM the SM dashboard payload but activity feed is near-empty (events default-route to SM target_role; PM never receives them — fan-out fix open). Audit other PM dashboard surfaces (KPIs, panels) for correctness against PM's actual scope vs. the SM-derived data they currently see
+- [ ] Welcome email on invite: send registration link via email when admin invites a user. Currently manual link sharing.
+- [ ] ADMIN inherits all actions: `canPostMilestone` is exact-match VENDOR only. ADMIN should exercise any role-scoped action (post milestones, submit vendor responses, etc.) for support and debugging. Audit every `isExact` usage in `permissions.ts` and backend role guards; convert to `is(role, ...) || role === 'ADMIN'` unless there is a concrete reason to keep a capability VENDOR-only.
+
+## UX
+
+- [ ] Error handling across all users and workflows: define and surface user-facing error states for every endpoint (validation errors, conflict errors, not-found, auth failures). Currently errors are ad hoc per endpoint with no consistent frontend treatment.
+- [ ] Recent activity redesign: club PO and invoice activity into a unified feed (currently separate activity streams). Needs discussion on grouping, filtering, and presentation.
+- [ ] Deep link preservation on register/bootstrap: `/login` is done (iter 033). If an invited user opens a deep link (e.g. `/po/123`) and lands on `/register` or `/setup`, the original path is still lost. After registration/bootstrap they go to `/dashboard`, not the deep link. Low priority since registration is a one-time event.
+- [ ] Session cookie path/domain audit: verify the session cookie is set with `path=/` and appropriate domain/SameSite attributes for production deployment behind a reverse proxy. Currently works in dev via Vite proxy.
+- [ ] DataTable primitive extension: promote selection column + snippet cell support out of `PoListTable` and `PoInvoicesPanel` into the shared `frontend/src/lib/ui/DataTable.svelte` primitive, so other list pages can adopt the same selection contract without copy-paste. Phase 4.x cleanup task.
+- [ ] PO document versioning: re-uploading a SIGNED_PO does not supersede the prior row — both rows persist, ordered by `uploaded_at DESC`. Cleanup is manual delete. Revisit when users complain about clutter or audit-trail confusion.
+- [ ] PO_DOCUMENT_DELETED activity event: iter 084 records uploads only, matching the iter 046 shipment-document-upload precedent. Add a delete event when anyone needs deletion history.
+- [ ] Email template for PO_DOCUMENT_UPLOADED: iter 084 records the activity row but does not invoke `NotificationDispatcher`. Wire SMTP fan-out (likely to SM for PROCUREMENT, FM for OPEX, mirroring the per-call target_role) when the workflow needs out-of-app notification.
+- [ ] Shared mock-fetch helper for `/ui-demo/*` gallery: iter 084's `/ui-demo/po-documents` patches `globalThis.fetch` for upload/delete demo flows and restores on cleanup. Centralizing this would let future demo routes drop the boilerplate.
+- [ ] Backend per-entity activity pagination: `/api/v1/activity/?entity_type=PO&entity_id={id}` returns the full list. Iter 083's `PoActivityPanel` does client-side "Show more" over a single fetch. Revisit when a single PO accumulates >100 events.
+- [ ] FREIGHT_MANAGER PO detail visibility: `canViewPOs` includes FREIGHT_MANAGER for the iter 073 ready-batch click-through (FM lands on a PO detail to plan shipping). FM sees an action rail with Download PDF only. Revisit whether FM should see PO detail at all or whether the ready-batch surface should expose only shipping-relevant fields directly. Tier 0 G-28 (role coverage matrix) territory.
+- [ ] Rounded corners across all pages (no sharp edges): bump `--radius-*` design tokens and audit every primitive (`PanelCard`, `KpiCard`, `FormCard`, `DataTable`, `StatusPill`, `Button`, `Input`, `Select`, modals, dialogs, sidebar items) to consume them. Goal: tile-like UI with consistent corner radius site-wide
+
+## Infrastructure
+
+- [ ] File endpoint role guards: restrict upload/download/delete by role and entity ownership on the generic `/api/v1/files/...` surface. Currently any authenticated user can access any file there. Iter 084 tightened the PO surface only via PO-scoped endpoints at `/api/v1/po/{po_id}/documents/...`; the certificate (iter 038) / packaging (iter 042) / shipment (iter 046) consumers still hit the open generic endpoint. Either define per-entity-type guards inside the generic router or migrate each consumer to its own scoped router (the iter 084 pattern).
+- [ ] File upload entity existence validation: upload endpoint accepts any entity_type/entity_id without checking the entity exists. Decide per-feature whether to validate at upload time or at the consuming feature level.
+- [ ] Vendor catalog / vendor-SKU mapping: products are vendor-agnostic, but a vendor's catalog defines which SKUs they offer. Line item `product_id` should reference a SKU in the vendor's catalog. New entity needed.
+- [ ] HTTPS for non-localhost deployment (WebAuthn requires HTTPS or localhost; needed before first external demo)
+- [ ] Database migration tool (alembic or similar; needed once real data exists that can't be dropped and recreated)
+- [ ] Session revocation ("log out all devices"; currently relies on cookie expiry + user status check)
+- [ ] Self-service vendor onboarding (currently invite-only; needed if vendors should sign up without admin)
+- [ ] Remove dev-login endpoint before production deployment
 
 ## Deferred
 

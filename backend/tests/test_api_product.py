@@ -3,6 +3,13 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+from src.domain.product import Product
+from src.domain.user import UserRole
+from src.domain.vendor import Vendor, VendorType
+from src.product_repository import ProductRepository
+from src.vendor_repository import VendorRepository
+from tests.test_role_guards import _make_client_with_role
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -227,3 +234,96 @@ async def test_update_manufacturing_address(authenticated_client: AsyncClient) -
     )
     assert resp.status_code == 200
     assert resp.json()["manufacturing_address"] == "456 Plant Ave"
+
+
+# ---------------------------------------------------------------------------
+# Role-scoped read access (iter: products read for VENDOR + PROCUREMENT_MANAGER)
+# ---------------------------------------------------------------------------
+
+
+async def _seed_other_vendor_with_product(conn, part_number: str = "PN-OTHER") -> tuple[str, str]:
+    """Seed a second vendor and one product on it. Returns (vendor_id, product_id)."""
+    other = Vendor.create(name="Other Vendor", country="DE", vendor_type=VendorType.PROCUREMENT)
+    await VendorRepository(conn).save(other)
+    product = Product.create(
+        vendor_id=other.id, part_number=part_number, description="Other vendor product"
+    )
+    await ProductRepository(conn).save(product)
+    return other.id, product.id
+
+
+async def test_vendor_can_list_their_own_products() -> None:
+    async for ac, conn in _make_client_with_role(UserRole.VENDOR):
+        # Helper auto-created the VENDOR's own vendor row. Seed one own product.
+        own_vendor_id = (await VendorRepository(conn).list_vendors())[0].id
+        own_product = Product.create(vendor_id=own_vendor_id, part_number="PN-MINE")
+        await ProductRepository(conn).save(own_product)
+        # Plus a product on a different vendor that VENDOR must not see.
+        await _seed_other_vendor_with_product(conn)
+
+        resp = await ac.get("/api/v1/products/")
+        assert resp.status_code == 200
+        data = resp.json()
+        ids = {item["id"] for item in data}
+        assert own_product.id in ids
+        assert all(item["vendor_id"] == own_vendor_id for item in data)
+
+
+async def test_vendor_cannot_see_other_vendor_products_via_query() -> None:
+    async for ac, conn in _make_client_with_role(UserRole.VENDOR):
+        own_vendor_id = (await VendorRepository(conn).list_vendors())[0].id
+        own_product = Product.create(vendor_id=own_vendor_id, part_number="PN-MINE")
+        await ProductRepository(conn).save(own_product)
+        other_vendor_id, _ = await _seed_other_vendor_with_product(conn)
+
+        # Even with ?vendor_id=other, VENDOR's own vendor_id is forced server-side.
+        resp = await ac.get(f"/api/v1/products/?vendor_id={other_vendor_id}")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert all(item["vendor_id"] == own_vendor_id for item in data)
+
+
+async def test_vendor_gets_404_on_other_vendor_product_by_id() -> None:
+    async for ac, conn in _make_client_with_role(UserRole.VENDOR):
+        _, other_product_id = await _seed_other_vendor_with_product(conn)
+        resp = await ac.get(f"/api/v1/products/{other_product_id}")
+        assert resp.status_code == 404
+
+
+async def test_vendor_can_get_own_product_by_id() -> None:
+    async for ac, conn in _make_client_with_role(UserRole.VENDOR):
+        own_vendor_id = (await VendorRepository(conn).list_vendors())[0].id
+        own_product = Product.create(vendor_id=own_vendor_id, part_number="PN-MINE")
+        await ProductRepository(conn).save(own_product)
+        resp = await ac.get(f"/api/v1/products/{own_product.id}")
+        assert resp.status_code == 200
+        assert resp.json()["id"] == own_product.id
+
+
+async def test_procurement_manager_can_list_all_products() -> None:
+    async for ac, conn in _make_client_with_role(UserRole.PROCUREMENT_MANAGER):
+        v1 = Vendor.create(name="V1", country="CN", vendor_type=VendorType.PROCUREMENT)
+        v2 = Vendor.create(name="V2", country="DE", vendor_type=VendorType.PROCUREMENT)
+        await VendorRepository(conn).save(v1)
+        await VendorRepository(conn).save(v2)
+        p1 = Product.create(vendor_id=v1.id, part_number="PN-A")
+        p2 = Product.create(vendor_id=v2.id, part_number="PN-B")
+        await ProductRepository(conn).save(p1)
+        await ProductRepository(conn).save(p2)
+
+        resp = await ac.get("/api/v1/products/")
+        assert resp.status_code == 200
+        ids = {item["id"] for item in resp.json()}
+        assert {p1.id, p2.id}.issubset(ids)
+
+
+async def test_procurement_manager_can_get_any_product_by_id() -> None:
+    async for ac, conn in _make_client_with_role(UserRole.PROCUREMENT_MANAGER):
+        v = Vendor.create(name="V", country="CN", vendor_type=VendorType.PROCUREMENT)
+        await VendorRepository(conn).save(v)
+        product = Product.create(vendor_id=v.id, part_number="PN-X")
+        await ProductRepository(conn).save(product)
+
+        resp = await ac.get(f"/api/v1/products/{product.id}")
+        assert resp.status_code == 200
+        assert resp.json()["id"] == product.id

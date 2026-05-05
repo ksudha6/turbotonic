@@ -2,13 +2,13 @@
 
 ## Context
 
-The legacy edit page (`frontend/src/routes/products/[id]/edit/+page.svelte`, 436 lines) bundles three concerns: (1) product details form (vendor + part_number readonly, description + manufacturing_address editable), (2) qualifications panel (list + add + remove), (3) packaging specs panel (list grouped by marketplace + add form + delete). At 436 lines this is the largest pre-revamp page; splitting per the iter discipline:
+The legacy edit page (`frontend/src/routes/products/[id]/edit/+page.svelte`, 436 lines) bundles three concerns: (1) product details form (vendor + part_number readonly, description + manufacturing_address editable), (2) qualifications panel (list + add + remove), (3) packaging specs panel (list grouped by marketplace + add form + delete). Split across iters:
 
-- **iter 092 (this one)**: page mount under `(nexus)` + details form + qualifications panel.
-- **iter 093**: packaging specs panel — the most elaborate section (add form, grouped list, delete confirm).
-- **iter 094**: iter 040 cert UI (cert upload flow, expiry alerts, dashboard surfaces).
+- **iter 092**: page mount under `(nexus)` + details form + qualifications panel.
+- **iter 093**: packaging specs panel.
+- **iter 094**: cert UI (cert upload flow, expiry alerts, dashboard surfaces).
 
-The packaging block renders inside the new `(nexus)` shell as a temporary holdover with its current legacy markup intact for iter 092. It looks out of place visually but the underlying behavior is unchanged. Iter 093 retires that block.
+The packaging block stays as legacy markup inside the new `(nexus)` shell with unchanged behavior; iter 093 retires it.
 
 ## JTBD
 

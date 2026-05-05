@@ -2,23 +2,17 @@
 
 ## Context
 
-The ADMIN user-management surface shipped across iters 095, 096, 098 added five lifecycle endpoints:
-`PATCH /api/v1/users/{id}`, `POST /{id}/deactivate`, `POST /{id}/reactivate`,
-`POST /{id}/reset-credentials`, `POST /{id}/reissue-invite`. None of them write a row to
-`activity_log`. The other write surfaces in this codebase (PO, invoice, milestone, certificate,
-packaging, shipment, document upload) all emit events through `ActivityLogRepository.append` —
-user-lifecycle is the only mutation surface with no audit trail.
+Iters 095, 096, and 098 added five user lifecycle endpoints: `PATCH /api/v1/users/{id}`,
+`POST /{id}/deactivate`, `POST /{id}/reactivate`, `POST /{id}/reset-credentials`,
+`POST /{id}/reissue-invite`. None write a row to `activity_log`. Every other write surface
+(PO, invoice, milestone, certificate, packaging, shipment, document upload) emits events
+through `ActivityLogRepository.append`; user-lifecycle is the only mutation surface with no
+audit trail.
 
-Iter 098's notes already flagged this as the right next iter: "deactivate / reactivate /
-reset-credentials / reissue-invite / patch should all fire `USER_LIFECYCLE_*` activity events
-for audit trail. None of them do today. Bundling all five into one user-mgmt audit iter is
-cleaner than spraying half-events across whichever iter is convenient."
+The five endpoints already exist and are tested in `test_user_management.py` and
+`test_user_recovery.py`. This iter adds the emission and asserts it — no behavior change.
 
-The five endpoints already exist and are tested against by `test_user_management.py` and
-`test_user_recovery.py`. This iter only adds the emission and asserts it — no behavior change.
-
-This is iter B in `parallel-slate-plan.md`. It runs disjoint from any frontend iter; the only
-files touched are backend domain + router + tests.
+Iter B in `parallel-slate-plan.md`. Backend domain + router + tests only; no frontend changes.
 
 ## JTBD
 
