@@ -8,7 +8,7 @@ from typing import Annotated, AsyncIterator
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
 
 from src.activity_repository import ActivityLogRepository
-from src.auth.dependencies import require_role
+from src.auth.dependencies import check_brand_access, require_role
 from src.certificate_repository import CertificateRepository
 from src.db import get_db
 from src.document_repository import DocumentRepository
@@ -18,6 +18,7 @@ from src.domain.shipment import Shipment, ShipmentLineItem, ShipmentStatus, vali
 from src.domain.shipment_document_requirement import ShipmentDocumentRequirement
 from src.domain.user import User, UserRole
 from src.packaging_repository import PackagingSpecRepository
+from src.user_repository import UserRepository
 from src.product_repository import ProductRepository
 from src.qualification_type_repository import QualificationTypeRepository
 from src.repository import PurchaseOrderRepository
@@ -108,6 +109,14 @@ QtRepoDep = Annotated[QualificationTypeRepository, Depends(get_qt_repo_for_shipm
 DocumentRepoDep = Annotated[DocumentRepository, Depends(get_document_repo_for_shipment)]
 FileStorageDep = Annotated[FileStorageService, Depends(get_file_storage_for_shipment)]
 ProductRepoDep = Annotated[ProductRepository, Depends(get_product_repo_for_shipment)]
+
+
+async def get_user_repo_for_shipment() -> AsyncIterator[UserRepository]:
+    async with get_db() as conn:
+        yield UserRepository(conn)
+
+
+UserRepoDep = Annotated[UserRepository, Depends(get_user_repo_for_shipment)]
 
 
 @router.post("/", response_model=ShipmentResponse, status_code=201)
@@ -206,13 +215,22 @@ async def remaining_quantities(
 @router.get("/", response_model=list[ShipmentResponse])
 async def list_shipments(
     repo: ShipmentRepoDep,
+    user_repo: UserRepoDep,
     po_id: str | None = None,
-    _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
+    user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
 ) -> list[ShipmentResponse]:
+    # Iter 111: brand filter for buyer-side roles.
+    from src.routers.auth import _BRAND_SCOPABLE_ROLES  # noqa: PLC0415
+    scoped_brand_ids: list[str] | None = None
+    if user.role in _BRAND_SCOPABLE_ROLES:
+        accessible = await user_repo.list_brand_ids(user.id)
+        if accessible:
+            scoped_brand_ids = accessible
+
     if po_id is not None:
         shipments = await repo.list_by_po(po_id)
     else:
-        shipments = await repo.list_all()
+        shipments = await repo.list_all(brand_ids=scoped_brand_ids)
 
     result: list[ShipmentResponse] = []
     for s in shipments:
@@ -225,11 +243,20 @@ async def list_shipments(
 async def get_shipment(
     shipment_id: str,
     repo: ShipmentRepoDep,
-    _user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
+    po_repo: PORepoDep,
+    user_repo: UserRepoDep,
+    user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
 ) -> ShipmentResponse:
     shipment = await repo.get(shipment_id)
     if shipment is None:
         raise HTTPException(status_code=404, detail="Shipment not found")
+    # Iter 111: brand-scope check for buyer-side roles.
+    from src.routers.auth import _BRAND_SCOPABLE_ROLES  # noqa: PLC0415
+    if user.role in _BRAND_SCOPABLE_ROLES:
+        po = await po_repo.get(shipment.po_id)
+        if po is not None:
+            accessible = await user_repo.list_brand_ids(user.id)
+            check_brand_access(user, po.brand_id, accessible)
     rows = await repo.get_line_item_rows(shipment_id)
     return shipment_to_response(shipment, rows)
 

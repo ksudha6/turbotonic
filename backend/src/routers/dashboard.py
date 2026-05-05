@@ -22,6 +22,7 @@ from src.domain.reference_data import RATE_TO_USD
 from src.invoice_repository import InvoiceRepository
 from src.milestone_repository import MilestoneRepository
 from src.repository import PurchaseOrderRepository
+from src.user_repository import UserRepository
 from src.vendor_repository import VendorRepository
 
 # Roles that receive a populated dashboard/summary payload.
@@ -55,11 +56,17 @@ async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
         yield ActivityLogRepository(conn)
 
 
+async def get_user_repo() -> AsyncIterator[UserRepository]:
+    async with get_db() as conn:
+        yield UserRepository(conn)
+
+
 RepoDep = Annotated[PurchaseOrderRepository, Depends(get_repo)]
 VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
 InvoiceRepoDep = Annotated[InvoiceRepository, Depends(get_invoice_repo)]
 MilestoneRepoDep = Annotated[MilestoneRepository, Depends(get_milestone_repo)]
 ActivityRepoDep = Annotated[ActivityLogRepository, Depends(get_activity_repo)]
+UserRepoDep = Annotated[UserRepository, Depends(get_user_repo)]
 
 
 class POStatusSummary(BaseModel):
@@ -118,12 +125,21 @@ async def get_dashboard(
     invoice_repo: InvoiceRepoDep,
     milestone_repo: MilestoneRepoDep,
     activity_repo: ActivityRepoDep,
+    user_repo: UserRepoDep,
     user: User = require_auth,
 ) -> DashboardResponse:
     vendor_id = user.vendor_id if user.role is UserRole.VENDOR else None
 
+    # Iter 111: brand filter for buyer-side roles.
+    from src.routers.auth import _BRAND_SCOPABLE_ROLES  # noqa: PLC0415
+    dashboard_brand_ids: list[str] | None = None
+    if user.role in _BRAND_SCOPABLE_ROLES:
+        accessible = await user_repo.list_brand_ids(user.id)
+        if accessible:
+            dashboard_brand_ids = accessible
+
     # PO summary: aggregate by status, convert to USD
-    raw_summary = await repo.po_summary_by_status(vendor_id=vendor_id)
+    raw_summary = await repo.po_summary_by_status(vendor_id=vendor_id, brand_ids=dashboard_brand_ids)
     status_agg: dict[str, dict[str, Any]] = {}
     for row in raw_summary:
         st = row["status"]
@@ -151,7 +167,7 @@ async def get_dashboard(
     )
 
     # Recent POs with vendor names
-    recent = await repo.recent_pos(10, vendor_id=vendor_id)
+    recent = await repo.recent_pos(10, vendor_id=vendor_id, brand_ids=dashboard_brand_ids)
     vendors = await vendor_repo.list_vendors()
     vendor_map: dict[str, str] = {v.id: v.name for v in vendors}
     recent_pos = [
@@ -461,6 +477,7 @@ async def get_dashboard_summary(
     invoice_repo: InvoiceRepoDep,
     milestone_repo: MilestoneRepoDep,
     activity_repo: ActivityRepoDep,
+    user_repo: UserRepoDep,
     user: User = require_auth,
 ) -> DashboardSummaryResponse:
     if user.role is UserRole.FREIGHT_MANAGER:
@@ -481,6 +498,16 @@ async def get_dashboard_summary(
     procurement_only = user.role in {UserRole.SM, UserRole.PROCUREMENT_MANAGER}
     po_type_clause = "AND p.po_type = 'PROCUREMENT'" if procurement_only else ""
 
+    # Iter 111: brand filter for buyer-side roles.
+    from src.routers.auth import _BRAND_SCOPABLE_ROLES  # noqa: PLC0415
+    brand_clause = ""
+    brand_params: list[object] = []
+    if user.role in _BRAND_SCOPABLE_ROLES:
+        accessible_brand_ids = await user_repo.list_brand_ids(user.id)
+        if accessible_brand_ids:
+            brand_clause = "AND p.brand_id = ANY($1)"
+            brand_params = [accessible_brand_ids]
+
     def _sum_usd(rows: list) -> Decimal:
         # Each row is one PO with its line-item subtotal in PO's native currency.
         total = Decimal("0")
@@ -498,8 +525,10 @@ async def get_dashboard_summary(
         LEFT JOIN line_items li ON li.po_id = p.id
         WHERE p.status IN ('DRAFT', 'PENDING', 'MODIFIED')
           {po_type_clause}
+          {brand_clause}
         GROUP BY p.id, p.currency
-        """
+        """,
+        *brand_params,
     )
     pending_count = len(pending_rows)
     pending_total_usd = _sum_usd(pending_rows)
@@ -514,8 +543,10 @@ async def get_dashboard_summary(
         WHERE p.status = 'PENDING'
           AND p.last_actor_role = 'SM'
           {po_type_clause}
+          {brand_clause}
         GROUP BY p.id, p.currency
-        """
+        """,
+        *brand_params,
     )
     awaiting_count = len(awaiting_rows_for_kpi)
     awaiting_total_usd = _sum_usd(awaiting_rows_for_kpi)
@@ -523,8 +554,10 @@ async def get_dashboard_summary(
     # --- KPI 3: IN PRODUCTION ---
     # ACCEPTED POs whose latest milestone is an in-production state.
     # SM scopes to PROCUREMENT only; ADMIN sees all po_types.
+    # Milestone params follow brand_params in parameter order.
+    milestone_start_idx = len(brand_params) + 1
     milestone_placeholders = ", ".join(
-        f"${i + 1}" for i in range(len(_IN_PRODUCTION_MILESTONES))
+        f"${i + milestone_start_idx}" for i in range(len(_IN_PRODUCTION_MILESTONES))
     )
     in_production_rows = await milestone_repo._conn.fetch(
         f"""
@@ -543,9 +576,11 @@ async def get_dashboard_summary(
         LEFT JOIN line_items li ON li.po_id = p.id
         WHERE p.status = 'ACCEPTED'
           {po_type_clause}
+          {brand_clause}
           AND lm.milestone IN ({milestone_placeholders})
         GROUP BY p.id, p.currency
         """,
+        *brand_params,
         *_IN_PRODUCTION_MILESTONES,
     )
     in_production_count = len(in_production_rows)
@@ -606,10 +641,12 @@ async def get_dashboard_summary(
         WHERE p.status = 'PENDING'
           AND p.last_actor_role = 'SM'
           {po_type_clause}
+          {brand_clause}
         GROUP BY p.id, p.po_number, p.vendor_id, p.currency, p.updated_at
         ORDER BY p.updated_at DESC
         LIMIT 10
-        """
+        """,
+        *brand_params,
     )
 
     # Build vendor name map for awaiting list

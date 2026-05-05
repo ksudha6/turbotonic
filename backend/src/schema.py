@@ -566,6 +566,19 @@ async def init_db(conn: asyncpg.Connection) -> None:
         "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS brand_id TEXT REFERENCES brands(id)"
     )
 
+    # Iter 111: user_brands join table. user_id -> brand_id m2m; empty set means
+    # "all brands" (unscoped). ON DELETE CASCADE so a removed user or brand
+    # automatically cleans up its assignment rows.
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_brands (
+            user_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            brand_id TEXT NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+            PRIMARY KEY (user_id, brand_id)
+        )
+        """
+    )
+
     # Iter 108 backfill: seed a Default Brand and associate all existing vendors
     # and POs with it so existing data continues to work after migration.
     from datetime import UTC, datetime

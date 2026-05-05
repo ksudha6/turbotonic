@@ -683,6 +683,8 @@ export interface User {
 	status: UserStatus;
 	vendor_id: string | null;
 	email: string | null;
+	// Iter 111: brand scope. Empty means unscoped (sees all brands).
+	brand_ids: string[];
 }
 
 // Iter 100: ADMIN /users page request shapes.
@@ -692,12 +694,16 @@ export interface InviteUserInput {
 	role: UserRole;
 	email?: string | null;
 	vendor_id?: string | null;
+	// Iter 111: optional brand scope. Ignored for ADMIN and VENDOR roles.
+	brand_ids?: string[] | null;
 }
 
 export interface PatchUserInput {
 	display_name?: string;
 	// Explicit null clears email; omitted leaves untouched.
 	email?: string | null;
+	// Iter 111: when present (including []), replaces brand set. Omit to leave unchanged.
+	brand_ids?: string[] | null;
 }
 
 export interface UserListFilters {

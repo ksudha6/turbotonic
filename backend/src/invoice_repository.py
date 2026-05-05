@@ -158,6 +158,7 @@ class InvoiceRepository:
         page: int = 1,
         page_size: int = 20,
         vendor_id: str | None = None,
+        brand_ids: list[str] | None = None,
     ) -> tuple[list[asyncpg.Record], int]:
         joins = """
             FROM invoices i
@@ -165,7 +166,7 @@ class InvoiceRepository:
             JOIN vendors v ON v.id = po.vendor_id
         """
         conditions: list[str] = []
-        params: list[str] = []
+        params: list[object] = []
         counter = 1
 
         if status is not None:
@@ -195,6 +196,11 @@ class InvoiceRepository:
         if vendor_id is not None:
             conditions.append(f"po.vendor_id = ${counter}")
             params.append(vendor_id)
+            counter += 1
+        if brand_ids is not None and len(brand_ids) > 0:
+            # Iter 111: filter invoices to those whose parent PO is in the accessible brands.
+            conditions.append(f"po.brand_id = ANY(${counter})")
+            params.append(brand_ids)
             counter += 1
 
         where_clause = (" WHERE " + " AND ".join(conditions)) if conditions else ""

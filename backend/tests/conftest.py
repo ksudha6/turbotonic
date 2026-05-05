@@ -28,6 +28,7 @@ from src.repository import PurchaseOrderRepository
 from src.shipment_repository import ShipmentRepository
 from src.routers.activity import get_activity_repo as activity_get_activity_repo
 from src.routers.auth import get_activity_repo as auth_get_activity_repo
+from src.routers.auth import get_brand_repo as auth_get_brand_repo
 from src.routers.auth import get_user_repo as auth_get_user_repo
 from src.routers.certificate import get_activity_repo_for_cert as cert_get_activity_repo
 from src.routers.certificate import get_cert_repo
@@ -39,12 +40,14 @@ from src.routers.dashboard import get_activity_repo as dash_get_activity_repo
 from src.routers.dashboard import get_invoice_repo as dash_get_invoice_repo
 from src.routers.dashboard import get_milestone_repo as dash_get_milestone_repo
 from src.routers.dashboard import get_repo as dash_get_repo
+from src.routers.dashboard import get_user_repo as dash_get_user_repo
 from src.routers.dashboard import get_vendor_repo as dash_get_vendor_repo
 from src.routers.document import get_document_repo as document_get_document_repo
 from src.routers.document import get_file_storage as document_get_file_storage
 from src.routers.invoice import get_activity_repo as invoice_get_activity_repo
 from src.routers.invoice import get_invoice_repo as invoice_get_invoice_repo
 from src.routers.invoice import get_po_repo as invoice_get_po_repo
+from src.routers.invoice import get_user_repo as invoice_get_user_repo
 from src.routers.invoice import get_vendor_repo as invoice_get_vendor_repo
 from src.routers.milestone import get_activity_repo as milestone_get_activity_repo
 from src.routers.milestone import get_cert_repo as milestone_get_cert_repo
@@ -54,6 +57,7 @@ from src.routers.milestone import get_product_repo as milestone_get_product_repo
 from src.routers.milestone import get_qualification_repo as milestone_get_qualification_repo
 from src.routers.purchase_order import get_activity_repo as po_get_activity_repo
 from src.routers.purchase_order import get_brand_repo as po_get_brand_repo
+from src.routers.purchase_order import get_user_repo as po_get_user_repo
 from src.routers.purchase_order import get_cert_repo as po_get_cert_repo
 from src.routers.purchase_order import get_email_service as po_get_email_service
 from src.routers.purchase_order import get_invoice_repo as po_get_invoice_repo
@@ -81,6 +85,7 @@ from src.routers.shipment import (
     get_document_repo_for_shipment as shipment_get_document_repo,
     get_file_storage_for_shipment as shipment_get_file_storage,
     get_product_repo_for_shipment as shipment_get_product_repo,
+    get_user_repo_for_shipment as shipment_get_user_repo,
 )
 from src.routers.brands import (
     get_brand_repo as brands_get_brand_repo,
@@ -105,6 +110,9 @@ TEST_DATABASE_URL = os.environ.get(
 
 _current_upload_dir: Path | None = None
 _current_fake_email: "FakeEmailService | None" = None
+# Iter 111: transport and conn shared across per-user client factory.
+_current_transport: ASGITransport | None = None
+_current_conn: asyncpg.Connection | None = None
 
 
 class FakeEmailService:
@@ -238,10 +246,12 @@ async def _setup_overrides(
     app.dependency_overrides[dash_get_invoice_repo] = override_get_invoice_repo
     app.dependency_overrides[dash_get_milestone_repo] = override_get_milestone_repo
     app.dependency_overrides[dash_get_activity_repo] = override_get_activity_repo
+    app.dependency_overrides[dash_get_user_repo] = override_get_user_repo
     app.dependency_overrides[invoice_get_invoice_repo] = override_get_invoice_repo
     app.dependency_overrides[invoice_get_po_repo] = override_get_repo
     app.dependency_overrides[invoice_get_vendor_repo] = override_get_vendor_repo
     app.dependency_overrides[invoice_get_activity_repo] = override_get_activity_repo
+    app.dependency_overrides[invoice_get_user_repo] = override_get_user_repo
     app.dependency_overrides[milestone_get_milestone_repo] = override_get_milestone_repo
     app.dependency_overrides[milestone_get_po_repo] = override_get_repo
     app.dependency_overrides[milestone_get_activity_repo] = override_get_activity_repo
@@ -265,6 +275,8 @@ async def _setup_overrides(
     app.dependency_overrides[qt_get_qt_repo] = override_get_qt_repo
     app.dependency_overrides[auth_get_user_repo] = override_get_user_repo
     app.dependency_overrides[auth_get_activity_repo] = override_get_activity_repo
+    app.dependency_overrides[auth_get_brand_repo] = override_get_brand_repo
+    app.dependency_overrides[po_get_user_repo] = override_get_user_repo
     app.dependency_overrides[document_get_document_repo] = override_get_document_repo
     app.dependency_overrides[document_get_file_storage] = override_get_file_storage
     app.dependency_overrides[get_shipment_repo] = override_get_shipment_repo
@@ -277,6 +289,7 @@ async def _setup_overrides(
     app.dependency_overrides[shipment_get_document_repo] = override_get_document_repo
     app.dependency_overrides[shipment_get_file_storage] = override_get_file_storage
     app.dependency_overrides[shipment_get_product_repo] = override_get_product_repo
+    app.dependency_overrides[shipment_get_user_repo] = override_get_user_repo
     app.dependency_overrides[brands_get_brand_repo] = override_get_brand_repo
     app.dependency_overrides[brands_get_vendor_repo] = override_get_vendor_repo
     app.dependency_overrides[brands_get_activity_repo] = override_get_activity_repo
@@ -359,16 +372,73 @@ async def authenticated_client() -> AsyncIterator[AsyncClient]:
         yield conn
 
     transport = ASGITransport(app=app)
+    global _current_transport, _current_conn
+    _current_transport = transport
+    _current_conn = conn
     with patch("src.routers.purchase_order.get_db", _test_get_db), \
          patch("src.routers.product.get_db", _test_get_db), \
          patch("src.auth.middleware.get_db", _test_get_db):
         async with AsyncClient(transport=transport, base_url="http://test", cookies=cookies) as ac:
             yield ac
 
+    _current_transport = None
+    _current_conn = None
     await tx.rollback()
     await conn.close()
     app.dependency_overrides.clear()
     shutil.rmtree(upload_dir, ignore_errors=True)
+
+
+@pytest.fixture
+def make_scoped_client():
+    """Factory fixture: creates a new AsyncClient with a per-user session cookie.
+
+    Shares the transport and connection of the active `authenticated_client` so
+    all requests land in the same transaction. Must be used inside a test that
+    also requests `authenticated_client`.
+
+    Usage:
+        async with make_scoped_client(user_id) as sc:
+            resp = await sc.get("/api/v1/...")
+    """
+    def _factory(user_id: str) -> AsyncClient:
+        assert _current_transport is not None, (
+            "make_scoped_client requires authenticated_client to be active"
+        )
+        cookies = {COOKIE_NAME: create_session_cookie(user_id)}
+        return AsyncClient(transport=_current_transport, base_url="http://test", cookies=cookies)
+
+    return _factory
+
+
+@pytest.fixture
+def make_active_scoped_user():
+    """Fixture: factory for creating ACTIVE users in the current test transaction.
+
+    Bypasses the invite flow (which creates PENDING users) so the resulting
+    user can authenticate immediately. `brand_ids` are assigned when provided
+    and role is brand-scopable. Requires `authenticated_client` to be active.
+
+    Usage:
+        user_id = await make_active_scoped_user("sm1", UserRole.SM, brand_ids=["brand-a"])
+    """
+    async def _factory(
+        username: str,
+        role: UserRole,
+        brand_ids: list[str] | None = None,
+    ) -> str:
+        assert _current_conn is not None, (
+            "make_active_scoped_user requires authenticated_client to be active"
+        )
+        conn = _current_conn
+        user = User.create(username=username, display_name=username, role=role)
+        repo = UserRepository(conn)
+        await repo.save(user)
+        if brand_ids:
+            await repo.set_brands(user.id, brand_ids)
+        return user.id
+
+    return _factory
 
 
 @pytest.fixture

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from starlette.responses import Response
 
 from src.activity_repository import ActivityLogRepository
-from src.auth.dependencies import check_vendor_access, require_auth, require_role
+from src.auth.dependencies import check_brand_access, check_vendor_access, require_auth, require_role
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType
 from src.domain.invoice import Invoice, InvoiceLineItem
@@ -30,6 +30,7 @@ from src.dto import (
 from src.invoice_repository import InvoiceRepository
 from src.repository import PurchaseOrderRepository
 from src.services.invoice_pdf import generate_bulk_invoice_pdf, generate_invoice_pdf
+from src.user_repository import UserRepository
 from src.vendor_repository import VendorRepository
 
 router = APIRouter(prefix="/api/v1/invoices", tags=["invoices"])
@@ -53,6 +54,14 @@ async def get_vendor_repo() -> AsyncIterator[VendorRepository]:
 InvoiceRepoDep = Annotated[InvoiceRepository, Depends(get_invoice_repo)]
 PORepoDep = Annotated[PurchaseOrderRepository, Depends(get_po_repo)]
 VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
+
+
+async def get_user_repo() -> AsyncIterator[UserRepository]:
+    async with get_db() as conn:
+        yield UserRepository(conn)
+
+
+UserRepoDep = Annotated[UserRepository, Depends(get_user_repo)]
 
 
 async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
@@ -219,6 +228,7 @@ async def create_invoice(
 @router.get("/", response_model=PaginatedInvoiceList)
 async def list_invoices(
     invoice_repo: InvoiceRepoDep,
+    user_repo: UserRepoDep,
     status: str | None = None,
     po_number: str | None = None,
     vendor_name: str | None = None,
@@ -230,6 +240,13 @@ async def list_invoices(
     user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
 ) -> PaginatedInvoiceList:
     scoped_vendor_id = user.vendor_id if user.role is UserRole.VENDOR else None
+    # Iter 111: brand filter for buyer-side roles.
+    from src.routers.auth import _BRAND_SCOPABLE_ROLES  # noqa: PLC0415
+    scoped_brand_ids: list[str] | None = None
+    if user.role in _BRAND_SCOPABLE_ROLES:
+        accessible = await user_repo.list_brand_ids(user.id)
+        if accessible:
+            scoped_brand_ids = accessible
     rows, total = await invoice_repo.list_all(
         status=status,
         po_number=po_number,
@@ -240,6 +257,7 @@ async def list_invoices(
         page=page,
         page_size=page_size,
         vendor_id=scoped_vendor_id,
+        brand_ids=scoped_brand_ids,
     )
     items = [invoice_row_to_list_item_with_context(r) for r in rows]
     return PaginatedInvoiceList(items=items, total=total, page=page, page_size=page_size)
@@ -285,6 +303,7 @@ async def get_invoice(
     invoice_id: str,
     invoice_repo: InvoiceRepoDep,
     po_repo: PORepoDep,
+    user_repo: UserRepoDep,
     user: User = require_role(UserRole.SM, UserRole.VENDOR, UserRole.FREIGHT_MANAGER),
 ) -> InvoiceResponse:
     invoice = await invoice_repo.get_by_id(invoice_id)
@@ -294,6 +313,11 @@ async def get_invoice(
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
     check_vendor_access(user, po.vendor_id)
+    # Iter 111: brand-scope check for buyer-side roles.
+    from src.routers.auth import _BRAND_SCOPABLE_ROLES  # noqa: PLC0415
+    if user.role in _BRAND_SCOPABLE_ROLES:
+        accessible = await user_repo.list_brand_ids(user.id)
+        check_brand_access(user, po.brand_id, accessible)
     return invoice_to_response(invoice)
 
 

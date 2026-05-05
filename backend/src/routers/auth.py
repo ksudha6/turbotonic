@@ -14,6 +14,7 @@ from src.auth.webauthn_service import (
     verify_authentication,
     verify_registration,
 )
+from src.brand_repository import BrandRepository
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType
 from src.domain.user import User, UserRole, UserStatus
@@ -21,6 +22,15 @@ from src.user_repository import UserRepository
 from webauthn.helpers import bytes_to_base64url, base64url_to_bytes
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+
+# Iter 111: roles subject to brand-scoping. ADMIN is unscoped; VENDOR is
+# vendor-scoped by a different axis. Both are excluded here.
+_BRAND_SCOPABLE_ROLES: frozenset[UserRole] = frozenset({
+    UserRole.SM,
+    UserRole.FREIGHT_MANAGER,
+    UserRole.QUALITY_LAB,
+    UserRole.PROCUREMENT_MANAGER,
+})
 
 
 def _dev_auth_enabled() -> bool:
@@ -40,8 +50,14 @@ async def get_activity_repo() -> AsyncIterator[ActivityLogRepository]:
         yield ActivityLogRepository(conn)
 
 
+async def get_brand_repo() -> AsyncIterator[BrandRepository]:
+    async with get_db() as conn:
+        yield BrandRepository(conn)
+
+
 UserRepoDep = Annotated[UserRepository, Depends(get_user_repo)]
 ActivityRepoDep = Annotated[ActivityLogRepository, Depends(get_activity_repo)]
+BrandRepoDep = Annotated[BrandRepository, Depends(get_brand_repo)]
 
 
 # Challenge stored in a signed cookie
@@ -71,7 +87,7 @@ def _set_session_cookie(response: Response, user_id: str) -> None:
     response.set_cookie(COOKIE_NAME, cookie_value, httponly=True, samesite="lax")
 
 
-def _user_to_dict(user: User) -> dict:
+def _user_to_dict(user: User, brand_ids: list[str] | None = None) -> dict:
     return {
         "id": user.id,
         "username": user.username,
@@ -80,6 +96,7 @@ def _user_to_dict(user: User) -> dict:
         "status": user.status.value,
         "vendor_id": user.vendor_id,
         "email": user.email,
+        "brand_ids": brand_ids if brand_ids is not None else [],
     }
 
 
@@ -103,11 +120,18 @@ class InviteRequest(BaseModel):
     display_name: str
     role: str
     vendor_id: str | None = None
+    # Iter 111: optional brand scope for buyer-side roles. None means unscoped.
+    # Silently ignored for ADMIN and VENDOR roles.
+    brand_ids: list[str] | None = None
 
 
 class UserUpdateRequest(BaseModel):
     display_name: str | None = None
     email: str | None = None
+    # Iter 111: when present (including empty list), replaces brand set.
+    # When absent (key not in body), brand assignments are unchanged.
+    # Silently ignored for ADMIN and VENDOR roles.
+    brand_ids: list[str] | None = None
 
 
 # --- Endpoints ---
@@ -284,6 +308,7 @@ async def invite_user(
     body: InviteRequest,
     request: Request,
     repo: UserRepoDep,
+    brand_repo: BrandRepoDep,
     activity_repo: ActivityRepoDep,
 ):
     current_user = getattr(request.state, "current_user", None)
@@ -306,6 +331,24 @@ async def invite_user(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await repo.save(user)
+
+    # Iter 111: apply brand scope when provided and role is brand-scopable.
+    assigned_brand_ids: list[str] = []
+    if body.brand_ids is not None and role in _BRAND_SCOPABLE_ROLES:
+        for bid in body.brand_ids:
+            brand = await brand_repo.get(bid)
+            if brand is None:
+                raise HTTPException(status_code=404, detail=f"Brand not found: {bid!r}")
+        await repo.set_brands(user.id, body.brand_ids)
+        assigned_brand_ids = list(body.brand_ids)
+        await activity_repo.append(
+            entity_type=EntityType.USER,
+            entity_id=user.id,
+            event=ActivityEvent.BRAND_USERS_UPDATED,
+            detail=f"{user.username} brand scope set to {assigned_brand_ids}",
+            actor_id=current_user.id,
+        )
+
     await activity_repo.append(
         entity_type=EntityType.USER,
         entity_id=user.id,
@@ -313,7 +356,7 @@ async def invite_user(
         detail=f"{user.username} invited as {user.role.value}",
         actor_id=current_user.id,
     )
-    return {"user": _user_to_dict(user), "invite_token": user.invite_token}
+    return {"user": _user_to_dict(user, assigned_brand_ids), "invite_token": user.invite_token}
 
 
 def _require_admin(request: Request) -> User:
@@ -346,7 +389,9 @@ async def list_users(
         except ValueError:
             raise HTTPException(status_code=422, detail=f"Invalid role: {role!r}")
     users = await repo.list_users(status=status_filter, role=role_filter)
-    return {"users": [_user_to_dict(u) for u in users]}
+    # Iter 111: single bulk query to avoid N+1 for brand_ids.
+    brand_map = await repo.list_brand_ids_bulk([u.id for u in users])
+    return {"users": [_user_to_dict(u, brand_map.get(u.id, [])) for u in users]}
 
 
 @invite_router.get("/{user_id}")
@@ -355,7 +400,8 @@ async def get_user(user_id: str, request: Request, repo: UserRepoDep):
     target = await repo.get_by_id(user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"user": _user_to_dict(target)}
+    brand_ids = await repo.list_brand_ids(user_id)
+    return {"user": _user_to_dict(target, brand_ids)}
 
 
 @invite_router.patch("/{user_id}")
@@ -364,6 +410,7 @@ async def update_user(
     body: UserUpdateRequest,
     request: Request,
     repo: UserRepoDep,
+    brand_repo: BrandRepoDep,
     activity_repo: ActivityRepoDep,
 ):
     current_user = _require_admin(request)
@@ -391,7 +438,27 @@ async def update_user(
         detail=f"{target.username} profile updated",
         actor_id=current_user.id,
     )
-    return {"user": _user_to_dict(target)}
+
+    # Iter 111: apply brand scope when brand_ids is present in the request body
+    # and the user's role is brand-scopable.
+    brand_ids: list[str] = await repo.list_brand_ids(target.id)
+    if "brand_ids" in body.model_fields_set and target.role in _BRAND_SCOPABLE_ROLES:
+        new_brand_ids: list[str] = body.brand_ids or []
+        for bid in new_brand_ids:
+            brand = await brand_repo.get(bid)
+            if brand is None:
+                raise HTTPException(status_code=404, detail=f"Brand not found: {bid!r}")
+        await repo.set_brands(target.id, new_brand_ids)
+        brand_ids = new_brand_ids
+        await activity_repo.append(
+            entity_type=EntityType.USER,
+            entity_id=target.id,
+            event=ActivityEvent.BRAND_USERS_UPDATED,
+            detail=f"{target.username} brand scope updated to {new_brand_ids}",
+            actor_id=current_user.id,
+        )
+
+    return {"user": _user_to_dict(target, brand_ids)}
 
 
 @invite_router.post("/{user_id}/deactivate")
