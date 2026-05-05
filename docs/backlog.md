@@ -47,7 +47,7 @@
 - [ ] Email/notification for invite links (manual link sharing works for small teams)
 - [ ] PROCUREMENT_MANAGER role permissions: enum value exists from iter 030, no endpoint guards wired. Define and wire access (read-only PO/vendor/invoice visibility, pay/dispute invoices). Frontend: define redirect behavior for PM on non-dashboard pages.
 - [ ] User management for PROCUREMENT_MANAGER: extend the iter 100 `/users` page so PM can manage users (likely scoped — invite/deactivate VENDOR users they own, or full parity with ADMIN). Decide scope, wire `canManageUsers(role)` to include PM, gate the user-lifecycle endpoints, expose Users in the PM sidebar
-- [ ] PROCUREMENT_MANAGER dashboard fixes: iter 075 gave PM the SM dashboard payload but activity feed is near-empty (events default-route to SM target_role; PM never receives them — fan-out fix open). Audit other PM dashboard surfaces (KPIs, panels) for correctness against PM's actual scope vs. the SM-derived data they currently see
+- [ ] PROCUREMENT_MANAGER dashboard fixes: iter 075 gave PM the SM dashboard payload but activity feed is near-empty (events default-route to SM target_role; PM never receives them — fan-out fix open). Audit other PM dashboard surfaces (KPIs, panels) for correctness against PM's actual scope vs. the SM-derived data they currently see (iter 114 spec)
 - [ ] Welcome email on invite: send registration link via email when admin invites a user. Currently manual link sharing.
 - [ ] ADMIN inherits all actions: `canPostMilestone` is exact-match VENDOR only. ADMIN should exercise any role-scoped action (post milestones, submit vendor responses, etc.) for support and debugging. Audit every `isExact` usage in `permissions.ts` and backend role guards; convert to `is(role, ...) || role === 'ADMIN'` unless there is a concrete reason to keep a capability VENDOR-only.
 
@@ -66,6 +66,26 @@
 - [ ] FREIGHT_MANAGER PO detail visibility: `canViewPOs` includes FREIGHT_MANAGER for the iter 073 ready-batch click-through (FM lands on a PO detail to plan shipping). FM sees an action rail with Download PDF only. Revisit whether FM should see PO detail at all or whether the ready-batch surface should expose only shipping-relevant fields directly. Tier 0 G-28 (role coverage matrix) territory.
 - [ ] Rounded corners across all pages (no sharp edges): bump `--radius-*` design tokens and audit every primitive (`PanelCard`, `KpiCard`, `FormCard`, `DataTable`, `StatusPill`, `Button`, `Input`, `Select`, modals, dialogs, sidebar items) to consume them. Goal: tile-like UI with consistent corner radius site-wide
 
+### Per-role dashboard implementation (iter 114 spec)
+
+- [ ] PM dashboard split from SM grid: cross-vendor 5-KPI grid (pending POs, in-production, quality pending, pending-for-shipment, outstanding A/P) + production stage breakdown panel + overdue milestones panel (iter 114 spec).
+- [ ] SM dashboard with vendor selector: vendor-scoped subset of PM KPIs, stage breakdown capped at READY_FOR_SHIPMENT, sticky vendor choice in user prefs (iter 114 spec).
+- [ ] QL dashboard: cert-request queue KPI, certs expiring within 30 days, certs expired, POs at QC_PASSED awaiting cert panel (iter 114 spec).
+- [ ] FM dashboard extension: five-stage shipment lifecycle KPIs, CUSTOMS_PENDING and DELIVERED tiles as placeholders until those modules land (iter 114 spec).
+- [ ] ADMIN dashboard split from SM grid: union-view KPIs (system-wide POs, shipments, A/P) + estate health KPIs (pending invites, inactive brands/vendors with active POs) + ShipmentStatusSummary panel (iter 114 spec).
+- [ ] VENDOR dashboard: POs awaiting response + drafts-to-invoice + disputed invoices + tasks-open KPIs, action-queue panel (Panel A) as primary affordance, vendor-scoped activity feed (iter 114 spec).
+
+### Backend gaps for dashboard iters (iter 114 spec, in dependency order)
+
+- [ ] PM/SM event fan-out: decide which existing events route to PROCUREMENT_MANAGER and SM in EVENT_METADATA so their activity feeds are non-empty (iter 114 spec, gap 1).
+- [ ] ShipmentStatusSummary aggregate query: mirrors po_summary_by_status shape, drives ADMIN Panel B and FM KPIs 1-3 (iter 114 spec, gap 2).
+- [ ] Milestone-to-shipment join query for "READY_FOR_SHIPMENT POs with no or staged shipment", parameterised by vendor_id (None for PM/ADMIN, set for SM) (iter 114 spec, gap 3).
+- [ ] Cert-pending aggregate: joins purchase_orders (latest milestone = QC_PASSED) x line items x products x qualifications x certificates to drive QL KPI 1 and Panel A (iter 114 spec, gap 4).
+- [ ] Certificate expiry queries: SQL expressions for "expiring within N days" and derived EXPIRED count, needed for QL KPI 3 and KPI 4 (iter 114 spec, gap 5).
+- [ ] CERT_UPLOADED event fan-out to FREIGHT_MANAGER so the FM cert-approval queue panel matches the inbox (iter 114 spec, gap 6).
+- [ ] Inactive-but-referenced drift scan: post-hoc query for deactivated brands/vendors with open POs, drives ADMIN KPI 5 (iter 114 spec, gap 7).
+- [ ] Vendor-scoped /dashboard/summary endpoint branch: SM iter must add vendor_id parameter to the existing role-branched endpoint (iter 114 spec, gap 8).
+
 ## Infrastructure
 
 - [ ] File endpoint role guards: restrict upload/download/delete by role and entity ownership on the generic `/api/v1/files/...` surface. Currently any authenticated user can access any file there. Iter 084 tightened the PO surface only via PO-scoped endpoints at `/api/v1/po/{po_id}/documents/...`; the certificate (iter 038) / packaging (iter 042) / shipment (iter 046) consumers still hit the open generic endpoint. Either define per-entity-type guards inside the generic router or migrate each consumer to its own scoped router (the iter 084 pattern).
@@ -83,6 +103,11 @@
 - [ ] Roles and permissions (beyond SM/Vendor split)
 - [ ] Email notifications
 - [ ] SM internal notes
+- [ ] Shipment DELIVERED state: confirmation source TBD (manual FM mark, carrier webhook, or POD upload); definition affects FM KPI 5 query shape (iter 114 spec).
+- [ ] Shipment CUSTOMS_* state(s): interim or parallel-gate semantics TBD; definition affects FM KPI 4 and state-machine shape (iter 114 spec).
+- [ ] ADMIN "view as role" impersonation toggle: lets ADMIN exercise any role-scoped dashboard view; affects auth shape (audit trail, impersonation model) (iter 114 spec).
+- [ ] Per-user dashboard widget reordering and customisation (iter 114 spec).
+- [ ] Real-time push for dashboard KPIs and panels (iter 114 spec).
 
 ## Phase 4.2 close-out (deferred, not blocking Phase 4.3)
 
