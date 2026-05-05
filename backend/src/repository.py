@@ -64,8 +64,9 @@ class PurchaseOrderRepository:
                         terms_and_conditions, incoterm, port_of_loading,
                         port_of_discharge, country_of_origin, country_of_destination,
                         marketplace, created_at, updated_at,
-                        round_count, last_actor_role, advance_paid_at, brand_id
-                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+                        round_count, last_actor_role, advance_paid_at, brand_id,
+                        seller_party_id, remit_to_party_id
+                    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
                     """,
                     po.id,
                     po.po_number,
@@ -92,6 +93,8 @@ class PurchaseOrderRepository:
                     last_actor,
                     advance_paid_iso,
                     po.brand_id,
+                    po.seller_party_id,
+                    po.remit_to_party_id,
                 )
 
                 for sort_order, item in enumerate(po.line_items):
@@ -160,8 +163,9 @@ class PurchaseOrderRepository:
                         country_of_origin = $16, country_of_destination = $17,
                         marketplace = $18, updated_at = $19,
                         round_count = $20, last_actor_role = $21,
-                        advance_paid_at = $22, brand_id = $23
-                    WHERE id = $24
+                        advance_paid_at = $22, brand_id = $23,
+                        seller_party_id = $24, remit_to_party_id = $25
+                    WHERE id = $26
                     """,
                     po.po_number,
                     po.status.value,
@@ -186,6 +190,8 @@ class PurchaseOrderRepository:
                     last_actor,
                     advance_paid_iso,
                     po.brand_id,
+                    po.seller_party_id,
+                    po.remit_to_party_id,
                     po.id,
                 )
 
@@ -605,4 +611,7 @@ def _reconstruct(
         brand_address=po_row.get("brand_address"),
         brand_country=po_row.get("brand_country"),
         brand_tax_id=po_row.get("brand_tax_id"),
+        # Iter 113: per-PO seller and remit-to party overrides
+        seller_party_id=po_row.get("seller_party_id"),
+        remit_to_party_id=po_row.get("remit_to_party_id"),
     )

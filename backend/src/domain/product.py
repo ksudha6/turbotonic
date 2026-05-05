@@ -17,9 +17,12 @@ class Product:
         updated_at: datetime,
         manufacturing_address: str = "",
         # Iter 106: manufacturer identity separate from the shipping vendor.
+        # Read-only from iter 113 forward; structured via manufacturer_party_id.
         manufacturer_name: str = "",
         manufacturer_address: str = "",
         manufacturer_country: str = "",
+        # Iter 113: structured manufacturer party FK (nullable; preferred over free-text).
+        manufacturer_party_id: str | None = None,
     ) -> None:
         self._id = id
         self.vendor_id = vendor_id
@@ -29,6 +32,7 @@ class Product:
         self.manufacturer_name = manufacturer_name
         self.manufacturer_address = manufacturer_address
         self.manufacturer_country = manufacturer_country
+        self.manufacturer_party_id = manufacturer_party_id
         self._created_at = created_at
         self.updated_at = updated_at
 
@@ -51,6 +55,7 @@ class Product:
         manufacturer_name: str = "",
         manufacturer_address: str = "",
         manufacturer_country: str = "",
+        manufacturer_party_id: str | None = None,
     ) -> Product:
         if not vendor_id or not vendor_id.strip():
             raise ValueError("vendor_id must not be empty or whitespace-only")
@@ -66,6 +71,7 @@ class Product:
             manufacturer_name=manufacturer_name,
             manufacturer_address=manufacturer_address,
             manufacturer_country=manufacturer_country,
+            manufacturer_party_id=manufacturer_party_id,
             created_at=now,
             updated_at=now,
         )
@@ -79,14 +85,19 @@ class Product:
         manufacturer_address: str | None = None,
         manufacturer_country: str | None = None,
     ) -> None:
+        # Iter 113: manufacturer_name/address/country are read-only from this iter forward.
+        # Callers that provide these fields receive a ValueError; use set_manufacturer_party instead.
+        if manufacturer_name is not None or manufacturer_address is not None or manufacturer_country is not None:
+            raise ValueError(
+                "manufacturer fields are read-only; use manufacturer_party_id"
+            )
         if description is not None:
             self.description = description
         if manufacturing_address is not None:
             self.manufacturing_address = manufacturing_address
-        if manufacturer_name is not None:
-            self.manufacturer_name = manufacturer_name
-        if manufacturer_address is not None:
-            self.manufacturer_address = manufacturer_address
-        if manufacturer_country is not None:
-            self.manufacturer_country = manufacturer_country
+        self.updated_at = datetime.now(UTC)
+
+    def set_manufacturer_party(self, party_id: str | None) -> None:
+        # Assigns the structured MANUFACTURER VendorParty to this product.
+        self.manufacturer_party_id = party_id
         self.updated_at = datetime.now(UTC)

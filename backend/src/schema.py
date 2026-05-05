@@ -631,3 +631,151 @@ async def init_db(conn: asyncpg.Connection) -> None:
     await conn.execute(
         "ALTER TABLE shipments ADD COLUMN IF NOT EXISTS export_reason TEXT NOT NULL DEFAULT ''"
     )
+
+    # Iter 113: VendorParty aggregate table. Holds each named party (manufacturer,
+    # seller, shipper, remit-to) under a vendor relationship.
+    await conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS vendor_parties (
+            id              TEXT PRIMARY KEY,
+            vendor_id       TEXT NOT NULL REFERENCES vendors(id) ON DELETE CASCADE,
+            role            TEXT NOT NULL,
+            legal_name      TEXT NOT NULL DEFAULT '',
+            address         TEXT NOT NULL DEFAULT '',
+            country         TEXT NOT NULL DEFAULT '',
+            tax_id          TEXT NOT NULL DEFAULT '',
+            banking_details TEXT NOT NULL DEFAULT '',
+            created_at      TEXT NOT NULL,
+            updated_at      TEXT NOT NULL
+        )
+        """
+    )
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS vendor_parties_vendor_id ON vendor_parties (vendor_id)"
+    )
+    await conn.execute(
+        "CREATE INDEX IF NOT EXISTS vendor_parties_vendor_role ON vendor_parties (vendor_id, role)"
+    )
+
+    # Iter 113: vendor default-party FK columns. Nullable; set during backfill and
+    # via PATCH /vendors/{id}. All three point at the same party for single-entity vendors.
+    await conn.execute(
+        "ALTER TABLE vendors ADD COLUMN IF NOT EXISTS default_seller_party_id TEXT REFERENCES vendor_parties(id)"
+    )
+    await conn.execute(
+        "ALTER TABLE vendors ADD COLUMN IF NOT EXISTS default_shipper_party_id TEXT REFERENCES vendor_parties(id)"
+    )
+    await conn.execute(
+        "ALTER TABLE vendors ADD COLUMN IF NOT EXISTS default_remit_to_party_id TEXT REFERENCES vendor_parties(id)"
+    )
+
+    # Iter 113: structured manufacturer party FK on products. Preferred over iter-106
+    # free-text columns for PDF rendering; free-text columns are retained read-only.
+    await conn.execute(
+        "ALTER TABLE products ADD COLUMN IF NOT EXISTS manufacturer_party_id TEXT REFERENCES vendor_parties(id)"
+    )
+
+    # Iter 113: per-shipment shipper party override. Nullable.
+    await conn.execute(
+        "ALTER TABLE shipments ADD COLUMN IF NOT EXISTS shipper_party_id TEXT REFERENCES vendor_parties(id)"
+    )
+
+    # Iter 113: per-PO seller and remit-to party overrides. Nullable.
+    await conn.execute(
+        "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS seller_party_id TEXT REFERENCES vendor_parties(id)"
+    )
+    await conn.execute(
+        "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS remit_to_party_id TEXT REFERENCES vendor_parties(id)"
+    )
+
+    # Iter 113: migration backfill.
+    # For every Vendor without a default_seller_party_id, create one SELLER VendorParty
+    # carrying the vendor's name, address, country, and tax_id. Set all three default
+    # columns to point at that party (single-entity collapse).
+    from datetime import UTC, datetime
+    from uuid import uuid4
+
+    vendors_to_backfill = await conn.fetch(
+        "SELECT id, name, address, country, tax_id FROM vendors WHERE default_seller_party_id IS NULL"
+    )
+    now_iso = datetime.now(UTC).isoformat()
+    for vendor_row in vendors_to_backfill:
+        party_id = str(uuid4())
+        # Use empty address / country fallback so INSERT does not violate NOT NULL.
+        v_address = vendor_row["address"] or ""
+        v_country = vendor_row["country"] or "US"
+        v_tax_id = vendor_row["tax_id"] or "" if "tax_id" in vendor_row.keys() else ""
+        await conn.execute(
+            """
+            INSERT INTO vendor_parties
+                (id, vendor_id, role, legal_name, address, country, tax_id, banking_details, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ON CONFLICT DO NOTHING
+            """,
+            party_id,
+            vendor_row["id"],
+            "SELLER",
+            vendor_row["name"],
+            v_address,
+            v_country,
+            v_tax_id,
+            "",
+            now_iso,
+            now_iso,
+        )
+        await conn.execute(
+            """
+            UPDATE vendors
+            SET default_seller_party_id = $1,
+                default_shipper_party_id = $1,
+                default_remit_to_party_id = $1
+            WHERE id = $2 AND default_seller_party_id IS NULL
+            """,
+            party_id,
+            vendor_row["id"],
+        )
+
+    # For every Product with non-empty manufacturer_name and no manufacturer_party_id,
+    # create a MANUFACTURER VendorParty under that product's vendor.
+    products_to_backfill = await conn.fetch(
+        """
+        SELECT p.id AS product_id, p.vendor_id, p.manufacturer_name,
+               p.manufacturer_address, p.manufacturer_country, v.country AS vendor_country
+        FROM products p
+        JOIN vendors v ON v.id = p.vendor_id
+        WHERE p.manufacturer_name != '' AND p.manufacturer_party_id IS NULL
+        """
+    )
+    for prod_row in products_to_backfill:
+        mfr_party_id = str(uuid4())
+        mfr_country = prod_row["manufacturer_country"] or prod_row["vendor_country"] or "US"
+        mfr_address = prod_row["manufacturer_address"] or ""
+        # If address is empty, use a placeholder so NOT NULL is satisfied.
+        if not mfr_address.strip():
+            mfr_address = "(see product record)"
+        await conn.execute(
+            """
+            INSERT INTO vendor_parties
+                (id, vendor_id, role, legal_name, address, country, tax_id, banking_details, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            ON CONFLICT DO NOTHING
+            """,
+            mfr_party_id,
+            prod_row["vendor_id"],
+            "MANUFACTURER",
+            prod_row["manufacturer_name"],
+            mfr_address,
+            mfr_country,
+            "",
+            "",
+            now_iso,
+            now_iso,
+        )
+        await conn.execute(
+            """
+            UPDATE products SET manufacturer_party_id = $1
+            WHERE id = $2 AND manufacturer_party_id IS NULL
+            """,
+            mfr_party_id,
+            prod_row["product_id"],
+        )

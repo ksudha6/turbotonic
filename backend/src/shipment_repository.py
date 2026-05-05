@@ -89,8 +89,9 @@ class ShipmentRepository:
                         signatory_title = $10,
                         declared_at = $11,
                         pallet_count = $12,
-                        export_reason = $13
-                    WHERE id = $14
+                        export_reason = $13,
+                        shipper_party_id = $14
+                    WHERE id = $15
                     """,
                     shipment.status.value,
                     _iso(shipment.updated_at),
@@ -105,6 +106,7 @@ class ShipmentRepository:
                     _iso(shipment.declared_at) if shipment.declared_at else None,
                     shipment.pallet_count,
                     shipment.export_reason,
+                    shipment.shipper_party_id,
                     shipment.id,
                 )
                 # Iter 044: update weight/dimension fields on existing line items
@@ -334,4 +336,5 @@ def _reconstruct(
         declared_at=_parse_dt(row["declared_at"]) if ("declared_at" in keys and row["declared_at"]) else None,
         pallet_count=row["pallet_count"] if ("pallet_count" in keys and row["pallet_count"] is not None) else None,
         export_reason=row["export_reason"] if ("export_reason" in keys and row["export_reason"]) else "",
+        shipper_party_id=row["shipper_party_id"] if ("shipper_party_id" in keys and row["shipper_party_id"]) else None,
     )

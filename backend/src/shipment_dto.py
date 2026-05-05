@@ -108,6 +108,8 @@ class ShipmentResponse(BaseModel):
     # Iter 110: logistics details
     pallet_count: int | None = None
     export_reason: str = ""
+    # Iter 113: per-shipment shipper party override FK
+    shipper_party_id: str | None = None
 
 
 class ShipmentBookRequest(BaseModel):
@@ -232,4 +234,5 @@ def shipment_to_response(
         declared_at=shipment.declared_at,
         pallet_count=shipment.pallet_count,
         export_reason=shipment.export_reason,
+        shipper_party_id=shipment.shipper_party_id,
     )

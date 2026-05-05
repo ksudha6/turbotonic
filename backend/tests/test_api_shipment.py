@@ -151,6 +151,8 @@ async def test_create_shipment_returns_201(authenticated_client: AsyncClient) ->
         "signatory_name", "signatory_title", "declared_at",
         # Iter 110: logistics fields
         "pallet_count", "export_reason",
+        # Iter 113: per-shipment shipper party override (nullable)
+        "shipper_party_id",
     }
     assert expected_keys == set(body.keys())
     assert body["po_id"] == po_id

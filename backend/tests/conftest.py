@@ -81,6 +81,7 @@ from src.routers.shipment import (
     get_document_repo_for_shipment as shipment_get_document_repo,
     get_file_storage_for_shipment as shipment_get_file_storage,
     get_product_repo_for_shipment as shipment_get_product_repo,
+    get_vendor_party_repo_for_shipment as shipment_get_vendor_party_repo,
 )
 from src.routers.brands import (
     get_brand_repo as brands_get_brand_repo,
@@ -88,6 +89,12 @@ from src.routers.brands import (
     get_activity_repo_for_brands as brands_get_activity_repo,
 )
 from src.routers.vendor import get_vendor_repo as vendor_get_vendor_repo
+from src.routers.vendor_parties import (
+    get_vendor_party_repo as vendor_parties_get_repo,
+    get_vendor_repo_for_parties as vendor_parties_get_vendor_repo,
+    get_activity_repo_for_parties as vendor_parties_get_activity_repo,
+)
+from src.vendor_party_repository import VendorPartyRepository
 from src.schema import init_db
 from src.packaging_repository import PackagingSpecRepository
 from src.product_repository import ProductRepository
@@ -221,6 +228,9 @@ async def _setup_overrides(
     async def override_get_brand_repo() -> AsyncIterator[BrandRepository]:
         yield BrandRepository(conn)
 
+    async def override_get_vendor_party_repo() -> AsyncIterator[VendorPartyRepository]:
+        yield VendorPartyRepository(conn)
+
     def override_get_file_storage() -> FileStorageService:
         return FileStorageService(upload_dir)
 
@@ -277,9 +287,13 @@ async def _setup_overrides(
     app.dependency_overrides[shipment_get_document_repo] = override_get_document_repo
     app.dependency_overrides[shipment_get_file_storage] = override_get_file_storage
     app.dependency_overrides[shipment_get_product_repo] = override_get_product_repo
+    app.dependency_overrides[shipment_get_vendor_party_repo] = override_get_vendor_party_repo
     app.dependency_overrides[brands_get_brand_repo] = override_get_brand_repo
     app.dependency_overrides[brands_get_vendor_repo] = override_get_vendor_repo
     app.dependency_overrides[brands_get_activity_repo] = override_get_activity_repo
+    app.dependency_overrides[vendor_parties_get_repo] = override_get_vendor_party_repo
+    app.dependency_overrides[vendor_parties_get_vendor_repo] = override_get_vendor_repo
+    app.dependency_overrides[vendor_parties_get_activity_repo] = override_get_activity_repo
 
     # Iter 060: route EmailService and NotificationDispatcher DI to the fake so
     # no test hits the network. Dispatcher is built here because it binds the

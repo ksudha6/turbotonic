@@ -42,8 +42,12 @@ class VendorCreate(BaseModel):
 
 
 class VendorPatch(BaseModel):
-    """Iter 110: partial update for vendor fields that can change post-creation."""
+    """Iter 110+113: partial update for vendor fields that can change post-creation."""
     tax_id: str | None = None
+    # Iter 113: update the default party assignments (nullable strings)
+    default_seller_party_id: str | None = None
+    default_shipper_party_id: str | None = None
+    default_remit_to_party_id: str | None = None
 
 
 class VendorResponse(BaseModel):
@@ -55,6 +59,10 @@ class VendorResponse(BaseModel):
     address: str
     account_details: str
     tax_id: str
+    # Iter 113: default party FK fields
+    default_seller_party_id: str | None = None
+    default_shipper_party_id: str | None = None
+    default_remit_to_party_id: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -68,6 +76,10 @@ class VendorListItem(BaseModel):
     address: str
     account_details: str
     tax_id: str
+    # Iter 113: default party FK fields
+    default_seller_party_id: str | None = None
+    default_shipper_party_id: str | None = None
+    default_remit_to_party_id: str | None = None
 
 
 def vendor_to_response(vendor: Vendor) -> VendorResponse:
@@ -80,6 +92,9 @@ def vendor_to_response(vendor: Vendor) -> VendorResponse:
         address=vendor.address,
         account_details=vendor.account_details,
         tax_id=vendor.tax_id,
+        default_seller_party_id=vendor.default_seller_party_id,
+        default_shipper_party_id=vendor.default_shipper_party_id,
+        default_remit_to_party_id=vendor.default_remit_to_party_id,
         created_at=vendor.created_at,
         updated_at=vendor.updated_at,
     )
@@ -95,4 +110,7 @@ def vendor_to_list_item(vendor: Vendor) -> VendorListItem:
         address=vendor.address,
         account_details=vendor.account_details,
         tax_id=vendor.tax_id,
+        default_seller_party_id=vendor.default_seller_party_id,
+        default_shipper_party_id=vendor.default_shipper_party_id,
+        default_remit_to_party_id=vendor.default_remit_to_party_id,
     )

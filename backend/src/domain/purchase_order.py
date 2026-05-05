@@ -153,6 +153,9 @@ class PurchaseOrder:
         brand_address: str | None = None,
         brand_country: str | None = None,
         brand_tax_id: str | None = None,
+        # Iter 113: per-PO seller and remit-to party overrides (nullable FKs)
+        seller_party_id: str | None = None,
+        remit_to_party_id: str | None = None,
     ) -> None:
         self._id = id
         self._po_number = po_number
@@ -189,6 +192,9 @@ class PurchaseOrder:
         self.brand_address = brand_address
         self.brand_country = brand_country
         self.brand_tax_id = brand_tax_id
+        # Iter 113: per-PO seller and remit-to party overrides
+        self.seller_party_id = seller_party_id
+        self.remit_to_party_id = remit_to_party_id
 
     @property
     def id(self) -> str:

@@ -65,6 +65,8 @@ class Shipment:
         # Iter 110: logistics details — pallet count on PL header; export reason on CI.
         pallet_count: int | None = None,
         export_reason: str = "",
+        # Iter 113: per-shipment shipper party override (nullable FK to vendor_parties).
+        shipper_party_id: str | None = None,
     ) -> None:
         self._id = id
         self.po_id = po_id
@@ -85,6 +87,7 @@ class Shipment:
         self.declared_at = declared_at
         self.pallet_count = pallet_count
         self.export_reason = export_reason
+        self.shipper_party_id = shipper_party_id
 
     @property
     def id(self) -> str:
@@ -233,6 +236,15 @@ class Shipment:
             export_reason = export_reason.strip()
         self.pallet_count = pallet_count
         self.export_reason = export_reason
+        self.updated_at = datetime.now(UTC)
+
+    def set_shipper_party(self, party_id: str | None) -> None:
+        # Shipper party override; only mutable while the shipment is DRAFT or DOCUMENTS_PENDING.
+        if self.status not in (ShipmentStatus.DRAFT, ShipmentStatus.DOCUMENTS_PENDING):
+            raise ValueError(
+                f"set_shipper_party is not allowed in {self.status.value} status"
+            )
+        self.shipper_party_id = party_id
         self.updated_at = datetime.now(UTC)
 
     def update_line_items(self, updates: list[dict[str, object]]) -> None:

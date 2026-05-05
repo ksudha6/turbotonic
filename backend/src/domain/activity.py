@@ -62,6 +62,11 @@ class ActivityEvent(Enum):
     BRAND_REACTIVATED = "BRAND_REACTIVATED"
     BRAND_VENDOR_ASSIGNED = "BRAND_VENDOR_ASSIGNED"
     BRAND_VENDOR_UNASSIGNED = "BRAND_VENDOR_UNASSIGNED"
+    # Iter 113: vendor-party lifecycle events. Routed to SM because party selection
+    # is a procurement workflow action, not system administration.
+    VENDOR_PARTY_ADDED = "VENDOR_PARTY_ADDED"
+    VENDOR_PARTY_UPDATED = "VENDOR_PARTY_UPDATED"
+    VENDOR_PARTY_REMOVED = "VENDOR_PARTY_REMOVED"
 
 
 class NotificationCategory(Enum):
@@ -78,6 +83,7 @@ class EntityType(Enum):
     SHIPMENT = "SHIPMENT"
     USER = "USER"
     BRAND = "BRAND"
+    VENDOR_PARTY = "VENDOR_PARTY"
 
 
 class TargetRole(Enum):
@@ -171,4 +177,8 @@ EVENT_METADATA: dict[ActivityEvent, tuple[NotificationCategory, TargetRole | Non
     ActivityEvent.BRAND_REACTIVATED: (NotificationCategory.LIVE, TargetRole.ADMIN),
     ActivityEvent.BRAND_VENDOR_ASSIGNED: (NotificationCategory.LIVE, TargetRole.ADMIN),
     ActivityEvent.BRAND_VENDOR_UNASSIGNED: (NotificationCategory.LIVE, TargetRole.ADMIN),
+    # Iter 113: vendor-party lifecycle events routed to SM.
+    ActivityEvent.VENDOR_PARTY_ADDED: (NotificationCategory.LIVE, TargetRole.SM),
+    ActivityEvent.VENDOR_PARTY_UPDATED: (NotificationCategory.LIVE, TargetRole.SM),
+    ActivityEvent.VENDOR_PARTY_REMOVED: (NotificationCategory.LIVE, TargetRole.SM),
 }

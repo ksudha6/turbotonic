@@ -48,10 +48,12 @@ class ProductResponse(BaseModel):
     part_number: str
     description: str
     manufacturing_address: str
-    # Iter 106: manufacturer identity fields
+    # Iter 106: manufacturer identity fields (read-only from iter 113)
     manufacturer_name: str
     manufacturer_address: str
     manufacturer_country: str
+    # Iter 113: structured manufacturer party FK
+    manufacturer_party_id: str | None = None
     qualifications: list[QualificationTypeListItem]
     created_at: datetime
     updated_at: datetime
@@ -63,10 +65,12 @@ class ProductListItem(BaseModel):
     part_number: str
     description: str
     manufacturing_address: str
-    # Iter 106: manufacturer identity fields
+    # Iter 106: manufacturer identity fields (read-only from iter 113)
     manufacturer_name: str
     manufacturer_address: str
     manufacturer_country: str
+    # Iter 113: structured manufacturer party FK
+    manufacturer_party_id: str | None = None
     qualifications: list[QualificationTypeListItem]
 
 
@@ -80,6 +84,7 @@ def product_to_response(product: Product, qualifications: list[QualificationType
         manufacturer_name=product.manufacturer_name,
         manufacturer_address=product.manufacturer_address,
         manufacturer_country=product.manufacturer_country,
+        manufacturer_party_id=product.manufacturer_party_id,
         qualifications=qualifications,
         created_at=product.created_at,
         updated_at=product.updated_at,
@@ -96,5 +101,6 @@ def product_to_list_item(product: Product, qualifications: list[QualificationTyp
         manufacturer_name=product.manufacturer_name,
         manufacturer_address=product.manufacturer_address,
         manufacturer_country=product.manufacturer_country,
+        manufacturer_party_id=product.manufacturer_party_id,
         qualifications=qualifications,
     )

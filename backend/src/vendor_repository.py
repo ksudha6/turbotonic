@@ -33,24 +33,36 @@ class VendorRepository:
         if not exists:
             await self._conn.execute(
                 """
-                INSERT INTO vendors (id, name, country, status, vendor_type, address, account_details, tax_id, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                INSERT INTO vendors (
+                    id, name, country, status, vendor_type, address, account_details, tax_id,
+                    default_seller_party_id, default_shipper_party_id, default_remit_to_party_id,
+                    created_at, updated_at
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
                 """,
                 vendor.id, vendor.name, vendor.country, vendor.status.value,
                 vendor.vendor_type.value, vendor.address, vendor.account_details,
                 vendor.tax_id,
+                vendor.default_seller_party_id,
+                vendor.default_shipper_party_id,
+                vendor.default_remit_to_party_id,
                 _iso(vendor.created_at), _iso(vendor.updated_at),
             )
         else:
             await self._conn.execute(
                 """
                 UPDATE vendors SET name = $1, country = $2, status = $3, vendor_type = $4,
-                    address = $5, account_details = $6, tax_id = $7, updated_at = $8
-                WHERE id = $9
+                    address = $5, account_details = $6, tax_id = $7,
+                    default_seller_party_id = $8, default_shipper_party_id = $9,
+                    default_remit_to_party_id = $10, updated_at = $11
+                WHERE id = $12
                 """,
                 vendor.name, vendor.country, vendor.status.value,
                 vendor.vendor_type.value, vendor.address, vendor.account_details,
                 vendor.tax_id,
+                vendor.default_seller_party_id,
+                vendor.default_shipper_party_id,
+                vendor.default_remit_to_party_id,
                 _iso(vendor.updated_at), vendor.id,
             )
 
@@ -99,4 +111,7 @@ def _reconstruct(row: asyncpg.Record) -> Vendor:
         address=row["address"] or "",
         account_details=row["account_details"] or "",
         tax_id=row["tax_id"] if "tax_id" in keys else "",
+        default_seller_party_id=row["default_seller_party_id"] if "default_seller_party_id" in keys else None,
+        default_shipper_party_id=row["default_shipper_party_id"] if "default_shipper_party_id" in keys else None,
+        default_remit_to_party_id=row["default_remit_to_party_id"] if "default_remit_to_party_id" in keys else None,
     )

@@ -73,16 +73,80 @@ async def patch_vendor(
     vendor_id: str,
     body: VendorPatch,
     repo: VendorRepoDep,
-    _user: User = require_role(UserRole.SM),
+    _user: User = require_role(UserRole.ADMIN),
 ) -> VendorResponse:
-    """Iter 110: partial update for vendor attributes (currently tax_id)."""
+    """Iter 110+113: partial update for vendor attributes (tax_id, default party FKs)."""
+    from datetime import UTC, datetime
+    from src.domain.vendor_party import VendorPartyRole
+    from src.vendor_party_repository import VendorPartyRepository
+
     vendor = await repo.get_by_id(vendor_id)
     if vendor is None:
         raise HTTPException(status_code=404, detail="Vendor not found")
+
     if body.tax_id is not None:
         vendor.tax_id = body.tax_id
-        from datetime import UTC, datetime
         vendor.updated_at = datetime.now(UTC)
+
+    # Validate and set each default party FK.
+    # party_repo shares the same connection as vendor_repo via the same DI function.
+    async def _validate_and_set_default(
+        field_value: str | None,
+        expected_role: VendorPartyRole,
+        setter_role: VendorPartyRole,
+    ) -> str | None:
+        if field_value is None:
+            return None
+        # We need party_repo; create it inline sharing the same conn.
+        # The vendor repo's internal conn is accessed via the dependency override pattern.
+        # Use a local import to avoid a circular dep at module level.
+        from src.db import get_db as _get_db  # noqa: F401 — not actually used here
+        # Reuse the connection from the vendor repo dependency (same DB session per request).
+        party_row = await repo._conn.fetchrow(
+            "SELECT vendor_id, role FROM vendor_parties WHERE id = $1", field_value
+        )
+        if party_row is None:
+            raise HTTPException(
+                status_code=422,
+                detail=f"VendorParty {field_value!r} not found",
+            )
+        if party_row["vendor_id"] != vendor_id:
+            raise HTTPException(
+                status_code=422,
+                detail=f"VendorParty {field_value!r} belongs to a different vendor",
+            )
+        if party_row["role"] != expected_role.value:
+            raise HTTPException(
+                status_code=422,
+                detail=f"VendorParty {field_value!r} has role {party_row['role']!r}; expected {expected_role.value!r}",
+            )
+        return field_value
+
+    if body.default_seller_party_id is not None:
+        validated = await _validate_and_set_default(
+            body.default_seller_party_id,
+            VendorPartyRole.SELLER,
+            VendorPartyRole.SELLER,
+        )
+        vendor.default_seller_party_id = validated
+        vendor.updated_at = datetime.now(UTC)
+    if body.default_shipper_party_id is not None:
+        validated = await _validate_and_set_default(
+            body.default_shipper_party_id,
+            VendorPartyRole.SHIPPER,
+            VendorPartyRole.SHIPPER,
+        )
+        vendor.default_shipper_party_id = validated
+        vendor.updated_at = datetime.now(UTC)
+    if body.default_remit_to_party_id is not None:
+        validated = await _validate_and_set_default(
+            body.default_remit_to_party_id,
+            VendorPartyRole.REMIT_TO,
+            VendorPartyRole.REMIT_TO,
+        )
+        vendor.default_remit_to_party_id = validated
+        vendor.updated_at = datetime.now(UTC)
+
     await repo.save(vendor)
     return vendor_to_response(vendor)
 

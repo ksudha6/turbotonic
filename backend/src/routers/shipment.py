@@ -42,6 +42,7 @@ from src.shipment_dto import (
 )
 from src.shipment_repository import ShipmentRepository
 from src.services.file_storage import FileStorageService
+from src.vendor_party_repository import VendorPartyRepository
 from src.vendor_repository import VendorRepository
 
 router = APIRouter(prefix="/api/v1/shipments", tags=["shipments"])
@@ -95,6 +96,11 @@ async def get_product_repo_for_shipment() -> AsyncIterator[ProductRepository]:
         yield ProductRepository(conn)
 
 
+async def get_vendor_party_repo_for_shipment() -> AsyncIterator[VendorPartyRepository]:
+    async with get_db() as conn:
+        yield VendorPartyRepository(conn)
+
+
 def get_file_storage_for_shipment() -> FileStorageService:
     return FileStorageService(Path(__file__).resolve().parent.parent.parent / "uploads")
 
@@ -109,6 +115,7 @@ QtRepoDep = Annotated[QualificationTypeRepository, Depends(get_qt_repo_for_shipm
 DocumentRepoDep = Annotated[DocumentRepository, Depends(get_document_repo_for_shipment)]
 FileStorageDep = Annotated[FileStorageService, Depends(get_file_storage_for_shipment)]
 ProductRepoDep = Annotated[ProductRepository, Depends(get_product_repo_for_shipment)]
+VendorPartyRepoDep = Annotated[VendorPartyRepository, Depends(get_vendor_party_repo_for_shipment)]
 
 
 @router.post("/", response_model=ShipmentResponse, status_code=201)
@@ -388,6 +395,62 @@ async def set_logistics(
             pallet_count=body.pallet_count,
             export_reason=body.export_reason,
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await repo.save(shipment)
+    rows = await repo.get_line_item_rows(shipment_id)
+    return shipment_to_response(shipment, rows)
+
+
+@router.patch("/{shipment_id}/shipper-party", response_model=ShipmentResponse)
+async def set_shipper_party(
+    shipment_id: str,
+    body: dict,
+    repo: ShipmentRepoDep,
+    vendor_party_repo: VendorPartyRepoDep,
+    _user: User = require_role(UserRole.ADMIN, UserRole.SM),
+) -> ShipmentResponse:
+    """Iter 113: set or clear the shipper VendorParty override for a shipment.
+
+    Body: {"shipper_party_id": "<id>" | null}
+    Validate: party must exist and belong to the shipment's vendor; role must be SHIPPER.
+    Allowed only in DRAFT and DOCUMENTS_PENDING statuses.
+    """
+    from src.domain.vendor_party import VendorPartyRole
+
+    shipment = await repo.get(shipment_id)
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+
+    party_id: str | None = body.get("shipper_party_id")
+
+    if party_id is not None:
+        # Resolve PO to get vendor_id for cross-vendor validation
+        po_repo_inner: PurchaseOrderRepository = None  # type: ignore
+        # Use direct SQL via the same conn rather than a second PO dependency
+        po_row = await repo._conn.fetchrow(
+            "SELECT vendor_id FROM purchase_orders WHERE id = $1", shipment.po_id
+        )
+        if po_row is None:
+            raise HTTPException(status_code=404, detail="Purchase order not found")
+        vendor_id = po_row["vendor_id"]
+
+        party = await vendor_party_repo.get(party_id)
+        if party is None:
+            raise HTTPException(status_code=422, detail=f"VendorParty {party_id!r} not found")
+        if party.vendor_id != vendor_id:
+            raise HTTPException(
+                status_code=422,
+                detail=f"VendorParty {party_id!r} belongs to a different vendor",
+            )
+        if party.role != VendorPartyRole.SHIPPER:
+            raise HTTPException(
+                status_code=422,
+                detail=f"VendorParty {party_id!r} has role {party.role.value!r}; expected SHIPPER",
+            )
+
+    try:
+        shipment.set_shipper_party(party_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     await repo.save(shipment)

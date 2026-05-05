@@ -33,8 +33,8 @@ class ProductRepository:
                 """
                 INSERT INTO products (id, vendor_id, part_number, description,
                     manufacturing_address, manufacturer_name, manufacturer_address,
-                    manufacturer_country, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    manufacturer_country, manufacturer_party_id, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 """,
                 product.id,
                 product.vendor_id,
@@ -44,6 +44,7 @@ class ProductRepository:
                 product.manufacturer_name,
                 product.manufacturer_address,
                 product.manufacturer_country,
+                product.manufacturer_party_id,
                 _iso(product.created_at),
                 _iso(product.updated_at),
             )
@@ -52,8 +53,9 @@ class ProductRepository:
                 """
                 UPDATE products SET vendor_id = $1, part_number = $2, description = $3,
                     manufacturing_address = $4, manufacturer_name = $5,
-                    manufacturer_address = $6, manufacturer_country = $7, updated_at = $8
-                WHERE id = $9
+                    manufacturer_address = $6, manufacturer_country = $7,
+                    manufacturer_party_id = $8, updated_at = $9
+                WHERE id = $10
                 """,
                 product.vendor_id,
                 product.part_number,
@@ -62,6 +64,7 @@ class ProductRepository:
                 product.manufacturer_name,
                 product.manufacturer_address,
                 product.manufacturer_country,
+                product.manufacturer_party_id,
                 _iso(product.updated_at),
                 product.id,
             )
@@ -110,6 +113,7 @@ def _reconstruct(row: asyncpg.Record) -> Product:
         manufacturer_name=row["manufacturer_name"] if "manufacturer_name" in keys else "",
         manufacturer_address=row["manufacturer_address"] if "manufacturer_address" in keys else "",
         manufacturer_country=row["manufacturer_country"] if "manufacturer_country" in keys else "",
+        manufacturer_party_id=row["manufacturer_party_id"] if "manufacturer_party_id" in keys else None,
         created_at=_parse_dt(row["created_at"]),
         updated_at=_parse_dt(row["updated_at"]),
     )

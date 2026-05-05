@@ -123,12 +123,18 @@ async def update_product(
     product = await repo.get_by_id(product_id)
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found")
+    # Iter 113: manufacturer_name/address/country are read-only; reject if supplied.
+    if any(
+        v is not None
+        for v in (body.manufacturer_name, body.manufacturer_address, body.manufacturer_country)
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="manufacturer fields are read-only; use manufacturer_party_id",
+        )
     product.update(
         description=body.description,
         manufacturing_address=body.manufacturing_address,
-        manufacturer_name=body.manufacturer_name,
-        manufacturer_address=body.manufacturer_address,
-        manufacturer_country=body.manufacturer_country,
     )
     await repo.save(product)
     async with get_db() as conn:

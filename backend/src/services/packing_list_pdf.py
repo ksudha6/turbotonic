@@ -18,6 +18,7 @@ from reportlab.platypus import (
 from src.domain.purchase_order import LineItemStatus, PurchaseOrder
 from src.domain.shipment import Shipment
 from src.domain.reference_labels import country_label, port_label
+from src.domain.vendor_party import VendorParty
 
 # Page margins — match po_pdf.py and invoice_pdf.py
 _LEFT_MARGIN = 0.75 * inch
@@ -52,6 +53,22 @@ def _fmt_str(value: str | None) -> str:
     return value
 
 
+def resolve_shipper_party(
+    shipment_shipper_party_id: str | None,
+    vendor_default_shipper_party_id: str | None,
+    party_index: dict[str, VendorParty],
+) -> VendorParty | None:
+    """Return the shipper VendorParty to render.
+
+    Priority: per-shipment override, then vendor default, then None (fall back to flat vendor).
+    party_index maps party_id to VendorParty object.
+    """
+    for party_id in (shipment_shipper_party_id, vendor_default_shipper_party_id):
+        if party_id and party_id in party_index:
+            return party_index[party_id]
+    return None
+
+
 def generate_packing_list_pdf(
     shipment: Shipment,
     po: PurchaseOrder,
@@ -62,14 +79,20 @@ def generate_packing_list_pdf(
     vendor_country: str = "",
     manufacturer_lookup: dict[str, dict[str, str]] | None = None,
     vendor_tax_id: str = "",
+    # Iter 113: structured party lookup maps party_id -> VendorParty for shipper block.
+    # vendor_default_shipper_party_id is the vendor-level fallback when no per-shipment override.
+    party_lookup: dict[str, VendorParty] | None = None,
+    vendor_default_shipper_party_id: str | None = None,
+    # Iter 113: per-product manufacturer parties map part_number -> VendorParty.
+    manufacturer_party_lookup: dict[str, VendorParty] | None = None,
 ) -> bytes:
     """Build a packing list PDF for the given Shipment and return it as raw bytes.
 
-    manufacturer_lookup maps part_number → {name, address, country}. When present,
-    per-line manufacturer data overrides the vendor block for that line. When absent
-    or a line has no entry, the vendor block is used as the manufacturer.
+    manufacturer_lookup maps part_number → {name, address, country}. Retained as the
+    free-text fallback path (iter 106). manufacturer_party_lookup maps part_number to a
+    structured VendorParty (iter 113) and takes priority when present.
+    Shipper block: uses shipment.shipper_party_id -> vendor default shipper -> flat vendor.
     """
-    """Build a packing list PDF for the given Shipment and return it as raw bytes."""
     buf = io.BytesIO()
 
     doc = SimpleDocTemplate(
@@ -181,31 +204,47 @@ def generate_packing_list_pdf(
 
     # -------------------------------------------------------------------------
     # 3. Parties: Shipper/Manufacturer and Consignee (buyer) side-by-side.
-    # Iter 106: when manufacturer_lookup is provided and all line items share the
-    # same manufacturer, use that manufacturer; otherwise fall back to vendor.
+    # Iter 113 priority chain for shipper block:
+    #   1. shipment.shipper_party_id -> structured VendorParty
+    #   2. vendor.default_shipper_party_id -> structured VendorParty
+    #   3. fallback to flat vendor address (iter pre-113 behavior)
+    # Iter 106 free-text manufacturer_lookup is the fallback for per-line manufacturer.
     # vendor_country resolves from the Vendor aggregate; country_label handles unknown codes.
     # -------------------------------------------------------------------------
     story.append(Paragraph("Parties", heading_style))
 
-    # Determine the manufacturer block to display.
-    # If all line items have a consistent non-empty manufacturer_name, use it;
-    # otherwise fall back to the vendor.
-    mfr_name = vendor_name
-    mfr_address = vendor_address
-    mfr_country = vendor_country
-    if manufacturer_lookup:
-        mfr_entries = [
-            manufacturer_lookup[item.part_number]
-            for item in shipment.line_items
-            if item.part_number in manufacturer_lookup
-                and manufacturer_lookup[item.part_number].get("name", "").strip()
-        ]
-        if mfr_entries:
-            # Use the first non-empty manufacturer; typical case is one manufacturer per shipment.
-            first = mfr_entries[0]
-            mfr_name = first.get("name", vendor_name) or vendor_name
-            mfr_address = first.get("address", vendor_address) or vendor_address
-            mfr_country = first.get("country", vendor_country) or vendor_country
+    # Determine the shipper / manufacturer block to display.
+    # Iter 113: resolve shipper from VendorParty priority chain.
+    _party_index = party_lookup or {}
+    shipper_party = resolve_shipper_party(
+        shipment.shipper_party_id if hasattr(shipment, "shipper_party_id") else None,
+        vendor_default_shipper_party_id,
+        _party_index,
+    )
+
+    if shipper_party is not None:
+        # Structured party takes priority over all free-text paths.
+        mfr_name = shipper_party.legal_name
+        mfr_address = shipper_party.address
+        mfr_country = shipper_party.country
+    else:
+        # Iter 106 / pre-113 fallback: use manufacturer_lookup (free-text) or vendor.
+        mfr_name = vendor_name
+        mfr_address = vendor_address
+        mfr_country = vendor_country
+        if manufacturer_lookup:
+            mfr_entries = [
+                manufacturer_lookup[item.part_number]
+                for item in shipment.line_items
+                if item.part_number in manufacturer_lookup
+                    and manufacturer_lookup[item.part_number].get("name", "").strip()
+            ]
+            if mfr_entries:
+                # Use the first non-empty manufacturer; typical case is one manufacturer per shipment.
+                first = mfr_entries[0]
+                mfr_name = first.get("name", vendor_name) or vendor_name
+                mfr_address = first.get("address", vendor_address) or vendor_address
+                mfr_country = first.get("country", vendor_country) or vendor_country
 
     mfr_country_display = country_label(mfr_country) if mfr_country else ""
     shipper_content = [

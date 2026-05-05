@@ -18,6 +18,7 @@ from reportlab.platypus import (
 
 from src.domain.purchase_order import LineItemStatus, PurchaseOrder
 from src.domain.shipment import Shipment
+from src.domain.vendor_party import VendorParty
 from src.domain.reference_labels import (
     currency_label,
     country_label,
@@ -59,6 +60,21 @@ def _weight_str(value: Decimal | None) -> str:
     return f"{value:.3f}"
 
 
+def resolve_seller_party(
+    po_seller_party_id: str | None,
+    vendor_default_seller_party_id: str | None,
+    party_index: dict[str, VendorParty],
+) -> VendorParty | None:
+    """Return the seller VendorParty to render on the CI.
+
+    Priority: per-PO override, then vendor default, then None (fall back to flat vendor).
+    """
+    for party_id in (po_seller_party_id, vendor_default_seller_party_id):
+        if party_id and party_id in party_index:
+            return party_index[party_id]
+    return None
+
+
 def generate_commercial_invoice_pdf(
     shipment: Shipment,
     po: PurchaseOrder,
@@ -70,6 +86,12 @@ def generate_commercial_invoice_pdf(
     buyer_country: str = "",
     buyer_tax_id: str = "",
     vendor_tax_id: str = "",
+    # Iter 113: structured party lookup for CI seller / banking blocks.
+    party_lookup: dict[str, VendorParty] | None = None,
+    po_seller_party_id: str | None = None,
+    vendor_default_seller_party_id: str | None = None,
+    po_remit_to_party_id: str | None = None,
+    vendor_default_remit_to_party_id: str | None = None,
 ) -> bytes:
     """Build a commercial invoice PDF for the given Shipment and PurchaseOrder.
 
@@ -206,18 +228,40 @@ def generate_commercial_invoice_pdf(
 
     # -------------------------------------------------------------------------
     # 4. Parties: Seller (left) / Buyer + Consignee (right)
+    # Iter 113 priority chain for seller block:
+    #   1. po.seller_party_id -> structured VendorParty (legal_name + address + country + tax_id)
+    #   2. vendor.default_seller_party_id -> structured VendorParty
+    #   3. fallback to flat vendor (vendor_name + vendor_address + vendor_country + vendor_tax_id)
     # -------------------------------------------------------------------------
     story.append(Paragraph("Parties", heading_style))
 
-    vendor_country_display = country_label(vendor_country) if vendor_country else ""
+    _party_index = party_lookup or {}
+    seller_party = resolve_seller_party(
+        po_seller_party_id,
+        vendor_default_seller_party_id,
+        _party_index,
+    )
+
+    if seller_party is not None:
+        _seller_name = seller_party.legal_name
+        _seller_address = seller_party.address
+        _seller_country = seller_party.country
+        _seller_tax_id = seller_party.tax_id
+    else:
+        _seller_name = vendor_name
+        _seller_address = vendor_address
+        _seller_country = vendor_country
+        _seller_tax_id = vendor_tax_id
+
+    seller_country_display = country_label(_seller_country) if _seller_country else ""
     seller_content: list = [
         Paragraph("<b>Seller</b>", cell_bold),
-        Paragraph(vendor_name, cell_style),
-        Paragraph(vendor_address, cell_style),
-        Paragraph(vendor_country_display, cell_style),
+        Paragraph(_seller_name, cell_style),
+        Paragraph(_seller_address, cell_style),
+        Paragraph(seller_country_display, cell_style),
     ]
-    if vendor_tax_id:
-        seller_content.append(Paragraph(f"Tax ID: {vendor_tax_id}", cell_style))
+    if _seller_tax_id:
+        seller_content.append(Paragraph(f"Tax ID: {_seller_tax_id}", cell_style))
     buyer_country_display = country_label(buyer_country) if buyer_country else country_label(po.buyer_country)
     buyer_content: list = [
         Paragraph("<b>Buyer</b>", cell_bold),
