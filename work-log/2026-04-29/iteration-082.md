@@ -2,16 +2,16 @@
 
 ## Context
 
-Phase 4.2 PO detail tier rollout. Tier 2 (iter 077) shipped the header + role-aware action rail + advance payment panel + cert warnings banner. Tier 3 (iter 081) shipped per-line negotiation cards (PENDING/MODIFIED states) + the sticky submit-response bar. The remaining ACCEPTED-PO surfaces on [(nexus)/po/[id]/+page.svelte](frontend/src/routes/(nexus)/po/[id]/+page.svelte) still render in pre-revamp shape:
+Phase 4.2 PO detail tier rollout. Tier 2 (iter 077) shipped the header, action rail, advance payment panel, and cert warnings banner. Tier 3 (iter 081) shipped per-line negotiation cards (PENDING/MODIFIED states) and the sticky submit-response bar. The remaining ACCEPTED-PO surfaces on [(nexus)/po/[id]/+page.svelte](frontend/src/routes/(nexus)/po/[id]/+page.svelte) still render in pre-revamp shape:
 
-- ACCEPTED line items table at [`+page.svelte:583-648`](frontend/src/routes/(nexus)/po/[id]/+page.svelte#L583) — legacy `<table class="table">` with `btn btn-secondary` + `badge badge-cert` + `badge badge-line-status` class selectors.
+- ACCEPTED line items table at [`+page.svelte:583-648`](frontend/src/routes/(nexus)/po/[id]/+page.svelte#L583) — legacy `<table class="table">` with `btn btn-secondary`, `badge badge-cert`, `badge badge-line-status` class selectors.
 - Add Line dialog at [`+page.svelte:770-820`](frontend/src/routes/(nexus)/po/[id]/+page.svelte) — seven free-text inputs with no reference-data validation for UoM, HS code, or Country.
 - Per-row Remove button at [`+page.svelte:631-637`](frontend/src/routes/(nexus)/po/[id]/+page.svelte#L631) — disabled with attribute tooltip when post-acceptance gate is closed.
-- Production Status section at [`+page.svelte:661-668`](frontend/src/routes/(nexus)/po/[id]/+page.svelte#L661) — legacy [MilestoneTimeline](frontend/src/lib/components/MilestoneTimeline.svelte) component, separate from the Phase 4.0 [Timeline](frontend/src/lib/ui/Timeline.svelte) primitive.
+- Production Status section at [`+page.svelte:661-668`](frontend/src/routes/(nexus)/po/[id]/+page.svelte#L661) — legacy [MilestoneTimeline](frontend/src/lib/components/MilestoneTimeline.svelte), separate from the Phase 4.0 [Timeline](frontend/src/lib/ui/Timeline.svelte) primitive.
 
-These surfaces are catalogued as G-18 (post-acceptance line add/remove dialogs) and G-19 (milestone timeline placement and post-action) in the Phase 4.2 mock-clarity inventory. Decisions agreed there: hide gated controls instead of disabling them, route Country/UoM/HS code through reference-data Selects, retire `MilestoneTimeline` in favor of the Phase 4.0 primitive, surface overdue as a red dot + "Overdue" label, keep VENDOR as the only role posting milestones.
+These surfaces are G-18 (post-acceptance line add/remove dialogs) and G-19 (milestone timeline placement and post-action) in the Phase 4.2 mock-clarity inventory. Decisions: hide gated controls instead of disabling them, route Country/UoM/HS code through reference-data Selects, retire `MilestoneTimeline` in favor of the Phase 4.0 primitive, surface overdue as a red dot + "Overdue" label, keep VENDOR as the only role posting milestones.
 
-After this iter the only remaining pre-revamp sections on `(nexus)/po/[id]` are the invoice table, rejection history, activity timeline, and the metadata grid (Terms / Country / Marketplace / etc.). Those are Tier 5 scope.
+The only remaining pre-revamp sections on `(nexus)/po/[id]` after this iter are the invoice table, rejection history, activity timeline, and metadata grid. Those are Tier 5 scope.
 
 ## JTBD
 

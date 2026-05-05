@@ -71,8 +71,16 @@ async def create_product(body: ProductCreate, repo: ProductRepoDep, _user: User 
 
 @router.get("/", response_model=list[ProductListItem])
 async def list_products(
-    repo: ProductRepoDep, vendor_id: str | None = None, _user: User = require_role(UserRole.SM, UserRole.QUALITY_LAB)
+    repo: ProductRepoDep,
+    vendor_id: str | None = None,
+    user: User = require_role(
+        UserRole.SM, UserRole.QUALITY_LAB, UserRole.VENDOR, UserRole.PROCUREMENT_MANAGER
+    ),
 ) -> list[ProductListItem]:
+    # VENDOR is scoped to their own products: their vendor_id always wins over any
+    # user-supplied filter. Other roles may pass any vendor_id for filtering.
+    if user.role is UserRole.VENDOR:
+        vendor_id = user.vendor_id
     products = await repo.list_products(vendor_id)
     if not products:
         return []
@@ -87,9 +95,19 @@ async def list_products(
 
 
 @router.get("/{product_id}", response_model=ProductResponse)
-async def get_product(product_id: str, repo: ProductRepoDep, _user: User = require_role(UserRole.SM, UserRole.QUALITY_LAB)) -> ProductResponse:
+async def get_product(
+    product_id: str,
+    repo: ProductRepoDep,
+    user: User = require_role(
+        UserRole.SM, UserRole.QUALITY_LAB, UserRole.VENDOR, UserRole.PROCUREMENT_MANAGER
+    ),
+) -> ProductResponse:
     product = await repo.get_by_id(product_id)
     if product is None:
+        raise HTTPException(status_code=404, detail="Product not found")
+    # VENDOR may only see their own products. 404 (not 403) so cross-vendor probes
+    # cannot enumerate ids — same shape as check_vendor_access for POs.
+    if user.role is UserRole.VENDOR and product.vendor_id != user.vendor_id:
         raise HTTPException(status_code=404, detail="Product not found")
     async with get_db() as conn:
         qt_repo = QualificationTypeRepository(conn)

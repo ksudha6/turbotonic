@@ -2,33 +2,33 @@
 
 ## Context
 
-The original iter 040 plan (drafted before Phase 4 took over) bundled four cert-UI pieces under one heading:
+The iter 040 plan bundled four cert-UI pieces:
 
-1. Product detail qualification list — **shipped iter 092** as `ProductQualificationsPanel`.
-2. PO-creation cert-warning banner — **shipped iter 077** as `PoCertWarningsBanner` consuming `POSubmitResponse.cert_warnings` from iter 039's quality gate.
-3. Certificate upload + management UI — **never shipped**. This iter.
-4. Dashboard expiry alerts — **never shipped**. Out of scope here; separate iter.
+1. Product detail qualification list (shipped iter 092 as `ProductQualificationsPanel`).
+2. PO-creation cert-warning banner (shipped iter 077 as `PoCertWarningsBanner`).
+3. Certificate upload + management UI (this iter).
+4. Dashboard expiry alerts (deferred to a separate iter).
 
 Backend cert surface is complete (iter 038):
 - Domain: `Certificate` aggregate with `CertificateStatus` (PENDING, VALID, with computed EXPIRED when `expiry_date < now`).
 - DTO: `CertificateCreate`, `CertificateUpdate`, `CertificateResponse`, `CertificateListItem` in `backend/src/certificate_dto.py`. List item carries id, product_id, qualification_type_id, cert_number, issuer, target_market, status (computed string), expiry_date.
 - Endpoints under `/api/v1/certificates`:
-  - `POST /` — SM only; creates cert with metadata (cert_number, issuer, testing_lab, test_date, issue_date, expiry_date, target_market).
-  - `GET /?product_id=X[&target_market=Y]` — SM/VENDOR; product_id required.
-  - `GET /{id}` — SM/VENDOR.
-  - `PATCH /{id}` — SM only; supports PENDING → VALID transition via `status: 'VALID'`.
-  - `POST /{id}/document` — SM/VENDOR; PDF upload (10MB) emits `CERT_UPLOADED` activity (LIVE → SM).
+  - `POST /`: SM only; creates cert with metadata (cert_number, issuer, testing_lab, test_date, issue_date, expiry_date, target_market).
+  - `GET /?product_id=X[&target_market=Y]`: SM/VENDOR; product_id required.
+  - `GET /{id}`: SM/VENDOR.
+  - `PATCH /{id}`: SM only; supports PENDING → VALID transition via `status: 'VALID'`.
+  - `POST /{id}/document`: SM/VENDOR; PDF upload (10MB) emits `CERT_UPLOADED` activity (LIVE → SM).
 
 Frontend has type stubs only:
 - `frontend/src/lib/types.ts:479-492` exports `CertWarning` + `CertWarningReason` for the iter-077 banner. **No `Certificate` / `CertificateListItem` types.**
 - `frontend/src/lib/api.ts` has zero cert-related functions.
 - No cert routes, no cert components.
 
-Permissions: SM and ADMIN can fully manage certs; VENDOR can list and upload documents. The product edit page is already gated to SM/ADMIN at the route level (per iter 092 redirect). VENDOR's cert UX would land on a vendor-side page that doesn't exist yet — out of scope.
+Permissions: SM and ADMIN can fully manage certs; VENDOR can list and upload documents. The product edit page is already gated to SM/ADMIN at the route level (iter 092). VENDOR cert UX lands on a vendor-side page that does not exist yet (out of scope).
 
-The cert vocabulary on the product edit page is already populated: `ProductQualificationsPanel` shows the assigned qualifications with `target_market` per qual. A cert is per `(product, qualification_type, target_market)` — multiple target_markets can share a qualification type, but in practice the qualification carries one target_market. The cert form will surface qualification + target_market as paired-but-editable fields (default target_market from the selected qualification, but allow override since the backend permits it).
+The cert vocabulary on the product edit page is populated: `ProductQualificationsPanel` shows the assigned qualifications with `target_market` per qual. A cert is per `(product, qualification_type, target_market)`. The cert form surfaces qualification + target_market as paired-but-editable fields (default target_market from the selected qualification, editable because the backend permits divergence).
 
-This iter ships **list + create + document upload**. Edit (PATCH metadata) and approve (PATCH status=VALID) are deferred to iter 095 — same split rhythm as iter 092 (list + create) → iter 093 (packaging panel without edit). Status transitions are workflow questions that warrant their own brainstorm.
+Iter 094 ships **list + create + document upload**. Edit (PATCH metadata) and approve (PATCH status=VALID) are deferred to iter 095.
 
 ## JTBD
 

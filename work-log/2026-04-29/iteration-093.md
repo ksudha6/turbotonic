@@ -2,12 +2,12 @@
 
 ## Context
 
-Iter 092 ported the edit page under `(nexus)` with `ProductEditForm` + `ProductQualificationsPanel` but kept the packaging-specs section as inline legacy markup as a transitional holdover. This iter retires that block.
+Iter 092 ported the edit page under `(nexus)` with `ProductEditForm` + `ProductQualificationsPanel` but kept the packaging-specs section as inline legacy markup as a transitional holdover. Iter 093 retires that block.
 
 The legacy markup has three concerns:
 1. **List** grouped by marketplace, each spec showing name, description, status pill, and a Delete button gated on `status === 'PENDING'`.
-2. **Add form** toggled by an "Add Spec" button — inputs for marketplace, spec_name, description, requirements_text. Submit POSTs and prepends to the local list. Add and Delete are SM/ADMIN only.
-3. **Native `confirm()`** before Delete — keeping the same UX in the new panel since there's no Phase 4.0 confirm dialog primitive.
+2. **Add form** toggled by an "Add Spec" button (inputs for marketplace, spec_name, description, requirements_text). Submit POSTs and prepends to the local list. Add and Delete are SM/ADMIN only.
+3. **Native `confirm()`** before Delete, kept in the new panel since there's no Phase 4.0 confirm dialog primitive.
 
 The frontend `PackagingSpecStatus` type currently lists only `'PENDING'`, but the backend has a `COLLECTED` status documented in the iter 042 summary (file upload transitions PENDING → COLLECTED). The legacy page renders the status string verbatim and only allows Delete on PENDING; the new panel preserves that exact behavior. Status pill tone: PENDING → gray, COLLECTED → green (the same pattern other surfaces use).
 

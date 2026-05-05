@@ -50,10 +50,14 @@
 	});
 
 	onMount(async () => {
-		try {
-			vendors = await listVendors();
-		} catch {
-			// Vendor pre-fetch failure leaves the filter dropdown empty; the main fetch surfaces a real error state.
+		// VENDOR sees only their own products, so the vendor filter is hidden and
+		// listVendors() (which 403s for VENDOR) is skipped.
+		if (role !== 'VENDOR') {
+			try {
+				vendors = await listVendors();
+			} catch {
+				// Vendor pre-fetch failure leaves the filter dropdown empty; the main fetch surfaces a real error state.
+			}
 		}
 		await fetchProducts();
 	});
@@ -101,7 +105,9 @@
 	</PageHeader>
 
 	<div class="product-list-page">
-		<ProductListFilters bind:vendor {vendors} onClear={clearFilters} />
+		{#if role !== 'VENDOR'}
+			<ProductListFilters bind:vendor {vendors} onClear={clearFilters} />
+		{/if}
 
 		{#if errorMessage && !loading}
 			<ErrorState message={errorMessage} onRetry={fetchProducts} />

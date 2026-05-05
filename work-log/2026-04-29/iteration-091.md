@@ -2,7 +2,7 @@
 
 ## Context
 
-Following iter 090 (`/products` list under `(nexus)`), this iter ports the matching create form. Today's `/products/new` is 131 lines — slightly smaller than iter 089's `VendorForm` (134 lines). The shape is similar: native `<input class="input">`, `<select class="select">`, `<textarea class="textarea">`, hand-rolled 2-column `.form-grid`, native Cancel `<a>` + Submit `<button>` row.
+Iter 090 revamped the `/products` list. This iter ports the create form. `/products/new` is 131 lines: native `<input class="input">`, `<select class="select">`, `<textarea class="textarea">`, hand-rolled 2-column `.form-grid`, native Cancel `<a>` + Submit `<button>` row.
 
 The legacy page filters vendors by `status: 'ACTIVE'` on the `listVendors` call — only active vendors are eligible to be selected when creating a product. The revamp preserves this constraint.
 

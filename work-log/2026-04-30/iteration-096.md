@@ -2,15 +2,15 @@
 
 ## Context
 
-Today the registration URL is `/register?username=<name>`. Anyone who knows a PENDING user's username can complete registration on their behalf — usernames are guessable (typically email-local-part or the obvious handle), and the backend `POST /api/v1/auth/register/options` accepts a raw username. The only thing standing between an attacker and a stolen account is "did the legitimate invitee click first." Iter 030 shipped the username-keyed flow as the smallest path to working passkeys; the security gap was logged at the time and has lived on the backlog ever since.
+Today the registration URL is `/register?username=<name>`. Anyone who knows a PENDING user's username can complete registration on their behalf — usernames are guessable, and `POST /api/v1/auth/register/options` accepts a raw username. Iter 030 shipped the username-keyed flow as the smallest path to working passkeys; the security gap was logged at the time.
 
-This iter runs as a parallel-track follow-up to iter 095. It is backend-and-auth-frontend only and has zero overlap with Phase 4.5 Tier 4 (cert UI fold-in), which is in flight on a separate branch and only touches `(nexus)/products/*`. The `/register` and `/setup` routes are pre-revamp and are explicitly *not* part of any Phase 4 tier — Phase 4's auth-page revamp is its own future iter.
+This iter is backend-and-auth-frontend only, with no overlap with Phase 4.5 Tier 4 (cert UI fold-in) on `(nexus)/products/*`. The `/register` and `/setup` routes are pre-revamp and are not part of any Phase 4 tier.
 
-The shape of the change is small and contained: the registration link becomes `/register?token=<uuid>`, where `<uuid>` is a per-invite secret stored on `users.invite_token`. The token is generated when an invite (or bootstrap) creates the PENDING user, returned to the inviter in the response so they can build the link, consumed by the registration handshake (both `options` and `verify` keyed off the token), and cleared as part of activation. Username never leaves the server during registration.
+The registration link becomes `/register?token=<uuid>`, where `<uuid>` is a per-invite secret stored on `users.invite_token`. The token is generated when an invite (or bootstrap) creates the PENDING user, returned to the inviter in the response, consumed by both `options` and `verify`, and cleared on activation. Username never leaves the server during registration.
 
-The bootstrap flow is structurally identical — the very first ADMIN is also a PENDING user the first time around, so `POST /api/v1/auth/bootstrap` already creates a User via `User.invite(...)`. Bootstrap returns `options` (and now `invite_token`) so `/setup` can redirect to `/register?token=...` rather than `/register?username=...`.
+Bootstrap is structurally identical: `POST /api/v1/auth/bootstrap` creates a User via `User.invite(...)` and now returns `invite_token` alongside `options` so `/setup` redirects to `/register?token=...`.
 
-The domain layer needs the smallest possible change: `User.invite()` allocates an `invite_token` alongside `id`, and `User.activate()` clears it (single point of truth for "registration complete → token spent"). Repository persists it (ALTER TABLE column add) and exposes a `get_by_invite_token` lookup. Existing PENDING users are backfilled with a fresh token at `init_db` time so no manual data step is required during deploy.
+Domain changes: `User.invite()` allocates `invite_token` alongside `id`; `User.activate()` clears it. Repository persists it via ALTER TABLE and exposes `get_by_invite_token`. Existing PENDING users are backfilled with a fresh token at `init_db` time.
 
 ## JTBD
 

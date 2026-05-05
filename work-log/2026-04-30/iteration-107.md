@@ -3,18 +3,16 @@
 ## Context
 
 `TargetRole` in `backend/src/domain/activity.py` covers five operational roles: SM, VENDOR,
-QUALITY_LAB, FREIGHT_MANAGER, PROCUREMENT_MANAGER. ADMIN has no corresponding value. When iter
-099 added user-lifecycle events (USER_UPDATED, USER_DEACTIVATED, USER_REACTIVATED,
+QUALITY_LAB, FREIGHT_MANAGER, PROCUREMENT_MANAGER. ADMIN has no value. When iter 099 added
+user-lifecycle events (USER_UPDATED, USER_DEACTIVATED, USER_REACTIVATED,
 USER_CREDENTIALS_RESET, USER_INVITE_REISSUED), all five were assigned `target_role=None` as a
-broadcast rather than introducing a missing enum member. The comment in `activity.py` explicitly
-flagged this deferral: "If user-event noise appears in non-ADMIN feeds, add TargetRole.ADMIN
-and narrow." Iter 100 shipped the /users ADMIN page that consumes these events; the activity
-feed now filters by target_role, so ADMIN-scoped events never appear in ADMIN feeds because
-the value does not exist.
+broadcast. Iter 100 shipped the `/users` ADMIN page that consumes these events; the activity
+feed filters by target_role, so ADMIN-scoped events never appear in ADMIN feeds because the
+enum value is missing.
 
-The invite endpoint (`POST /api/v1/users/invite`) also has no activity event at all. The USER_*
-events introduced in iter 099 cover the five lifecycle mutation endpoints but the invite
-creation itself was deferred. This iter adds USER_INVITED alongside TargetRole.ADMIN.
+`POST /api/v1/users/invite` has no activity event. The USER_* events from iter 099 cover the
+five lifecycle mutation endpoints; invite creation was deferred. This iter adds USER_INVITED
+alongside TargetRole.ADMIN.
 
 ## JTBD
 

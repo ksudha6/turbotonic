@@ -2,9 +2,9 @@
 
 ## Context
 
-The CLAUDE.md selector policy added in iter 076 mandates new Playwright tests query elements by `getByRole`, `getByLabel`, or `getByTestId` only — preferring role/label first. Every primitive in [frontend/src/lib/ui/](frontend/src/lib/ui/) accepts a `testid` prop today, but most do not expose a `label` or `aria-label` prop, so role-based queries collide on multi-instance pages and label-based queries fall through. This blocks the policy from being first-class in test selection. Backlog item "Primitive `label` / `aria-label` plumbing" (queued from iter 076 close) covers the retrofit.
+The CLAUDE.md selector policy (iter 076) mandates new Playwright tests query by `getByRole`, `getByLabel`, or `getByTestId` only. Every primitive in [frontend/src/lib/ui/](frontend/src/lib/ui/) accepts a `testid` prop today, but most do not expose a `label` or `aria-label` prop, so role-based queries collide on multi-instance pages and label-based queries fall through. Backlog item "Primitive `label` / `aria-label` plumbing" (queued from iter 076 close) covers the retrofit.
 
-Iter 080 lands the retrofit as a single mechanical pass across the primitive surface. Components that already have implicit accessible names (FormField wraps its child in `<label>`; Button's text is its name; Toggle's `label` prop is already wired) need no change. Components without one get either (a) an `ariaLabel` prop forwarded to `aria-label`, (b) a `label` prop forwarded to `aria-label` on the container, or (c) a generated id wired to `aria-labelledby` on the existing visible heading.
+This iter is a single mechanical pass across the primitive surface. Components with implicit accessible names (FormField wraps its child in `<label>`; Button's text is its name; Toggle's `label` prop is already wired) are unchanged. Components without one get either (a) an `ariaLabel` prop forwarded to `aria-label`, (b) a `label` prop forwarded to `aria-label` on the container, or (c) a generated id wired to `aria-labelledby` on the existing visible heading.
 
 ## JTBD
 

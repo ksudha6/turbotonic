@@ -2,11 +2,11 @@
 
 ## Context
 
-Phase 4.3 read surfaces are feature-complete after iter 086 (`/invoices` list) and iter 087 (`/invoice/[id]` detail). The one remaining pre-revamp surface in the invoice flow is the create-invoice modal that opens from `(nexus)/po/[id]` when a VENDOR (or ADMIN) presses "Create Invoice" on an ACCEPTED PROCUREMENT PO.
+Phase 4.3 read surfaces closed at iter 086 (`/invoices` list) and iter 087 (`/invoice/[id]` detail). The remaining pre-revamp surface is the create-invoice modal that opens from `(nexus)/po/[id]` when a VENDOR (or ADMIN) presses "Create Invoice" on an ACCEPTED PROCUREMENT PO.
 
-Today's modal is `frontend/src/lib/components/CreateInvoiceDialog.svelte`: 113 lines, raw `<table class="table">`, native `<input class="qty-input">`, native `<button class="btn btn-secondary">` / `<button class="btn btn-primary">`, no responsive layout, no accessible name on the dialog root, no testids. It is the last consumer in `frontend/src/lib/components/` aside from `POForm.svelte` (already retired by iter 085 — only the file path is gone) — meaning after this iter, the only legacy components remaining are the few iter-057 negotiation pieces already retired by iter 081 and `MilestoneTimeline.svelte` already deleted in iter 082. Net effect: `frontend/src/lib/components/` becomes empty (or near-empty) and the directory itself can retire.
+The modal is `frontend/src/lib/components/CreateInvoiceDialog.svelte`: 113 lines, raw `<table class="table">`, native `<input class="qty-input">`, native `<button class="btn btn-secondary">` / `<button class="btn btn-primary">`, no responsive layout, no accessible name on the dialog root, no testids. It is the last component in `frontend/src/lib/components/` — iter 081 (negotiation pieces) and iter 082 (`MilestoneTimeline.svelte`) retired all prior files. Deleting it empties the directory.
 
-OPEX flow does not use this modal — `handleCreateOpexInvoice` calls `createInvoice(poId)` with no line items and goes directly to `/invoice/{id}`. Only PROCUREMENT POs need the per-line quantity entry.
+OPEX flow does not use this modal. `handleCreateOpexInvoice` calls `createInvoice(poId)` with no line items and navigates directly to `/invoice/{id}`. Only PROCUREMENT POs need per-line quantity entry.
 
 ## JTBD
 

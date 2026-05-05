@@ -2,20 +2,18 @@
 
 ## Context
 
-Phase 4.2 PO detail rollout has shipped Tier 2 (header + action rail + advance panel + cert banner — iter 077), Tier 3 (line negotiation cards + sticky submit-response bar — iter 081), and Tier 4 (post-acceptance line dialogs + production status timeline — iter 082). Iter 082's close named the only remaining pre-revamp sections on [(nexus)/po/[id]/+page.svelte](frontend/src/routes/(nexus)/po/[id]/+page.svelte) as the invoice table, rejection history, activity timeline, and the metadata grid (Currency / Issued Date / Delivery Date / Total Value / Payment Terms / Marketplace + Buyer + Vendor + Trade Details + Terms & Conditions).
+Phase 4.2 PO detail has shipped Tier 2 (iter 077), Tier 3 (iter 081), and Tier 4 (iter 082). The remaining pre-revamp sections on [(nexus)/po/[id]/+page.svelte](frontend/src/routes/(nexus)/po/[id]/+page.svelte) are the invoice table, rejection history, activity timeline, and metadata grid (Currency / Issued Date / Delivery Date / Total Value / Payment Terms / Marketplace + Buyer + Vendor + Trade Details + Terms & Conditions).
 
-Concrete pre-revamp blocks today:
+Pre-revamp blocks:
 
-- Metadata grid at [`+page.svelte:463-551`](frontend/src/routes/(nexus)/po/[id]/+page.svelte#L463) — five `<div class="section card">` blocks each owning a hand-rolled `<div class="info-grid">` of `field-label` + `value` spans. Currency / Issued / Delivery / Total / Payment Terms / Marketplace; Buyer; Vendor; Trade Details; Terms & Conditions.
+- Metadata grid at [`+page.svelte:463-551`](frontend/src/routes/(nexus)/po/[id]/+page.svelte#L463) — five `<div class="section card">` blocks with hand-rolled `<div class="info-grid">` of `field-label` + `value` spans.
 - Rejection History at [`+page.svelte:634-644`](frontend/src/routes/(nexus)/po/[id]/+page.svelte#L634) — `<div class="section card">` with hand-rolled `.rejection-record` rows (G-25).
 - Invoices sub-list at [`+page.svelte:646-670`](frontend/src/routes/(nexus)/po/[id]/+page.svelte#L646) — legacy `<table class="table">` (G-24).
-- Activity at [`+page.svelte:672-675`](frontend/src/routes/(nexus)/po/[id]/+page.svelte#L672) — legacy [ActivityTimeline](frontend/src/lib/components/ActivityTimeline.svelte) component (G-21).
+- Activity at [`+page.svelte:672-675`](frontend/src/routes/(nexus)/po/[id]/+page.svelte#L672) — legacy [ActivityTimeline](frontend/src/lib/components/ActivityTimeline.svelte) (G-21).
 
-`ActivityTimeline` is also referenced by [invoice/[id]/+page.svelte:7](frontend/src/routes/invoice/[id]/+page.svelte#L7), so the file is not deleted in this iter; only its PO consumer migrates.
+`ActivityTimeline` is also referenced by [invoice/[id]/+page.svelte:7](frontend/src/routes/invoice/[id]/+page.svelte#L7), so only its PO consumer migrates here.
 
-G-22 (PO document attachment) is greenfield (no existing surface; needs a new `canManagePOAttachments` helper, file-picker affordance, and `entity_type='PO'` wiring) and is descoped to its own iter so this Tier 5 stays a finishing pass over surfaces that already render content.
-
-After this iter the entire `(nexus)/po/[id]` page consumes Phase 4.0 primitives end-to-end and Phase 4.2 PO surfaces (list + detail) reach feature parity with the legacy shape.
+G-22 (PO document attachment) is greenfield and descoped to its own iter so this Tier 5 covers only surfaces that already render content.
 
 ## JTBD
 

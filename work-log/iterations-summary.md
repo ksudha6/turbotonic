@@ -278,47 +278,9 @@ The full design system + page redesign covering every existing page (~22 routes)
 - ~~**Iter 074 frontend**: Booking metadata panel (carrier, booking_reference, pickup_date) + Mark shipped button.~~ **Done in iter 103 (Phase 4.6 Tier 3).** ~~PL/CI no-schema joins iter (ports, HS code, manufacturer block, marketplace, declaration).~~ **Done in iter 104.** ~~Schema-additions iter (vessel_name, voyage_number, signatory, per-line manufacturer on products).~~ **Done in iter 106.** Still open: `Vendor.tax_id`, `PurchaseOrder.buyer_tax_id`, `Shipment.pallet_count`, `Shipment.export_reason`. FBA-specific fields (FBA Shipment ID, FNSKU, ASIN, fulfilment-centre code) parked as a separate marketplace-integration iter.
 - **Iter 048 dashboard**: shipment counts by status (DRAFT / DOCUMENTS_PENDING / READY_TO_SHIP), certificate expiry alerts, packaging collection progress per marketplace, notification bell routing for new event types (CERT_REQUESTED, DOCUMENT_UPLOADED, etc.).
 
-### From the backlog (PO confirmation module)
-- Overdue PO status (time-based trigger past required delivery date)
-- Mobile layout
-- Custom value approval for reference data dropdowns
-- Dedicated `/api/v1/po/ids` endpoint for cross-page selection beyond 200
-- Live/historical exchange rates
-- ~~Buyer as first-class entity (currently hardcoded)~~ Resolved iter 108: backend-only Brand aggregate. Frontend in iter 109.
+### Backlog
 
-### From the backlog (auth and user management)
-- Multiple passkeys per user (register backup device for recovery)
-- VENDOR user's vendor gets deactivated — make vendor-scoped data read-only
-- Stale PENDING user cleanup (invited but never registered)
-- Proxy access for internal leave coverage (delegation table, time-bounded, audit trail)
-- Email/notification for invite links (manual link sharing works for small teams)
-- PROCUREMENT_MANAGER role permissions: enum value exists from iter 030, no endpoint guards wired. Future iteration to define and wire access (read-only PO/vendor/invoice visibility, pay/dispute invoices). Frontend: define redirect behavior for PM on non-dashboard pages.
-- Welcome email on invite: send registration link via email when admin invites a user. Currently manual link sharing.
-- ADMIN inherits all actions: `canPostMilestone` is currently exact-match VENDOR only. ADMIN should be able to exercise any role-scoped action (post milestones, submit vendor responses, etc.) for support and debugging. Audit every `isExact` usage in `permissions.ts` and the backend role guards; convert to `is(role, ...) || role === 'ADMIN'` unless there is a concrete reason to keep a capability VENDOR-only.
-
-### From the backlog (UX)
-- Error handling across all users and workflows: define and surface user-facing error states for every endpoint (validation errors, conflict errors, not-found, auth failures). Currently errors are ad hoc per endpoint with no consistent frontend treatment.
-- Recent activity redesign: club PO and invoice activity into a unified feed (currently separate activity streams). Needs discussion on grouping, filtering, and presentation.
-- Deep link preservation on register/bootstrap: deep link preservation on /login is done (iter 033). If an invited user opens a deep link (e.g. `/po/123`) and lands on `/register` or `/setup`, the original path is still lost. After registration/bootstrap they go to `/dashboard`, not the deep link. Low priority since registration is a one-time event.
-- Session cookie path/domain audit: verify the session cookie is set with `path=/` and appropriate domain/SameSite attributes for production deployment behind a reverse proxy. Currently works in dev via Vite proxy.
-- DataTable primitive extension: promote selection column + snippet cell support out of `PoListTable` and `PoInvoicesPanel` into the shared `frontend/src/lib/ui/DataTable.svelte` primitive, so other list pages can adopt the same selection contract without copy-paste. Phase 4.x cleanup task.
-- PO document versioning: re-uploading a SIGNED_PO does not supersede the prior row — both rows persist, ordered by `uploaded_at DESC`. Cleanup is manual delete. Revisit when users complain about clutter or audit-trail confusion.
-- PO_DOCUMENT_DELETED activity event: iter 084 records uploads only, matching the iter 046 shipment-document-upload precedent. Add a delete event when anyone needs deletion history.
-- Email template for PO_DOCUMENT_UPLOADED: iter 084 records the activity row but does not invoke `NotificationDispatcher`. Wire SMTP fan-out (likely to SM for PROCUREMENT, FM for OPEX, mirroring the per-call target_role) when the workflow needs out-of-app notification.
-- Shared mock-fetch helper for `/ui-demo/*` gallery: iter 084's `/ui-demo/po-documents` patches `globalThis.fetch` for upload/delete demo flows and restores on cleanup. Centralizing this would let future demo routes drop the boilerplate.
-- ~~Legacy `frontend/src/lib/components/ActivityTimeline.svelte` and `frontend/src/lib/components/StatusPill.svelte` retire when `invoice/[id]` revamps.~~ Resolved iter 087: all three legacy components (`ActivityTimeline`, `StatusPill`, `DisputeDialog`) deleted; `PoInvoicesPanel` migrated to Phase 4.0 `StatusPill`.
-- Backend per-entity activity pagination: `/api/v1/activity/?entity_type=PO&entity_id={id}` returns the full list. Iter 083's `PoActivityPanel` does client-side "Show more" over a single fetch. Revisit when a single PO accumulates >100 events.
-- FREIGHT_MANAGER PO detail visibility: today `canViewPOs` includes FREIGHT_MANAGER for the iter 073 ready-batch click-through (FM lands on a PO detail to plan shipping). FM sees an action rail with Download PDF only. Revisit whether FM should see PO detail at all or whether the ready-batch surface should expose only the shipping-relevant fields directly without exposing the full PO. Tier 0 G-28 (role coverage matrix) territory.
-
-### From the backlog (infrastructure)
-- File endpoint role guards: restrict upload/download/delete by role and entity ownership on the generic `/api/v1/files/...` surface. Currently any authenticated user can access any file there. Iter 084 tightened the PO surface only via PO-scoped endpoints at `/api/v1/po/{po_id}/documents/...`; the certificate (iter 038) / packaging (iter 042) / shipment (iter 046) consumers still hit the open generic endpoint. Either define per-entity-type guards inside the generic router or migrate each consumer to its own scoped router (the iter 084 pattern).
-- File upload entity existence validation: upload endpoint accepts any entity_type/entity_id without checking the entity exists. Decide per-feature whether to validate at upload time or at the consuming feature level.
-- Vendor catalog / vendor-SKU mapping: products are vendor-agnostic, but a vendor's catalog defines which SKUs they offer. Line item product_id should reference a SKU in the vendor's catalog. New entity needed.
-- HTTPS for non-localhost deployment (WebAuthn requires HTTPS or localhost; needed before first external demo)
-- Database migration tool (alembic or similar; needed once real data exists that can't be dropped and recreated)
-- Session revocation ("log out all devices"; currently relies on cookie expiry + user status check)
-- Self-service vendor onboarding (currently invite-only; needed if vendors should sign up without admin)
-- Remove dev-login endpoint before production deployment
+See [`docs/backlog.md`](../docs/backlog.md) for the canonical backlog (PO Confirmation, Auth and user management, UX, Infrastructure, Deferred, Phase 4.2 close-out, Type-hardening). Iter close-outs add new items there, not here.
 
 ### From the roadmap (post-confirmation)
 1. **Quality labs frontend** — backend done (iters 036a, 038, 039); frontend cert UI is iter 040 (folded into Phase 4).

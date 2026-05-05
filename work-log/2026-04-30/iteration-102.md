@@ -15,9 +15,9 @@ Iter 046 backend ([backend/src/routers/shipment.py](backend/src/routers/shipment
 - `GET /shipments/{id}/readiness` (SM, FM) — `documents_ready` + `certificates_ready` + `packaging_ready` with missing-item lists. `missing_certificates` and `missing_packaging` are `{product_id, ...}` dicts; the page resolves `product_id` to part_number via the already-loaded `shipment.line_items`.
 - `POST /shipments/{id}/mark-ready` (SM, FM) — DOCUMENTS_PENDING → READY_TO_SHIP. 409 carries the `ReadinessResult` in `detail` when not ready.
 
-[frontend/src/lib/api.ts](frontend/src/lib/api.ts) currently has shipment CRUD + PDF downloads only; document / readiness / transition clients do not exist. Greenfield UI on existing backend — no pre-revamp port.
+[frontend/src/lib/api.ts](frontend/src/lib/api.ts) currently has shipment CRUD + PDF downloads only; document / readiness / transition clients do not exist. Greenfield UI on existing backend.
 
-Patterns: iter 077 PoActionRail for the transition surface, iter 094 ProductCertificatesPanel for the upload-bearing list (PanelCard + PENDING/COLLECTED StatusPill + 10MB / PDF-MIME client guard + inline add form with `wasAdding` `$effect`), and the backend `ReadinessResult` shape for the readiness panel.
+Patterns follow: iter 077 `PoActionRail` for the transition surface; iter 094 `ProductCertificatesPanel` for the upload-bearing list (`PanelCard` + PENDING/COLLECTED `StatusPill` + 10MB / PDF-MIME client guard + inline add form with `wasAdding` `$effect`); backend `ReadinessResult` shape for the readiness panel.
 
 Iter 074 frontend (booking + mark-shipped) is out of scope; Phase 4.6 Tier 3 follow-up.
 

@@ -2,21 +2,17 @@
 
 ## Context
 
-Iters 095, 096, 098, and 099 together shipped a complete ADMIN user-management backend:
-list (`?status=` + `?role=` filters), get, patch (display_name + email), invite, deactivate,
-reactivate, reset-credentials, reissue-invite, plus an audit trail via `USER_*` activity
-events. There is no frontend that consumes any of it — every operation today is curl + dev DB.
-The iter 098 doc explicitly logged "frontend `/users` page (still backlog)" as the gating
-follow-up, and the parallel-slate plan flags it as iter A.
+Iters 095, 096, 098, and 099 shipped a complete ADMIN user-management backend: list
+(`?status=` + `?role=` filters), get, patch (display_name + email), invite, deactivate,
+reactivate, reset-credentials, reissue-invite, and `USER_*` activity events. No frontend
+consumes any of it; every operation is curl + dev DB.
 
 The sidebar already has a `USERS` slot wired to ADMIN role at
-`frontend/src/lib/ui/sidebar-items.ts:44-51` from an earlier prep commit; it currently links
-to a 404 because the route does not exist. This iter creates the route and the components
-behind it.
+`frontend/src/lib/ui/sidebar-items.ts:44-51`; it links to a 404 because the route does not
+exist. This iter creates the route and the components behind it.
 
-This is iter A in `parallel-slate-plan.md`. Disjoint from iter 101 (auth route revamp) at the
-file level: iter 101 touches `/routes/login`, `/routes/register`, `/routes/setup`. Both can
-land in either order.
+Iter A in `parallel-slate-plan.md`. Disjoint from iter 101 (auth route revamp) at the file
+level; iter 101 touches `/routes/login`, `/routes/register`, `/routes/setup` only.
 
 ## JTBD
 

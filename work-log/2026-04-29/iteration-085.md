@@ -2,19 +2,19 @@
 
 ## Context
 
-Phase 4.2 has shipped `/po` (list, iter 076) and `/po/[id]` (detail Tiers 2-5 + documents, iters 077, 081-084). The remaining surface in the Phase 4.2 plan is the create + edit flow: `/po/new` and `/po/[id]/edit`. Per the [v2 design spec L184-192](docs/superpowers/specs/2026-04-24-ui-revamp-v2-design.md#L184-L192), these are the last `/po/*` routes that still render under the pre-revamp top-nav layout, and the spec calls `POForm.svelte` "the biggest single retrofit" — both routes share one component, so a half-port breaks the past-flow gate.
+Phase 4.2 shipped `/po` list (iter 076) and `/po/[id]` detail Tiers 2-5 + documents (iters 077, 081-084). The remaining surface is the create + edit flow: `/po/new` and `/po/[id]/edit`. Both routes share `POForm.svelte`, so both port in one iter.
 
-The mock-clarity inventory ([phase-4.2-mock-clarity-inventory.md](tools/phase-4-research/phase-4.2-mock-clarity-inventory.md)) closes the create/edit decisions across G-08 through G-12 (`/po/new`), G-26 (`/po/[id]/edit`), and G-27 (the cross-cutting retrofit strategy):
+Decisions from the mock-clarity inventory ([phase-4.2-mock-clarity-inventory.md](tools/phase-4-research/phase-4.2-mock-clarity-inventory.md)):
 
-- **G-27 ruling:** keep `POForm.svelte` as a single component; gate field disability by mode; port to primitives in one iter so both routes stay green at every commit.
+- **G-27:** keep `POForm.svelte` as a single component; gate field disability by mode; port to primitives in one iter.
 - **G-08:** tabular at >=1024px, stacked-card per Line Item below 1024px; "Add Line Item" Button below last row at every breakpoint; HS Code errors inline via `FormField`.
-- **G-09:** vendor `Select` disabled until PO Type is chosen; silent vendor clear shows inline `FormField` hint; Marketplace stays a hardcoded enum and is hidden entirely on OPEX; PO Type is read-only on edit.
-- **G-10:** Buyer block stays visible inside its own `PanelCard` with `DEFAULT_BUYER_NAME`/`DEFAULT_BUYER_COUNTRY` editable in place; Buyer Country shares the country reference-data `Select` with Country of Origin.
-- **G-11:** native `Select` stays for all reference-data fields; Payment Terms options append an "advance required" suffix when `has_advance` is true; closed state shows `code — label` parity with the PDF Reference Label resolver.
-- **G-12:** Cancel routes back to `/po/[id]` when editing and `/po` when creating; confirm-on-discard fires only when dirty via a lightweight in-app modal; errors land per-field via `FormField` with a top banner for non-field-scoped failures; footer sticks to viewport at 390px and stays bottom-of-flow at >=768px.
-- **G-26:** edit page accepts both DRAFT and REJECTED per ddd-vocab "mutable only in Draft and Rejected"; non-matching statuses render `ErrorState` inside the `FormCard` frame with a back link to detail; submit label branches to "Save & Revise" (REJECTED) vs "Save Draft" (DRAFT); REJECTED edit renders a `RejectionHistoryPanel` above the form.
+- **G-09:** vendor `Select` disabled until PO Type is chosen; silent vendor clear shows inline `FormField` hint; Marketplace hidden on OPEX; PO Type read-only on edit.
+- **G-10:** Buyer block inside Purchase Order Details `PanelCard`; Buyer Country shares the country reference-data `Select` with Country of Origin.
+- **G-11:** native `Select` for all reference-data fields; Payment Terms options append an "advance required" suffix when `has_advance` is true; closed state shows `code — label`.
+- **G-12:** Cancel routes to `/po/[id]` when editing and `/po` when creating; confirm-on-discard fires only when dirty; errors per-field via `FormField` with a top banner for non-field-scoped failures; footer sticks to viewport at 390px and stays bottom-of-flow at >=768px.
+- **G-26:** edit page accepts both DRAFT and REJECTED; non-matching statuses render `ErrorState` with a back link; submit label branches to "Save & Revise" (REJECTED) vs "Save Draft" (DRAFT); REJECTED edit renders `RejectionHistoryPanel` above the form.
 
-After this iter the entire `/po/*` surface lives under `(nexus)` on Phase 4.0 primitives, the pre-revamp `frontend/src/lib/components/POForm.svelte` is retired (or moved/renamed under `frontend/src/lib/po/`), `isRevampRoute` no longer needs the `/po*` prefix special-case (every PO route is already `(nexus)`-mounted), and Phase 4.2 closes pending only the cross-cutting items G-28 (role-matrix audit) and G-29 (bulk-action + row-click spec migration) which the plan budgets at phase close.
+The entire `/po/*` surface lives under `(nexus)` on Phase 4.0 primitives once this iter closes. Phase 4.2 closes pending only G-28 (role-matrix audit) and G-29 (bulk-action + row-click spec migration).
 
 ## JTBD
 

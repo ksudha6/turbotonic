@@ -2,13 +2,13 @@
 
 ## Context
 
-User confirmed splitting Phase 4.5 into per-route iters: 090 = list only, 091 = `/products/new`, 092 = `/products/[id]/edit` (the largest at 436 lines), 093 = iter 040 cert UI fold-in. Each stays small per the iter discipline.
+Phase 4.5 splits into per-route iters: 090 = list only, 091 = `/products/new`, 092 = `/products/[id]/edit` (436 lines), 093 = packaging specs panel.
 
-Today's `/products` (`frontend/src/routes/products/+page.svelte`, 138 lines): inline `<select class="select">` vendor filter, raw `<table class="table">`, hand-rolled `.badge-cert` / `.badge-no-cert` pills with stale `product.requires_certification` field reference. The type `ProductListItem` no longer carries `requires_certification` — it was replaced by `qualifications: QualificationTypeListItem[]` in iter 036a — so the legacy page is reading an undefined field and rendering "No" for every row regardless of actual qualification state. The new list will surface the qualification count instead.
+Pre-revamp `/products` (`frontend/src/routes/products/+page.svelte`, 138 lines): inline `<select class="select">` vendor filter, raw `<table class="table">`, hand-rolled `.badge-cert` / `.badge-no-cert` pills with stale `product.requires_certification` field reference. `ProductListItem` no longer carries `requires_certification` — it was replaced by `qualifications: QualificationTypeListItem[]` in iter 036a — so the legacy page reads an undefined field and renders "No" for every row. The new list surfaces the qualification count instead.
 
 Permission: SM/QUALITY_LAB/VENDOR/PROCUREMENT_MANAGER can view; SM/ADMIN can manage.
 
-`product.spec.ts` has 3 tests, all targeting `/products/new` or `/products/[id]/edit` — none assert list-page markup. The existing test that POSTs from `/products/new` and `waitForURL('**/products')` is content-agnostic and continues passing under the new list page.
+`product.spec.ts` has 3 tests, all targeting `/products/new` or `/products/[id]/edit`. None assert list-page markup. The test that POSTs from `/products/new` and calls `waitForURL('**/products')` is content-agnostic and continues passing.
 
 ## JTBD
 

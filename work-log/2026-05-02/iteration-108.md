@@ -2,23 +2,19 @@
 
 ## Context
 
-The system handles purchase orders, invoices, and shipments on behalf of an implicit single buyer. The buyer block on the auto-generated Commercial Invoice and Packing List is hardcoded in the PDF generators. The backlog has flagged "Buyer as first-class entity (currently hardcoded)" since the early iterations.
-For an operator running multiple brands (the horizontal-SaaS exit path called out in the product vision) this is a foundation gap that affects every layer:
+The buyer block on the auto-generated Commercial Invoice and Packing List is hardcoded in the
+PDF generators. The system handles purchase orders, invoices, and shipments on behalf of an
+implicit single buyer; there is no `brand_id` on a PO and no brand entity in the schema.
 
-- **Procurement**: a PO is placed on behalf of a brand. Brand A and Brand B have different vendor lists, different legal entities, different tax IDs, different banking. Today PO has no `brand_id`.
-- **Invoicing**: the vendor invoices Brand A specifically — Brand A's legal name, address, payment terms. Today an invoice carries no brand context.
-- **Customs**: the CI declares Buyer = Brand A's legal entity + tax_id. The PDF generator emits operator constants regardless of which PO drives it.
+Multi-brand impact:
+- **Procurement**: PO has no `brand_id`; Brand A and Brand B have different vendor lists, legal entities, tax IDs.
+- **Invoicing**: the vendor invoices a specific brand's legal name and address; today no brand context exists on an invoice.
+- **Customs**: the CI declares Buyer = Brand's legal entity + tax_id; the PDF generator emits hardcoded operator constants.
 
-Iter 102 split the customs-doc work: no-schema joins (iter 104), vessel/voyage
-schema (iter 106), and a remaining "schema additions" piece for tax IDs /
-pallet count / export reason. Tax IDs cannot live on the PO; they belong on
-the Brand. This iter introduces the Brand aggregate and rewires the buyer
-block on PL/CI to read from it. The customs-paper tail (Vendor.tax_id,
-Shipment.pallet_count, Shipment.export_reason) follows in iter 110.
+Iter 102 split the customs-doc work: no-schema joins (iter 104), vessel/voyage schema (iter 106). Tax IDs cannot live on the PO; they belong on the Brand. This iter introduces the Brand aggregate and rewires the PL/CI buyer block to read from it. The customs tail (Vendor.tax_id, Shipment.pallet_count, Shipment.export_reason) follows in iter 110.
 
-This iter is backend-only. The frontend `/brands` admin pages and the PO
-create-form `BrandSelect` integration land in iter 109, mirroring the
-iter 095 (backend) → iter 100 (frontend) split for user management.
+Backend-only. The frontend `/brands` admin pages and the PO `BrandSelect` integration land in
+iter 109, mirroring the iter 095 (backend) → iter 100 (frontend) split for user management.
 
 ## JTBD
 

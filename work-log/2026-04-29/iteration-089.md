@@ -2,13 +2,13 @@
 
 ## Context
 
-The user confirmed the order: revamp → cleanup → backend features. Phase 4.4 starts with the vendor surface — the smallest of the four remaining pre-revamp routes (vendors, products, shipments, auth) and has no nested complexity. Both `/vendors` (list) and `/vendors/new` (create form) are straightforward CRUD pages.
+Phase 4.4 starts with the vendor surface, the smallest of the four remaining pre-revamp routes (vendors, products, shipments, auth).
 
-Today's `/vendors` (`frontend/src/routes/vendors/+page.svelte`, 162 lines): inline `<select class="select">` filters, raw `<table class="table">`, native `.btn-danger`/`.btn-success` action buttons, hand-rolled `.badge` pills for status. Permission: SM only (per `canManageVendors`).
+Pre-revamp state:
+- `/vendors` (`frontend/src/routes/vendors/+page.svelte`, 162 lines): inline `<select class="select">` filters, raw `<table class="table">`, native `.btn-danger`/`.btn-success` action buttons, hand-rolled `.badge` pills. Permission: SM only (per `canManageVendors`).
+- `/vendors/new` (`frontend/src/routes/vendors/new/+page.svelte`, 134 lines): native `<input class="input">`, `<select class="select">`, `<textarea class="textarea">`, hand-rolled `.form-grid`. No textarea primitive in Phase 4.0 (same gap iter 087 hit with `InvoiceDisputeModal`).
 
-Today's `/vendors/new` (`frontend/src/routes/vendors/new/+page.svelte`, 134 lines): native `<input class="input">`, `<select class="select">`, `<textarea class="textarea">`, hand-rolled `.form-grid` with 2-column layout. No textarea primitive in Phase 4.0 — same gap iter 087 hit with `InvoiceDisputeModal` (used native textarea).
-
-Existing `frontend/tests/vendor.spec.ts` has 9 tests; 8 target vendor markup with brittle selectors (`page.fill('#name', ...)`, `page.locator('tbody')`, `page.waitForSelector('table')`). One unrelated test (`'PO form prefills buyer fields with defaults'`) is mis-located in this file but already uses testids — leave it alone. The 8 vendor-specific tests migrate to the new testid namespace.
+Existing `frontend/tests/vendor.spec.ts` has 9 tests; 8 target vendor markup with brittle selectors (`page.fill('#name', ...)`, `page.locator('tbody')`, `page.waitForSelector('table')`). One unrelated test (`'PO form prefills buyer fields with defaults'`) already uses testids and is left alone. The 8 vendor-specific tests migrate to the new testid namespace.
 
 ## JTBD
 
