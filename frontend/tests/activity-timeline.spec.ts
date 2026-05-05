@@ -38,7 +38,13 @@ const PO_DRAFT = {
 	rejection_history: [],
 	total_value: '0',
 	created_at: '2026-04-01T00:00:00+00:00',
-	updated_at: '2026-04-01T00:00:00+00:00'
+	updated_at: '2026-04-01T00:00:00+00:00',
+	brand_id: 'brand-default',
+	brand_name: 'Default Brand',
+	brand_legal_name: 'Default Brand LLC',
+	brand_address: '1 Brand St',
+	brand_country: 'US',
+	brand_tax_id: ''
 };
 
 const INVOICE_DETAIL = {
