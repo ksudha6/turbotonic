@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.auth.middleware import SessionMiddleware
 from src.db import close_pool, get_db, init_pool
-from src.routers import activity, brands, certificate, dashboard, document, invoice, milestone, packaging, po_documents, product, purchase_order, qualification_type, reference_data, shipment, vendor
+from src.routers import activity, brands, certificate, dashboard, document, invoice, invoice_documents, milestone, packaging, po_documents, product, purchase_order, qualification_type, reference_data, shipment, vendor
 from src.routers.auth import router as auth_router, invite_router
 from src.schema import init_db
 
@@ -37,6 +37,7 @@ app.include_router(auth_router)
 app.include_router(invite_router)
 app.include_router(purchase_order.router)
 app.include_router(po_documents.router)
+app.include_router(invoice_documents.router)
 app.include_router(reference_data.router)
 app.include_router(vendor.router)
 app.include_router(product.router)

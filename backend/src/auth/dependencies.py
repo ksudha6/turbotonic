@@ -8,6 +8,38 @@ from src.domain.purchase_order import POType, PurchaseOrder
 from src.domain.user import User, UserRole, UserStatus
 
 
+def can_view_invoice_attachments(user: User) -> bool:
+    """Return True if user may read documents attached to any invoice.
+
+    VENDOR, SM, ADMIN, PROCUREMENT_MANAGER: view. FREIGHT_MANAGER: view.
+    QUALITY_LAB: hidden.
+    Returns False for inactive/pending users as a defense-in-depth guard.
+    """
+    if user.status is not UserStatus.ACTIVE:
+        return False
+    return user.role in (
+        UserRole.ADMIN,
+        UserRole.SM,
+        UserRole.VENDOR,
+        UserRole.PROCUREMENT_MANAGER,
+        UserRole.FREIGHT_MANAGER,
+    )
+
+
+def can_manage_invoice_attachments(user: User) -> bool:
+    """Return True if user may upload or delete invoice documents.
+
+    VENDOR (own invoice, enforced via check_vendor_access), SM, ADMIN: manage.
+    PROCUREMENT_MANAGER: read-only.
+    FREIGHT_MANAGER: read-only.
+    QUALITY_LAB: hidden.
+    Returns False for inactive/pending users as a defense-in-depth guard.
+    """
+    if user.status is not UserStatus.ACTIVE:
+        return False
+    return user.role in (UserRole.ADMIN, UserRole.SM, UserRole.VENDOR)
+
+
 def check_vendor_access(user: User, vendor_id: str) -> None:
     """Raise 404 if VENDOR user doesn't own this entity. Non-VENDOR roles pass through."""
     if user.role is UserRole.VENDOR and user.vendor_id != vendor_id:

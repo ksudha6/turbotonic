@@ -20,6 +20,7 @@
 	import InvoiceDisputeModal from '$lib/invoice/InvoiceDisputeModal.svelte';
 	import InvoiceMetadataPanel from '$lib/invoice/InvoiceMetadataPanel.svelte';
 	import InvoiceDisputeReasonPanel from '$lib/invoice/InvoiceDisputeReasonPanel.svelte';
+	import InvoiceDocumentsPanel from '$lib/invoice/InvoiceDocumentsPanel.svelte';
 	import InvoiceLineItemsPanel from '$lib/invoice/InvoiceLineItemsPanel.svelte';
 	import InvoiceActivityPanel from '$lib/invoice/InvoiceActivityPanel.svelte';
 	import type { Invoice, UserRole } from '$lib/types';
@@ -36,6 +37,7 @@
 	let invoice: Invoice | null = $state(null);
 	let poNumber: string | undefined = $state(undefined);
 	let vendorName: string | undefined = $state(undefined);
+	let vendorId: string | undefined = $state(undefined);
 	let loading: boolean = $state(true);
 	let errorMessage: string = $state('');
 	let showDisputeModal: boolean = $state(false);
@@ -55,9 +57,11 @@
 				const po = await getPO(invoice.po_id);
 				poNumber = po.po_number;
 				vendorName = po.vendor_name;
+				vendorId = po.vendor_id;
 			} catch {
 				poNumber = undefined;
 				vendorName = undefined;
+				vendorId = undefined;
 			}
 		} catch (e) {
 			errorMessage = e instanceof Error ? e.message : 'Failed to load invoice';
@@ -136,6 +140,14 @@
 			{/if}
 
 			<InvoiceMetadataPanel {invoice} {poNumber} />
+
+			{#if vendorId && user}
+				<InvoiceDocumentsPanel
+					invoiceId={invoice.id}
+					{vendorId}
+					{user}
+				/>
+			{/if}
 
 			<InvoiceLineItemsPanel lineItems={invoice.line_items} />
 

@@ -82,6 +82,30 @@ export const canSetTransport = (role: UserRole, status: ShipmentStatus): boolean
 export const canDeclareShipment = (role: UserRole, status: ShipmentStatus): boolean =>
 	is(role, 'SM', 'FREIGHT_MANAGER') && status !== 'DRAFT';
 
+// Iter 112: Invoice document permissions.
+// canViewInvoiceAttachments: VENDOR (own), SM, ADMIN, PROCUREMENT_MANAGER, FREIGHT_MANAGER.
+// canManageInvoiceAttachments: VENDOR (own), SM, ADMIN (upload + delete).
+// QUALITY_LAB: hidden.
+export function canViewInvoiceAttachments(
+	user: User,
+	vendorId: string
+): boolean {
+	if (user.status !== 'ACTIVE') return false;
+	if (is(user.role, 'SM', 'PROCUREMENT_MANAGER', 'FREIGHT_MANAGER')) return true;
+	if (user.role === 'VENDOR') return user.vendor_id === vendorId;
+	return false;
+}
+
+export function canManageInvoiceAttachments(
+	user: User,
+	vendorId: string
+): boolean {
+	if (user.status !== 'ACTIVE') return false;
+	if (is(user.role, 'SM')) return true;
+	if (user.role === 'VENDOR') return user.vendor_id === vendorId;
+	return false;
+}
+
 export function canViewPOAttachments(
 	user: User,
 	po: { po_type: POType; vendor_id: string }

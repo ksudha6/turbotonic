@@ -44,6 +44,8 @@ class ActivityEvent(Enum):
     DOCUMENT_UPLOADED = "DOCUMENT_UPLOADED"
     # Iter 084: signed/countersigned PO copy or agreement attached to a PO.
     PO_DOCUMENT_UPLOADED = "PO_DOCUMENT_UPLOADED"
+    # Iter 112: vendor-uploaded invoice file attached to an invoice.
+    INVOICE_DOCUMENT_UPLOADED = "INVOICE_DOCUMENT_UPLOADED"
     # Iter 074: shipment booking lifecycle. FM records carrier + booking; SM observes.
     SHIPMENT_BOOKED = "SHIPMENT_BOOKED"
     SHIPMENT_SHIPPED = "SHIPMENT_SHIPPED"
@@ -152,6 +154,8 @@ EVENT_METADATA: dict[ActivityEvent, tuple[NotificationCategory, TargetRole | Non
     # Iter 084: PO document uploaded. target_role is None (default broadcast); the
     # router supplies a per-call override: SM for PROCUREMENT, FM for OPEX.
     ActivityEvent.PO_DOCUMENT_UPLOADED: (NotificationCategory.LIVE, None),
+    # Iter 112: invoice document uploaded. target_role is SM (upload-only activity event).
+    ActivityEvent.INVOICE_DOCUMENT_UPLOADED: (NotificationCategory.LIVE, TargetRole.SM),
     # Iter 074: SM observes FM bookings and dispatches.
     ActivityEvent.SHIPMENT_BOOKED: (NotificationCategory.LIVE, TargetRole.SM),
     ActivityEvent.SHIPMENT_SHIPPED: (NotificationCategory.LIVE, TargetRole.SM),

@@ -87,6 +87,13 @@ from src.routers.brands import (
     get_vendor_repo_for_brands as brands_get_vendor_repo,
     get_activity_repo_for_brands as brands_get_activity_repo,
 )
+from src.routers.invoice_documents import (
+    get_invoice_repo as invoice_doc_get_invoice_repo,
+    get_po_repo as invoice_doc_get_po_repo,
+    get_document_repo as invoice_doc_get_document_repo,
+    get_activity_repo as invoice_doc_get_activity_repo,
+    get_file_storage as invoice_doc_get_file_storage,
+)
 from src.routers.vendor import get_vendor_repo as vendor_get_vendor_repo
 from src.schema import init_db
 from src.packaging_repository import PackagingSpecRepository
@@ -280,6 +287,11 @@ async def _setup_overrides(
     app.dependency_overrides[brands_get_brand_repo] = override_get_brand_repo
     app.dependency_overrides[brands_get_vendor_repo] = override_get_vendor_repo
     app.dependency_overrides[brands_get_activity_repo] = override_get_activity_repo
+    app.dependency_overrides[invoice_doc_get_invoice_repo] = override_get_invoice_repo
+    app.dependency_overrides[invoice_doc_get_po_repo] = override_get_repo
+    app.dependency_overrides[invoice_doc_get_document_repo] = override_get_document_repo
+    app.dependency_overrides[invoice_doc_get_activity_repo] = override_get_activity_repo
+    app.dependency_overrides[invoice_doc_get_file_storage] = override_get_file_storage
 
     # Iter 060: route EmailService and NotificationDispatcher DI to the fake so
     # no test hits the network. Dispatcher is built here because it binds the
