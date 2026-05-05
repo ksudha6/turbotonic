@@ -271,6 +271,7 @@ async def test_get_user_as_admin_returns_user(
             "status": "ACTIVE",
             "vendor_id": None,
             "email": "bob@example.com",
+            "brand_ids": [],
         }
     }
 
@@ -312,6 +313,7 @@ async def test_patch_user_updates_display_name(
         "status": "ACTIVE",
         "vendor_id": None,
         "email": "bob@example.com",
+        "brand_ids": [],
     }
 
 

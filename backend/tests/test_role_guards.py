@@ -20,6 +20,7 @@ from src.product_repository import ProductRepository
 from src.repository import PurchaseOrderRepository
 from src.routers.activity import get_activity_repo as activity_get_activity_repo
 from src.routers.auth import get_activity_repo as auth_get_activity_repo
+from src.routers.auth import get_brand_repo as auth_get_brand_repo
 from src.routers.auth import get_user_repo as auth_get_user_repo
 from src.routers.dashboard import get_activity_repo as dash_get_activity_repo
 from src.routers.dashboard import get_invoice_repo as dash_get_invoice_repo
@@ -183,6 +184,7 @@ async def _make_client_with_role(
     app.dependency_overrides[product_get_product_repo] = override_get_product_repo
     app.dependency_overrides[auth_get_user_repo] = override_get_user_repo
     app.dependency_overrides[auth_get_activity_repo] = override_get_activity_repo
+    app.dependency_overrides[auth_get_brand_repo] = override_get_brand_repo
 
     transport = ASGITransport(app=app)
     with patch("src.routers.purchase_order.get_db", _test_get_db), \

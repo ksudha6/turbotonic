@@ -198,7 +198,7 @@ test('invite modal shows brand checklist for SM role', async ({ page }) => {
 	await expect(page.getByTestId('user-invite-modal')).toBeVisible();
 
 	// Select SM role — brands section should appear.
-	await page.getByLabel('Role').selectOption('SM');
+	await page.getByTestId('user-invite-role').selectOption('SM');
 	await expect(page.getByTestId('user-invite-brands')).toBeVisible();
 	await expect(page.getByText('Brand Alpha')).toBeVisible();
 	await expect(page.getByText('Brand Beta')).toBeVisible();
@@ -209,7 +209,7 @@ test('invite modal shows brand checklist for FREIGHT_MANAGER role', async ({ pag
 	await page.goto('/users');
 
 	await page.getByTestId('user-page-header-action').click();
-	await page.getByLabel('Role').selectOption('FREIGHT_MANAGER');
+	await page.getByTestId('user-invite-role').selectOption('FREIGHT_MANAGER');
 	await expect(page.getByTestId('user-invite-brands')).toBeVisible();
 });
 
@@ -218,7 +218,7 @@ test('invite modal hides brand checklist for VENDOR role', async ({ page }) => {
 	await page.goto('/users');
 
 	await page.getByTestId('user-page-header-action').click();
-	await page.getByLabel('Role').selectOption('VENDOR');
+	await page.getByTestId('user-invite-role').selectOption('VENDOR');
 	await expect(page.getByTestId('user-invite-brands')).not.toBeVisible();
 });
 
@@ -227,7 +227,7 @@ test('invite modal hides brand checklist for ADMIN role', async ({ page }) => {
 	await page.goto('/users');
 
 	await page.getByTestId('user-page-header-action').click();
-	await page.getByLabel('Role').selectOption('ADMIN');
+	await page.getByTestId('user-invite-role').selectOption('ADMIN');
 	await expect(page.getByTestId('user-invite-brands')).not.toBeVisible();
 });
 
@@ -261,7 +261,7 @@ test('invite with selected brands sends brand_ids in request', async ({ page }) 
 
 	await page.getByTestId('user-page-header-action').click();
 	await page.getByLabel('Username').fill('branduser');
-	await page.getByLabel('Role').selectOption('SM');
+	await page.getByTestId('user-invite-role').selectOption('SM');
 
 	// Check Brand Alpha only.
 	const brandsRegion = page.getByTestId('user-invite-brands');
@@ -300,7 +300,7 @@ test('invite with no brands selected sends null brand_ids', async ({ page }) => 
 
 	await page.getByTestId('user-page-header-action').click();
 	await page.getByLabel('Username').fill('unscopeduser');
-	await page.getByLabel('Role').selectOption('SM');
+	await page.getByTestId('user-invite-role').selectOption('SM');
 	// No brands selected.
 	await page.getByTestId('user-invite-submit').click();
 
@@ -318,7 +318,7 @@ test('edit modal pre-populates brand checkboxes from user.brand_ids', async ({ p
 	await page.goto('/users');
 
 	// Open edit modal for SM_USER (has brand_ids: ['brand-a']).
-	await page.getByTestId(`user-row-edit-${SM_USER.id}`).click();
+	await page.getByTestId('user-table-desktop').getByTestId(`user-row-edit-${SM_USER.id}`).click();
 
 	await expect(page.getByTestId('user-edit-modal')).toBeVisible();
 	const brandsRegion = page.getByTestId('user-edit-brands');
@@ -349,7 +349,7 @@ test('edit modal save sends brand_ids in PATCH body', async ({ page }) => {
 		route.fallback();
 	});
 
-	await page.getByTestId(`user-row-edit-${SM_UNSCOPED.id}`).click();
+	await page.getByTestId('user-table-desktop').getByTestId(`user-row-edit-${SM_UNSCOPED.id}`).click();
 
 	await expect(page.getByTestId('user-edit-modal')).toBeVisible();
 	const brandsRegion = page.getByTestId('user-edit-brands');
