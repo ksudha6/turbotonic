@@ -150,10 +150,24 @@ class ShipmentRepository:
             result.append(_reconstruct(row, item_rows))
         return result
 
-    async def list_all(self) -> list[Shipment]:
-        rows = await self._conn.fetch(
-            "SELECT * FROM shipments ORDER BY created_at DESC"
-        )
+    async def list_all(self, brand_ids: list[str] | None = None) -> list[Shipment]:
+        # Iter 111: when brand_ids is a non-empty list, join to purchase_orders
+        # and filter by brand_id so brand-scoped users only see their brands' shipments.
+        if brand_ids is not None and len(brand_ids) > 0:
+            rows = await self._conn.fetch(
+                """
+                SELECT s.*
+                FROM shipments s
+                JOIN purchase_orders p ON p.id = s.po_id
+                WHERE p.brand_id = ANY($1)
+                ORDER BY s.created_at DESC
+                """,
+                brand_ids,
+            )
+        else:
+            rows = await self._conn.fetch(
+                "SELECT * FROM shipments ORDER BY created_at DESC"
+            )
         result: list[Shipment] = []
         for row in rows:
             item_rows = await self._conn.fetch(

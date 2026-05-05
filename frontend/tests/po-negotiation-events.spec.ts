@@ -176,7 +176,13 @@ const PO_DETAIL = {
 	created_at: '2026-04-01T00:00:00+00:00',
 	updated_at: '2026-04-01T00:00:00+00:00',
 	round_count: 1,
-	last_actor_role: 'SM'
+	last_actor_role: 'SM',
+	brand_id: 'brand-default',
+	brand_name: 'Default Brand',
+	brand_legal_name: 'Default Brand LLC',
+	brand_address: '1 Brand St',
+	brand_country: 'US',
+	brand_tax_id: ''
 };
 
 // All seven iter-058 events, each with a distinct category/target_role so the

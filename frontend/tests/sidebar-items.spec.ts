@@ -8,7 +8,7 @@ test('sidebarItemsFor returns sections keyed by label', () => {
 	expect(Array.isArray(sections[0].items)).toBe(true);
 });
 
-test('sidebar items for ADMIN include all aggregates plus Users', () => {
+test('sidebar items for ADMIN include all aggregates plus Users and Brands', () => {
 	const items = sidebarItemsFor('ADMIN').flatMap((s) => s.items).map((i) => i.label);
 	expect(items).toEqual([
 		'Dashboard',
@@ -16,7 +16,8 @@ test('sidebar items for ADMIN include all aggregates plus Users', () => {
 		'Invoices',
 		'Vendors',
 		'Products',
-		'Users'
+		'Users',
+		'Brands'
 	]);
 });
 

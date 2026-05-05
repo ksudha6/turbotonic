@@ -179,6 +179,65 @@ class UserRepository:
             "DELETE FROM webauthn_credentials WHERE user_id = $1", user_id
         )
 
+    # --- Iter 111: brand-scope m2m helpers ---
+
+    async def assign_brand(self, user_id: str, brand_id: str) -> None:
+        # Idempotent: ON CONFLICT DO NOTHING means a double-assign is safe.
+        await self._conn.execute(
+            """
+            INSERT INTO user_brands (user_id, brand_id)
+            VALUES ($1, $2)
+            ON CONFLICT DO NOTHING
+            """,
+            user_id, brand_id,
+        )
+
+    async def unassign_brand(self, user_id: str, brand_id: str) -> None:
+        # No-op if the row does not exist.
+        await self._conn.execute(
+            "DELETE FROM user_brands WHERE user_id = $1 AND brand_id = $2",
+            user_id, brand_id,
+        )
+
+    async def list_brand_ids(self, user_id: str) -> list[str]:
+        # Returns all brand_ids assigned to this user; empty list means unscoped.
+        rows = await self._conn.fetch(
+            "SELECT brand_id FROM user_brands WHERE user_id = $1 ORDER BY brand_id",
+            user_id,
+        )
+        return [row["brand_id"] for row in rows]
+
+    async def set_brands(self, user_id: str, brand_ids: list[str]) -> None:
+        # Atomically replaces the full brand set for user_id. Empty brand_ids
+        # clears all assignments (reverts to unscoped / "all brands").
+        async with self._conn.transaction():
+            await self._conn.execute(
+                "DELETE FROM user_brands WHERE user_id = $1", user_id
+            )
+            for brand_id in brand_ids:
+                await self._conn.execute(
+                    """
+                    INSERT INTO user_brands (user_id, brand_id)
+                    VALUES ($1, $2)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    user_id, brand_id,
+                )
+
+    async def list_brand_ids_bulk(self, user_ids: list[str]) -> dict[str, list[str]]:
+        # Returns {user_id: [brand_id, ...]} for every id in user_ids.
+        # Used by list_users to avoid N+1 queries.
+        if not user_ids:
+            return {}
+        rows = await self._conn.fetch(
+            "SELECT user_id, brand_id FROM user_brands WHERE user_id = ANY($1) ORDER BY user_id, brand_id",
+            user_ids,
+        )
+        result: dict[str, list[str]] = {uid: [] for uid in user_ids}
+        for row in rows:
+            result[row["user_id"]].append(row["brand_id"])
+        return result
+
 
 def _reconstruct(row: asyncpg.Record) -> User:
     # Older rows may not carry the email/invite_token columns depending on

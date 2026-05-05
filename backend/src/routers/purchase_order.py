@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
 from src.activity_repository import ActivityLogRepository
-from src.auth.dependencies import check_vendor_access, require_auth, require_role
+from src.auth.dependencies import check_brand_access, check_vendor_access, require_auth, require_role
 from src.brand_repository import BrandRepository
 from src.db import get_db
 from src.domain.activity import ActivityEvent, EntityType, TargetRole
@@ -84,6 +84,14 @@ async def get_brand_repo() -> AsyncIterator[BrandRepository]:
 
 
 BrandRepoDep = Annotated[BrandRepository, Depends(get_brand_repo)]
+
+
+async def get_user_repo() -> AsyncIterator[UserRepository]:
+    async with get_db() as conn:
+        yield UserRepository(conn)
+
+
+UserRepoDep = Annotated[UserRepository, Depends(get_user_repo)]
 
 
 async def get_invoice_repo() -> AsyncIterator[InvoiceRepository]:
@@ -238,6 +246,7 @@ async def create_po(body: PurchaseOrderCreate, repo: RepoDep, vendor_repo: Vendo
 @router.get("/", response_model=PaginatedPOList)
 async def list_pos(
     repo: RepoDep,
+    user_repo: UserRepoDep,
     status: str | None = None,
     search: str | None = None,
     vendor_id: str | None = None,
@@ -274,10 +283,18 @@ async def list_pos(
         except ValueError:
             raise HTTPException(status_code=422, detail=f"Invalid milestone value: {milestone!r}")
 
+    # Iter 111: resolve brand scope for buyer-side roles.
+    # None = no filter; [] = unscoped (all brands); [...] = filter to listed brands.
+    from src.routers.auth import _BRAND_SCOPABLE_ROLES  # noqa: PLC0415
+    accessible_brand_ids: list[str] | None = None
+    if user.role in _BRAND_SCOPABLE_ROLES:
+        accessible_brand_ids = await user_repo.list_brand_ids(user.id)
+
     try:
         rows, total = await repo.list_pos_paginated(
             status=po_status,
             vendor_id=vendor_id,
+            brand_ids=accessible_brand_ids if accessible_brand_ids else None,
             currency=currency,
             milestone=milestone,
             marketplace=marketplace,
@@ -354,11 +371,16 @@ async def bulk_transition(body: BulkTransitionRequest, user: User = require_role
 
 
 @router.get("/{po_id}", response_model=PurchaseOrderResponse)
-async def get_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, user: User = require_auth) -> PurchaseOrderResponse:
+async def get_po(po_id: str, repo: RepoDep, vendor_repo: VendorRepoDep, user_repo: UserRepoDep, user: User = require_auth) -> PurchaseOrderResponse:
     po = await repo.get(po_id)
     if po is None:
         raise HTTPException(status_code=404, detail="Purchase order not found")
     check_vendor_access(user, po.vendor_id)
+    # Iter 111: brand-scope check for buyer-side roles.
+    from src.routers.auth import _BRAND_SCOPABLE_ROLES  # noqa: PLC0415
+    if user.role in _BRAND_SCOPABLE_ROLES:
+        accessible = await user_repo.list_brand_ids(user.id)
+        check_brand_access(user, po.brand_id, accessible)
     vendor = await vendor_repo.get_by_id(po.vendor_id)
     vname = vendor.name if vendor else ""
     vcountry = vendor.country if vendor else ""

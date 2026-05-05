@@ -95,6 +95,7 @@
 			mode={formMode}
 			initialData={{
 				po_type: po.po_type,
+				brand_id: po.brand_id,
 				vendor_id: po.vendor_id,
 				buyer_name: po.buyer_name,
 				buyer_country: po.buyer_country,

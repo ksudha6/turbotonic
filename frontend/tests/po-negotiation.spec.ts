@@ -74,6 +74,12 @@ function makePO(overrides: Record<string, unknown> = {}) {
 		advance_paid_at: null,
 		has_removed_line: false,
 		current_milestone: null,
+		brand_id: 'brand-default',
+		brand_name: 'Default Brand',
+		brand_legal_name: 'Default Brand LLC',
+		brand_address: '1 Brand St',
+		brand_country: 'US',
+		brand_tax_id: '',
 		...overrides
 	};
 }

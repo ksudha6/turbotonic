@@ -68,7 +68,9 @@ const PO_DRAFT = {
 	issued_date: '2026-03-16T00:00:00+00:00',
 	required_delivery_date: '2026-04-16T00:00:00+00:00',
 	total_value: '1500',
-	currency: 'USD'
+	currency: 'USD',
+	brand_id: 'brand-default',
+	brand_name: 'Default Brand'
 };
 
 const PO_PENDING = {
@@ -84,7 +86,9 @@ const PO_PENDING = {
 	issued_date: '2026-03-16T00:00:00+00:00',
 	required_delivery_date: '2026-04-16T00:00:00+00:00',
 	total_value: '2500',
-	currency: 'USD'
+	currency: 'USD',
+	brand_id: 'brand-default',
+	brand_name: 'Default Brand'
 };
 
 const PO_ACCEPTED = {
@@ -100,7 +104,9 @@ const PO_ACCEPTED = {
 	issued_date: '2026-03-16T00:00:00+00:00',
 	required_delivery_date: '2026-04-16T00:00:00+00:00',
 	total_value: '3500',
-	currency: 'USD'
+	currency: 'USD',
+	brand_id: 'brand-default',
+	brand_name: 'Default Brand'
 };
 
 const EMPTY_REF_DATA = {

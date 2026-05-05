@@ -35,8 +35,12 @@ const REFERENCE_DATA = {
 };
 
 const VENDORS = [
-	{ id: 'v-proc-1', name: 'Acme Procurement', country: 'CN', status: 'ACTIVE', vendor_type: 'PROCUREMENT' },
-	{ id: 'v-opex-1', name: 'Acme OpEx', country: 'US', status: 'ACTIVE', vendor_type: 'OPEX' }
+	{ id: 'v-proc-1', name: 'Acme Procurement', country: 'CN', status: 'ACTIVE', vendor_type: 'PROCUREMENT', address: '', account_details: '' },
+	{ id: 'v-opex-1', name: 'Acme OpEx', country: 'US', status: 'ACTIVE', vendor_type: 'OPEX', address: '', account_details: '' }
+];
+
+const BRANDS = [
+	{ id: 'brand-1', name: 'Acme Brands', legal_name: 'Acme Brands LLC', address: '1 Brand St', country: 'US', tax_id: 'US123', status: 'ACTIVE', created_at: '2026-01-01T00:00:00Z', updated_at: '2026-01-01T00:00:00Z' }
 ];
 
 const SM_USER = {
@@ -78,6 +82,29 @@ function mockVendors(page: Page) {
 	});
 }
 
+function mockBrands(page: Page) {
+	// Broad pattern for the brands list endpoint. LIFO ordering means the
+	// more-specific mockBrandVendors (registered after) wins for /brands/*/vendors.
+	return page.route('**/api/v1/brands**', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(BRANDS)
+		});
+	});
+}
+
+function mockBrandVendors(page: Page) {
+	// More specific /brands/*/vendors — registered after mockBrands, wins via LIFO.
+	return page.route('**/api/v1/brands/*/vendors', (route) => {
+		route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(VENDORS)
+		});
+	});
+}
+
 function mockUnreadCount(page: Page) {
 	return page.route('**/api/v1/activity/unread-count*', (route) => {
 		route.fulfill({
@@ -100,6 +127,8 @@ test.beforeEach(async ({ page }) => {
 	await mockUnreadCount(page);
 	await mockReferenceData(page);
 	await mockVendors(page);
+	await mockBrands(page);
+	await mockBrandVendors(page);
 });
 
 // ---------------------------------------------------------------------------
@@ -129,6 +158,8 @@ test('switching po_type to OPEX hides marketplace select', async ({ page }) => {
 test('switching po_type clears stale vendor_id and shows hint', async ({ page }) => {
 	await page.goto('/po/new');
 	await page.getByTestId('po-form').waitFor();
+	// Select a brand first to enable the vendor select, then select a vendor.
+	await page.getByTestId('po-form-brand').selectOption('brand-1');
 	await page.getByTestId('po-form-vendor').selectOption('v-proc-1');
 	await page.getByTestId('po-form-po-type').selectOption('OPEX');
 	await expect(page.getByTestId('po-form-vendor')).toHaveValue('');
@@ -198,6 +229,7 @@ test('valid create POSTs body and navigates to /po/{id}', async ({ page }) => {
 	await page.goto('/po/new');
 	await page.getByTestId('po-form').waitFor();
 
+	await page.getByTestId('po-form-brand').selectOption('brand-1');
 	await page.getByTestId('po-form-vendor').selectOption('v-proc-1');
 	await page.getByTestId('po-form-currency').selectOption('USD');
 	await page.getByTestId('po-form-issued-date').fill('2026-03-16');
@@ -209,6 +241,7 @@ test('valid create POSTs body and navigates to /po/{id}', async ({ page }) => {
 
 	expect(capturedBody).not.toBeNull();
 	expect((capturedBody as unknown as Record<string, unknown>)['vendor_id']).toBe('v-proc-1');
+	expect((capturedBody as unknown as Record<string, unknown>)['brand_id']).toBe('brand-1');
 });
 
 test('Cancel on pristine form navigates to /po without prompt', async ({ page }) => {
@@ -286,6 +319,12 @@ function makePO(status: string, overrides: Record<string, unknown> = {}) {
 		advance_paid_at: null,
 		has_removed_line: false,
 		current_milestone: null,
+		brand_id: 'brand-1',
+		brand_name: 'Acme Brands',
+		brand_legal_name: 'Acme Brands LLC',
+		brand_address: '1 Brand St',
+		brand_country: 'US',
+		brand_tax_id: 'US123',
 		...overrides
 	};
 }

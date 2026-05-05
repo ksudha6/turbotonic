@@ -2,8 +2,8 @@
 	import Button from '$lib/ui/Button.svelte';
 	import FormField from '$lib/ui/FormField.svelte';
 	import Input from '$lib/ui/Input.svelte';
-	import { patchUser } from '$lib/api';
-	import type { PatchUserInput, User } from '$lib/types';
+	import { listBrands, patchUser } from '$lib/api';
+	import type { Brand, PatchUserInput, User } from '$lib/types';
 
 	let {
 		user,
@@ -18,13 +18,46 @@
 	const titleId = crypto.randomUUID();
 	const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+	// Iter 111: roles subject to brand scoping.
+	const BRAND_SCOPABLE_ROLES: ReadonlyArray<string> = [
+		'SM',
+		'FREIGHT_MANAGER',
+		'QUALITY_LAB',
+		'PROCUREMENT_MANAGER'
+	];
+
 	let display_name: string = $state(user.display_name);
 	let email: string = $state(user.email ?? '');
+
+	// Iter 111: brand scope state.
+	const isBrandScopable = $derived(BRAND_SCOPABLE_ROLES.includes(user.role));
+	let brands: Brand[] = $state([]);
+	let selectedBrandIds: string[] = $state([...(user.brand_ids ?? [])]);
 
 	let displayNameError: string = $state('');
 	let emailError: string = $state('');
 	let serverError: string = $state('');
 	let submitting: boolean = $state(false);
+
+	$effect(() => {
+		if (isBrandScopable) {
+			listBrands({ status: 'ACTIVE' })
+				.then((result) => {
+					brands = result;
+				})
+				.catch(() => {
+					// Brand list failure leaves the multi-select empty.
+				});
+		}
+	});
+
+	function toggleBrand(brandId: string) {
+		if (selectedBrandIds.includes(brandId)) {
+			selectedBrandIds = selectedBrandIds.filter((id) => id !== brandId);
+		} else {
+			selectedBrandIds = [...selectedBrandIds, brandId];
+		}
+	}
 
 	function validate(): boolean {
 		displayNameError = '';
@@ -49,7 +82,10 @@
 			const body: PatchUserInput = {
 				display_name: display_name.trim(),
 				// Empty input clears email server-side via explicit null.
-				email: email.trim() ? email.trim() : null
+				email: email.trim() ? email.trim() : null,
+				// Iter 111: always send brand_ids for brand-scopable roles so the
+				// server replaces the set. Empty array clears all assignments.
+				...(isBrandScopable ? { brand_ids: selectedBrandIds } : {})
 			};
 			const { user: updated } = await patchUser(user.id, body);
 			onSuccess(updated);
@@ -112,6 +148,33 @@
 					/>
 				{/snippet}
 			</FormField>
+
+			{#if isBrandScopable}
+				<FormField
+					label="Brands"
+					hint="Leave empty to see all brands."
+					data-testid="user-edit-brands-field"
+				>
+					{#snippet children()}
+						<div class="brand-checklist" aria-label="Brands" data-testid="user-edit-brands">
+							{#if brands.length === 0}
+								<p class="brand-checklist__empty">No active brands.</p>
+							{:else}
+								{#each brands as brand (brand.id)}
+									<label class="brand-checklist__item">
+										<input
+											type="checkbox"
+											checked={selectedBrandIds.includes(brand.id)}
+											onchange={() => toggleBrand(brand.id)}
+										/>
+										{brand.name}
+									</label>
+								{/each}
+							{/if}
+						</div>
+					{/snippet}
+				</FormField>
+			{/if}
 		</div>
 
 		<footer class="user-modal__footer">
@@ -177,5 +240,25 @@
 		gap: var(--space-3);
 		padding: var(--space-4) var(--space-6);
 		border-top: 1px solid var(--gray-100);
+	}
+	.brand-checklist {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		max-height: 12rem;
+		overflow-y: auto;
+		padding: var(--space-2) 0;
+	}
+	.brand-checklist__item {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		font-size: var(--font-size-sm);
+		cursor: pointer;
+	}
+	.brand-checklist__empty {
+		font-size: var(--font-size-sm);
+		color: var(--gray-500);
+		margin: 0;
 	}
 </style>

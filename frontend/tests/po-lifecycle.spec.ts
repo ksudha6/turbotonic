@@ -80,6 +80,12 @@ function makePO(status: string, extra: object = {}) {
 		total_value: '1500',
 		created_at: '2026-03-16T00:00:00+00:00',
 		updated_at: '2026-03-16T00:00:00+00:00',
+		brand_id: 'brand-default',
+		brand_name: 'Default Brand',
+		brand_legal_name: 'Default Brand LLC',
+		brand_address: '1 Brand St',
+		brand_country: 'US',
+		brand_tax_id: '',
 		...extra
 	};
 }
@@ -261,10 +267,19 @@ test('create PO form validates empty part number', async ({ page }) => {
 		});
 	});
 
+	// Iter 109: brand selection required before vendor; use LIFO ordering.
+	await page.route('**/api/v1/brands**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'b1', name: 'Test Brand', status: 'ACTIVE' }]) });
+	});
+	await page.route('**/api/v1/brands/*/vendors', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'v1', name: 'Test Vendor', country: 'US', status: 'ACTIVE', vendor_type: 'PROCUREMENT', address: '', account_details: '' }]) });
+	});
+
 	await page.goto('/po/new');
 	await page.getByTestId('po-form').waitFor();
 
 	// Fill required header fields (form already has novalidate)
+	await page.getByTestId('po-form-brand').selectOption('b1');
 	await page.getByTestId('po-form-vendor').selectOption('v1');
 	await page.getByTestId('po-form-currency').selectOption('USD');
 	await page.getByTestId('po-form-issued-date').fill('2026-03-16');
@@ -296,10 +311,19 @@ test('create PO form rejects quantity <= 0', async ({ page }) => {
 		});
 	});
 
+	// Iter 109: brand selection required before vendor; use LIFO ordering.
+	await page.route('**/api/v1/brands**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'b1', name: 'Test Brand', status: 'ACTIVE' }]) });
+	});
+	await page.route('**/api/v1/brands/*/vendors', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'v1', name: 'Test Vendor', country: 'US', status: 'ACTIVE', vendor_type: 'PROCUREMENT', address: '', account_details: '' }]) });
+	});
+
 	await page.goto('/po/new');
 	await page.getByTestId('po-form').waitFor();
 
 	// Fill required header fields (form already has novalidate)
+	await page.getByTestId('po-form-brand').selectOption('b1');
 	await page.getByTestId('po-form-vendor').selectOption('v1');
 	await page.getByTestId('po-form-currency').selectOption('USD');
 	await page.getByTestId('po-form-issued-date').fill('2026-03-16');
@@ -522,10 +546,19 @@ test('PO form submits marketplace value', async ({ page }) => {
 		}
 	});
 
+	// Iter 109: brand selection required before vendor; use LIFO ordering.
+	await page.route('**/api/v1/brands**', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'b1', name: 'Test Brand', status: 'ACTIVE' }]) });
+	});
+	await page.route('**/api/v1/brands/*/vendors', (route) => {
+		route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'vendor-uuid-1', name: 'Acme Corp', country: 'CN', status: 'ACTIVE', vendor_type: 'PROCUREMENT', address: '', account_details: '' }]) });
+	});
+
 	await page.goto('/po/new');
 	await page.getByTestId('po-form').waitFor();
 
 	// Fill required header fields
+	await page.getByTestId('po-form-brand').selectOption('b1');
 	await page.getByTestId('po-form-vendor').selectOption('vendor-uuid-1');
 	await page.getByTestId('po-form-currency').selectOption('USD');
 	await page.getByTestId('po-form-issued-date').fill('2026-03-16');

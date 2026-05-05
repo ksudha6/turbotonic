@@ -98,6 +98,10 @@ export function canViewPOAttachments(
 	return false;
 }
 
+// Iter 109: Brand management. ADMIN-only create/edit/deactivate; SM can view the list.
+export const canManageBrands = (role: UserRole) => is(role, 'ADMIN');
+export const canViewBrands = (role: UserRole) => is(role, 'ADMIN', 'SM');
+
 export function canManagePOAttachments(
 	user: User,
 	po: { po_type: POType; vendor_id: string }

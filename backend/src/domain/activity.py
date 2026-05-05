@@ -62,6 +62,8 @@ class ActivityEvent(Enum):
     BRAND_REACTIVATED = "BRAND_REACTIVATED"
     BRAND_VENDOR_ASSIGNED = "BRAND_VENDOR_ASSIGNED"
     BRAND_VENDOR_UNASSIGNED = "BRAND_VENDOR_UNASSIGNED"
+    # Iter 111: brand-user assignment changed by ADMIN.
+    BRAND_USERS_UPDATED = "BRAND_USERS_UPDATED"
 
 
 class NotificationCategory(Enum):
@@ -171,4 +173,6 @@ EVENT_METADATA: dict[ActivityEvent, tuple[NotificationCategory, TargetRole | Non
     ActivityEvent.BRAND_REACTIVATED: (NotificationCategory.LIVE, TargetRole.ADMIN),
     ActivityEvent.BRAND_VENDOR_ASSIGNED: (NotificationCategory.LIVE, TargetRole.ADMIN),
     ActivityEvent.BRAND_VENDOR_UNASSIGNED: (NotificationCategory.LIVE, TargetRole.ADMIN),
+    # Iter 111: brand user assignment changed.
+    ActivityEvent.BRAND_USERS_UPDATED: (NotificationCategory.LIVE, TargetRole.ADMIN),
 }

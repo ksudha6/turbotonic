@@ -207,6 +207,9 @@ export interface PurchaseOrderListItem {
 	// A PO is "Partial" iff status is ACCEPTED AND has_removed_line is true.
 	has_removed_line?: boolean;
 	round_count?: number;
+	// Iter 109: brand fields added by Brand entity (iter 108 backend).
+	brand_id: string;
+	brand_name: string;
 }
 
 export interface PaginatedPOList {
@@ -235,6 +238,11 @@ export interface PurchaseOrder extends PurchaseOrderListItem {
 	// to decide which party is on the clock. round_count is inherited from the
 	// list-item view.
 	last_actor_role?: string | null;
+	// Iter 109: full brand block on detail view (list carries brand_id + brand_name only).
+	brand_legal_name: string;
+	brand_address: string;
+	brand_country: string;
+	brand_tax_id: string;
 }
 
 export interface LineItemInput {
@@ -273,6 +281,7 @@ export interface PurchaseOrderInput {
 	po_number: string;
 	po_type: POType;
 	vendor_id: string;
+	brand_id: string;
 	buyer_name: string;
 	buyer_country: string;
 	issued_date: string;
@@ -674,6 +683,8 @@ export interface User {
 	status: UserStatus;
 	vendor_id: string | null;
 	email: string | null;
+	// Iter 111: brand scope. Empty means unscoped (sees all brands).
+	brand_ids: string[];
 }
 
 // Iter 100: ADMIN /users page request shapes.
@@ -683,12 +694,16 @@ export interface InviteUserInput {
 	role: UserRole;
 	email?: string | null;
 	vendor_id?: string | null;
+	// Iter 111: optional brand scope. Ignored for ADMIN and VENDOR roles.
+	brand_ids?: string[] | null;
 }
 
 export interface PatchUserInput {
 	display_name?: string;
 	// Explicit null clears email; omitted leaves untouched.
 	email?: string | null;
+	// Iter 111: when present (including []), replaces brand set. Omit to leave unchanged.
+	brand_ids?: string[] | null;
 }
 
 export interface UserListFilters {
@@ -700,4 +715,34 @@ export interface UserListFilters {
 export interface InviteUserResponse {
 	user: User;
 	invite_token: string;
+}
+
+// Iter 109: Brand aggregate types.
+export type BrandStatus = 'ACTIVE' | 'INACTIVE';
+
+export interface Brand {
+	id: string;
+	name: string;
+	legal_name: string;
+	address: string;
+	country: string;
+	tax_id: string;
+	status: BrandStatus;
+	created_at: string;
+	updated_at: string;
+}
+
+export interface BrandCreate {
+	name: string;
+	legal_name: string;
+	address: string;
+	country: string;
+	tax_id?: string;
+}
+
+export interface BrandUpdate {
+	legal_name?: string;
+	address?: string;
+	country?: string;
+	tax_id?: string;
 }
