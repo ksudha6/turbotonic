@@ -117,6 +117,7 @@
 							{col.label}{sortGlyph(col.key)}
 						</th>
 					{/each}
+					<th>Brand</th>
 					<th>Type</th>
 					<th>Current Milestone</th>
 				</tr>
@@ -152,6 +153,7 @@
 						<td>{formatDate(row.issued_date)}</td>
 						<td>{formatDate(row.required_delivery_date)}</td>
 						<td>{formatValue(row.total_value, row.currency)}</td>
+						<td class="po-list-table__brand" title={row.brand_name}>{row.brand_name ? (row.brand_name.length > 18 ? row.brand_name.slice(0, 18) + '…' : row.brand_name) : ''}</td>
 						<td>{row.po_type}</td>
 						<td class="po-list-table__milestone">{milestoneLabel(row.current_milestone)}</td>
 					</tr>
@@ -194,6 +196,9 @@
 							>{formatValue(row.total_value, row.currency)}</span
 						>
 					</div>
+					{#if row.brand_name}
+						<div class="po-row-card__brand">Brand: {row.brand_name}</div>
+					{/if}
 					<div class="po-row-card__vendor">{row.vendor_name}</div>
 					<div class="po-row-card__status">
 						<PoStatusPills
@@ -311,5 +316,17 @@
 			color: var(--gray-600);
 			white-space: nowrap;
 		}
+		.po-list-table__brand {
+			font-size: var(--font-size-sm);
+			color: var(--gray-700);
+			max-width: 140px;
+			overflow: hidden;
+			text-overflow: ellipsis;
+			white-space: nowrap;
+		}
+	}
+	.po-row-card__brand {
+		font-size: var(--font-size-xs);
+		color: var(--gray-600);
 	}
 </style>

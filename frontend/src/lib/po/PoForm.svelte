@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { LineItemInput, PurchaseOrderInput, ReferenceData, VendorListItem } from '$lib/types';
-	import { listVendors, fetchReferenceData } from '$lib/api';
+	import type { Brand, LineItemInput, PurchaseOrderInput, ReferenceData, VendorListItem } from '$lib/types';
+	import { listBrands, listBrandVendors, listVendors, fetchReferenceData } from '$lib/api';
 	import { untrack } from 'svelte';
 	import PanelCard from '$lib/ui/PanelCard.svelte';
 	import FormField from '$lib/ui/FormField.svelte';
@@ -32,6 +32,7 @@
 
 	interface InitialData {
 		po_type?: string;
+		brand_id?: string;
 		vendor_id?: string;
 		buyer_name?: string;
 		buyer_country?: string;
@@ -111,8 +112,14 @@
 
 	let vendors = $state<VendorListItem[]>([]);
 	let refData = $state<ReferenceData | null>(null);
+	// Iter 109: brands for BrandSelect. brandVendors is the filtered set for the chosen brand.
+	let brands = $state<Brand[]>([]);
+	let brandVendors = $state<VendorListItem[]>([]);
+	let brandsLoading = $state(false);
+	let brandsError = $state('');
 
 	let po_type: string = $state(initialData.po_type ?? 'PROCUREMENT');
+	let brand_id: string = $state(initialData.brand_id ?? '');
 	let vendor_id: string = $state(initialData.vendor_id ?? '');
 	let vendorClearedHint: boolean = $state(false);
 	let buyer_name: string = $state(initialData.buyer_name ?? DEFAULT_BUYER_NAME);
@@ -141,6 +148,7 @@
 	const initialSnapshot = untrack(() =>
 		JSON.stringify({
 			po_type,
+			brand_id,
 			vendor_id,
 			buyer_name,
 			buyer_country,
@@ -163,6 +171,7 @@
 	const currentSnapshot = $derived(
 		JSON.stringify({
 			po_type,
+			brand_id,
 			vendor_id,
 			buyer_name,
 			buyer_country,
@@ -192,17 +201,60 @@
 	const hsCodeErrors = $derived(lineItems.map((item) => hsCodeError(item.hs_code)));
 	const hasHsCodeErrors = $derived(hsCodeErrors.some((e) => e !== ''));
 
-	const filteredVendors = $derived(vendors.filter((v) => v.vendor_type === po_type));
+	// Vendor pool: in create mode, if a brand is chosen use brandVendors (brand-scoped); else empty.
+	// In edit/revise mode, use all active vendors (select is disabled; just needs current value to display).
+	const vendorPool = $derived(mode !== 'create' ? vendors : (brand_id ? brandVendors : []));
+	const filteredVendors = $derived(vendorPool.filter((v) => v.vendor_type === po_type));
 	const vendorOptions = $derived([
-		{ value: '', label: 'Select a vendor' },
+		{ value: '', label: (mode === 'create' && !brand_id) ? 'Select a brand first' : 'Select a vendor' },
 		...filteredVendors.map((v) => ({ value: v.id, label: `${v.name} (${v.country})` }))
 	]);
 
+	const brandOptions = $derived([
+		{ value: '', label: 'Select a brand' },
+		...brands.map((b) => ({ value: b.id, label: b.name }))
+	]);
+
+	const brandDisabled = $derived(mode !== 'create');
+	// Vendor is disabled in edit/revise mode (immutable); in create mode disabled until brand chosen.
+	const vendorDisabled = $derived(mode !== 'create' || !brand_id);
+
 	$effect(() => {
-		if (vendor_id && filteredVendors.length > 0 && !filteredVendors.some((v) => v.id === vendor_id)) {
+		// Only auto-clear vendor in create mode; edit/revise modes keep the existing vendor locked.
+		if (mode === 'create' && vendor_id && filteredVendors.length > 0 && !filteredVendors.some((v) => v.id === vendor_id)) {
 			vendor_id = '';
 			vendorClearedHint = true;
 		}
+	});
+
+	// When brand changes in create mode, reset vendor and reload brand vendors.
+	let prevBrandId = $state(initialData.brand_id ?? '');
+	$effect(() => {
+		const currentBrandId = brand_id;
+		if (currentBrandId === prevBrandId) return;
+		prevBrandId = currentBrandId;
+		if (mode !== 'create') return;
+		vendor_id = '';
+		vendorClearedHint = false;
+		if (!currentBrandId) {
+			brandVendors = [];
+			return;
+		}
+		void listBrandVendors(currentBrandId).then((vs) => {
+			brandVendors = vs
+				.filter((v) => v.status === 'ACTIVE')
+				.map((v) => ({
+					id: v.id,
+					name: v.name,
+					country: v.country,
+					status: v.status as import('$lib/types').VendorStatus,
+					vendor_type: v.vendor_type as import('$lib/types').VendorType,
+					address: v.address,
+					account_details: v.account_details
+				}));
+		}).catch(() => {
+			brandVendors = [];
+		});
 	});
 
 	const countryOptions = $derived([
@@ -235,6 +287,9 @@
 	const poTypeDisabled = $derived(mode !== 'create');
 
 	const vendorHint = $derived.by(() => {
+		if (mode === 'create' && !brand_id) {
+			return 'Select a brand first.';
+		}
 		if (vendorClearedHint) {
 			return 'Vendor cleared because it does not match the selected PO type.';
 		}
@@ -242,10 +297,31 @@
 	});
 
 	onMount(async () => {
-		[vendors, refData] = await Promise.all([
-			listVendors({ status: 'ACTIVE' }),
-			fetchReferenceData()
-		]);
+		brandsLoading = true;
+		try {
+			[vendors, refData, brands] = await Promise.all([
+				listVendors({ status: 'ACTIVE' }),
+				fetchReferenceData(),
+				listBrands({ status: 'ACTIVE' })
+			]);
+			// If editing and brand_id is set, load brand vendors immediately.
+			if (brand_id && mode !== 'create') {
+				const bv = await listBrandVendors(brand_id);
+				brandVendors = bv.filter((v) => v.status === 'ACTIVE').map((v) => ({
+					id: v.id,
+					name: v.name,
+					country: v.country,
+					status: v.status as import('$lib/types').VendorStatus,
+					vendor_type: v.vendor_type as import('$lib/types').VendorType,
+					address: v.address,
+					account_details: v.account_details
+				}));
+			}
+		} catch (e) {
+			brandsError = e instanceof Error ? e.message : 'Failed to load brands';
+		} finally {
+			brandsLoading = false;
+		}
 	});
 
 	function addLineItem() {
@@ -291,6 +367,7 @@
 			po_type: po_type as import('$lib/types').POType,
 			total_value: '',
 			vendor_id,
+			brand_id,
 			buyer_name,
 			buyer_country,
 			currency,
@@ -367,12 +444,25 @@
 					{/snippet}
 				</FormField>
 
+				<FormField label="Brand" required>
+					{#snippet children({ invalid })}
+						<Select
+							bind:value={brand_id}
+							options={brandOptions}
+							disabled={brandDisabled || brandsLoading}
+							{invalid}
+							ariaLabel="Brand"
+							data-testid="po-form-brand"
+						/>
+					{/snippet}
+				</FormField>
+
 				<FormField label="Vendor" required hint={vendorHint}>
 					{#snippet children({ invalid })}
 						<Select
 							bind:value={vendor_id}
 							options={vendorOptions}
-							disabled={!po_type}
+							disabled={vendorDisabled}
 							{invalid}
 							ariaLabel="Vendor"
 							data-testid="po-form-vendor"

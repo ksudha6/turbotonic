@@ -14,6 +14,26 @@ def check_vendor_access(user: User, vendor_id: str) -> None:
         raise HTTPException(status_code=404, detail="Not found")
 
 
+def check_brand_access(
+    user: User,
+    brand_id: str | None,
+    accessible_brand_ids: list[str] | None,
+) -> None:
+    """Raise 404 if the user is brand-scoped and brand_id is not in their set.
+
+    accessible_brand_ids == None  →  no brand filter (ADMIN, VENDOR)
+    accessible_brand_ids == []    →  unscoped buyer-side user; sees all brands
+    accessible_brand_ids == [...]  →  scoped; brand_id must be in the list
+    """
+    if accessible_brand_ids is None:
+        return
+    if not accessible_brand_ids:
+        # empty list means "all brands" — unscoped buyer-side user
+        return
+    if brand_id not in accessible_brand_ids:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
 def can_view_po_attachments(user: User, po: PurchaseOrder) -> bool:
     """Return True if user may read documents attached to po.
 

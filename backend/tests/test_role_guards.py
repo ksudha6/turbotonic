@@ -25,10 +25,12 @@ from src.routers.dashboard import get_activity_repo as dash_get_activity_repo
 from src.routers.dashboard import get_invoice_repo as dash_get_invoice_repo
 from src.routers.dashboard import get_milestone_repo as dash_get_milestone_repo
 from src.routers.dashboard import get_repo as dash_get_repo
+from src.routers.dashboard import get_user_repo as dash_get_user_repo
 from src.routers.dashboard import get_vendor_repo as dash_get_vendor_repo
 from src.routers.invoice import get_activity_repo as invoice_get_activity_repo
 from src.routers.invoice import get_invoice_repo as invoice_get_invoice_repo
 from src.routers.invoice import get_po_repo as invoice_get_po_repo
+from src.routers.invoice import get_user_repo as invoice_get_user_repo
 from src.routers.invoice import get_vendor_repo as invoice_get_vendor_repo
 from src.routers.milestone import get_activity_repo as milestone_get_activity_repo
 from src.routers.milestone import get_milestone_repo as milestone_get_milestone_repo
@@ -45,6 +47,7 @@ from src.routers.purchase_order import get_activity_repo as po_get_activity_repo
 from src.routers.purchase_order import get_brand_repo as po_get_brand_repo
 from src.routers.purchase_order import get_invoice_repo as po_get_invoice_repo
 from src.routers.purchase_order import get_repo
+from src.routers.purchase_order import get_user_repo as po_get_user_repo
 from src.routers.purchase_order import get_vendor_repo as po_get_vendor_repo
 from src.routers.vendor import get_vendor_repo as vendor_get_vendor_repo
 from src.schema import init_db
@@ -154,6 +157,7 @@ async def _make_client_with_role(
 
     app.dependency_overrides[get_repo] = override_get_repo
     app.dependency_overrides[po_get_brand_repo] = override_get_brand_repo
+    app.dependency_overrides[po_get_user_repo] = override_get_user_repo
     app.dependency_overrides[po_get_vendor_repo] = override_get_vendor_repo
     app.dependency_overrides[brands_get_brand_repo] = override_get_brand_repo
     app.dependency_overrides[brands_get_vendor_repo] = override_get_vendor_repo
@@ -166,7 +170,9 @@ async def _make_client_with_role(
     app.dependency_overrides[dash_get_invoice_repo] = override_get_invoice_repo
     app.dependency_overrides[dash_get_milestone_repo] = override_get_milestone_repo
     app.dependency_overrides[dash_get_activity_repo] = override_get_activity_repo
+    app.dependency_overrides[dash_get_user_repo] = override_get_user_repo
     app.dependency_overrides[invoice_get_invoice_repo] = override_get_invoice_repo
+    app.dependency_overrides[invoice_get_user_repo] = override_get_user_repo
     app.dependency_overrides[invoice_get_po_repo] = override_get_repo
     app.dependency_overrides[invoice_get_vendor_repo] = override_get_vendor_repo
     app.dependency_overrides[invoice_get_activity_repo] = override_get_activity_repo

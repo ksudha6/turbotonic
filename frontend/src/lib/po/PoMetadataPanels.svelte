@@ -46,7 +46,26 @@
 		{ label: 'Country of Origin', value: resolve('countries', po.country_of_origin) },
 		{ label: 'Country of Destination', value: resolve('countries', po.country_of_destination) }
 	]);
+
+	// Iter 109: Brand block. brand_legal_name etc. come from iter 108 backend.
+	const brandItems = $derived.by(() => {
+		const items: Array<{ label: string; value: string }> = [
+			{ label: 'Name', value: po.brand_name ?? '' },
+			{ label: 'Legal Name', value: po.brand_legal_name ?? '' },
+			{ label: 'Country', value: po.brand_country ?? '' }
+		];
+		if (po.brand_address) items.push({ label: 'Address', value: po.brand_address });
+		if (po.brand_tax_id) items.push({ label: 'Tax ID', value: po.brand_tax_id });
+		return items;
+	});
 </script>
+
+<!-- Brand panel above Buyer (iter 109). Supersedes legacy buyer block visually for new POs. -->
+<PanelCard title="Brand" data-testid="po-metadata-brand">
+	{#snippet children()}
+		<AttributeList items={brandItems} />
+	{/snippet}
+</PanelCard>
 
 <PanelCard title="Trade Summary" data-testid="po-metadata-trade-summary">
 	{#snippet children()}

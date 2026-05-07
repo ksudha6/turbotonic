@@ -47,8 +47,14 @@ const USERS: SidebarItem = {
 	match: (p) => p.startsWith('/users')
 };
 
+const BRANDS: SidebarItem = {
+	href: '/brands',
+	label: 'Brands',
+	match: (p) => p.startsWith('/brands')
+};
+
 const ROLE_ITEMS: Record<UserRole, SidebarItem[]> = {
-	ADMIN: [DASHBOARD, PURCHASE_ORDERS, INVOICES, VENDORS, PRODUCTS, USERS],
+	ADMIN: [DASHBOARD, PURCHASE_ORDERS, INVOICES, VENDORS, PRODUCTS, USERS, BRANDS],
 	SM: [DASHBOARD, PURCHASE_ORDERS, INVOICES, VENDORS, PRODUCTS],
 	VENDOR: [DASHBOARD, PURCHASE_ORDERS, INVOICES, PRODUCTS],
 	FREIGHT_MANAGER: [DASHBOARD, INVOICES],

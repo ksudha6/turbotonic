@@ -306,6 +306,7 @@ class PurchaseOrderRepository:
         *,
         status: POStatus | None = None,
         vendor_id: str | None = None,
+        brand_ids: list[str] | None = None,
         currency: str | None = None,
         milestone: str | None = None,
         marketplace: str | None = None,
@@ -333,6 +334,11 @@ class PurchaseOrderRepository:
         if vendor_id is not None:
             where_clauses.append(f"p.vendor_id = ${param_idx}")
             params.append(vendor_id)
+            param_idx += 1
+        if brand_ids is not None and len(brand_ids) > 0:
+            # brand_ids is a non-empty list: filter to these brands only.
+            where_clauses.append(f"p.brand_id = ANY(${param_idx})")
+            params.append(brand_ids)
             param_idx += 1
         if currency is not None:
             where_clauses.append(f"p.currency = ${param_idx}")
@@ -447,29 +453,35 @@ class PurchaseOrderRepository:
 
         return result
 
-    async def po_summary_by_status(self, vendor_id: str | None = None) -> list[dict[str, Any]]:
+    async def po_summary_by_status(
+        self,
+        vendor_id: str | None = None,
+        brand_ids: list[str] | None = None,
+    ) -> list[dict[str, Any]]:
+        # Build a parameterised WHERE clause from the optional filters.
+        conditions: list[str] = []
+        params: list[Any] = []
+        idx = 1
         if vendor_id is not None:
-            rows = await self._conn.fetch(
-                """
-                SELECT p.status, p.currency, COUNT(DISTINCT p.id) as po_count,
-                       COALESCE(SUM(li.quantity * CAST(li.unit_price AS REAL)), 0) as total_value
-                FROM purchase_orders p
-                LEFT JOIN line_items li ON li.po_id = p.id
-                WHERE p.vendor_id = $1
-                GROUP BY p.status, p.currency
-                """,
-                vendor_id,
-            )
-        else:
-            rows = await self._conn.fetch(
-                """
-                SELECT p.status, p.currency, COUNT(DISTINCT p.id) as po_count,
-                       COALESCE(SUM(li.quantity * CAST(li.unit_price AS REAL)), 0) as total_value
-                FROM purchase_orders p
-                LEFT JOIN line_items li ON li.po_id = p.id
-                GROUP BY p.status, p.currency
-                """
-            )
+            conditions.append(f"p.vendor_id = ${idx}")
+            params.append(vendor_id)
+            idx += 1
+        if brand_ids is not None and len(brand_ids) > 0:
+            conditions.append(f"p.brand_id = ANY(${idx})")
+            params.append(brand_ids)
+            idx += 1
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        rows = await self._conn.fetch(
+            f"""
+            SELECT p.status, p.currency, COUNT(DISTINCT p.id) as po_count,
+                   COALESCE(SUM(li.quantity * CAST(li.unit_price AS REAL)), 0) as total_value
+            FROM purchase_orders p
+            LEFT JOIN line_items li ON li.po_id = p.id
+            {where}
+            GROUP BY p.status, p.currency
+            """,
+            *params,
+        )
         return [
             {
                 "status": row["status"],
@@ -480,18 +492,29 @@ class PurchaseOrderRepository:
             for row in rows
         ]
 
-    async def recent_pos(self, limit: int = 10, vendor_id: str | None = None) -> list[PurchaseOrder]:  # noqa: E501
+    async def recent_pos(
+        self,
+        limit: int = 10,
+        vendor_id: str | None = None,
+        brand_ids: list[str] | None = None,
+    ) -> list[PurchaseOrder]:
+        conditions: list[str] = []
+        params: list[Any] = []
+        idx = 1
         if vendor_id is not None:
-            po_rows = await self._conn.fetch(
-                "SELECT * FROM purchase_orders WHERE vendor_id = $1 ORDER BY updated_at DESC LIMIT $2",
-                vendor_id,
-                limit,
-            )
-        else:
-            po_rows = await self._conn.fetch(
-                "SELECT * FROM purchase_orders ORDER BY updated_at DESC LIMIT $1",
-                limit,
-            )
+            conditions.append(f"vendor_id = ${idx}")
+            params.append(vendor_id)
+            idx += 1
+        if brand_ids is not None and len(brand_ids) > 0:
+            conditions.append(f"brand_id = ANY(${idx})")
+            params.append(brand_ids)
+            idx += 1
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        params.append(limit)
+        po_rows = await self._conn.fetch(
+            f"SELECT * FROM purchase_orders {where} ORDER BY updated_at DESC LIMIT ${idx}",
+            *params,
+        )
 
         result: list[PurchaseOrder] = []
         for po_row in po_rows:

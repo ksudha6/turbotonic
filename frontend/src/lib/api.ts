@@ -1,4 +1,4 @@
-import type { ActivityLogEntry, BulkTransitionResult, Certificate, CertificateCreateInput, CertificateListItem, CertWarning, DashboardData, DashboardSummary, DocumentRequirementStatus, Invoice, InvoiceLineItemCreate, InvoiceListItem, InviteUserInput, InviteUserResponse, MilestoneResponse, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, PatchUserInput, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReadinessResult, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentBookingPayload, ShipmentDeclarePayload, ShipmentDocumentRequirement, ShipmentLogisticsPayload, ShipmentTransportPayload, ShipmentUpdate, User, UserRole, UserStatus, Vendor, VendorInput, VendorListItem } from './types';
+import type { ActivityLogEntry, Brand, BrandCreate, BrandUpdate, BulkTransitionResult, Certificate, CertificateCreateInput, CertificateListItem, CertWarning, DashboardData, DashboardSummary, DocumentRequirementStatus, Invoice, InvoiceLineItemCreate, InvoiceListItem, InviteUserInput, InviteUserResponse, MilestoneResponse, PackagingSpec, PackagingSpecInput, PackagingSpecUpdate, PaginatedInvoiceList, PaginatedPOList, PatchUserInput, POSubmitResponse, Product, ProductInput, ProductListItem, PurchaseOrder, PurchaseOrderInput, QualificationType, QualificationTypeListItem, ReadinessResult, ReferenceData, RemainingQuantityResponse, Shipment, ShipmentBookingPayload, ShipmentDeclarePayload, ShipmentDocumentRequirement, ShipmentTransportPayload, ShipmentUpdate, User, UserRole, UserStatus, Vendor, VendorInput, VendorListItem } from './types';
 
 async function apiGet<T>(path: string): Promise<T> {
 	const res = await fetch(path, { credentials: 'include' });
@@ -974,4 +974,71 @@ export async function markShipmentShipped(id: string): Promise<Shipment> {
 		throw new Error(body.detail ?? `POST /api/v1/shipments/${id}/ship failed: ${res.status}`);
 	}
 	return res.json() as Promise<Shipment>;
+}
+
+// Iter 109: Brand CRUD + vendor assignment. 409 paths surface backend detail inline.
+
+export function listBrands(params?: { status?: string }): Promise<Brand[]> {
+	const query = new URLSearchParams();
+	if (params?.status) query.set('status', params.status);
+	const qs = query.toString();
+	return apiGet<Brand[]>(qs ? `/api/v1/brands/?${qs}` : '/api/v1/brands/');
+}
+
+export function getBrand(id: string): Promise<Brand> {
+	return apiGet<Brand>(`/api/v1/brands/${id}`);
+}
+
+export async function createBrand(data: BrandCreate): Promise<Brand> {
+	const path = '/api/v1/brands/';
+	const res = await fetch(path, {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(data),
+		credentials: 'include'
+	});
+	if (!res.ok) await detailOrThrow(res, 'POST', path);
+	return (await res.json()) as Brand;
+}
+
+export async function patchBrand(id: string, data: BrandUpdate): Promise<Brand> {
+	const path = `/api/v1/brands/${id}`;
+	const res = await fetch(path, {
+		method: 'PATCH',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(data),
+		credentials: 'include'
+	});
+	if (!res.ok) await detailOrThrow(res, 'PATCH', path);
+	return (await res.json()) as Brand;
+}
+
+export async function deactivateBrand(id: string): Promise<Brand> {
+	const path = `/api/v1/brands/${id}/deactivate`;
+	const res = await fetch(path, { method: 'POST', credentials: 'include' });
+	if (!res.ok) await detailOrThrow(res, 'POST', path);
+	return (await res.json()) as Brand;
+}
+
+export async function reactivateBrand(id: string): Promise<Brand> {
+	const path = `/api/v1/brands/${id}/reactivate`;
+	const res = await fetch(path, { method: 'POST', credentials: 'include' });
+	if (!res.ok) await detailOrThrow(res, 'POST', path);
+	return (await res.json()) as Brand;
+}
+
+export function listBrandVendors(brandId: string): Promise<Vendor[]> {
+	return apiGet<Vendor[]>(`/api/v1/brands/${brandId}/vendors`);
+}
+
+export async function assignVendorToBrand(brandId: string, vendorId: string): Promise<void> {
+	const path = `/api/v1/brands/${brandId}/vendors/${vendorId}`;
+	const res = await fetch(path, { method: 'PUT', credentials: 'include' });
+	if (!res.ok) await detailOrThrow(res, 'PUT', path);
+}
+
+export async function unassignVendorFromBrand(brandId: string, vendorId: string): Promise<void> {
+	const path = `/api/v1/brands/${brandId}/vendors/${vendorId}`;
+	const res = await fetch(path, { method: 'DELETE', credentials: 'include' });
+	if (!res.ok) await detailOrThrow(res, 'DELETE', path);
 }

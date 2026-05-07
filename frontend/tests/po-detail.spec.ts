@@ -77,6 +77,13 @@ function makePO(overrides: POFixture = {}): POFixture {
 		advance_paid_at: null,
 		has_removed_line: false,
 		current_milestone: null,
+		// Iter 109: brand fields added by Brand entity.
+		brand_id: 'brand-default',
+		brand_name: 'Default Brand',
+		brand_legal_name: 'Default Brand Legal LLC',
+		brand_address: '1 Brand St, City',
+		brand_country: 'US',
+		brand_tax_id: 'US123456789',
 		...overrides
 	};
 }

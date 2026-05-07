@@ -19,7 +19,14 @@ export const EVENT_LABELS = {
 	INVOICE_PAID: 'Invoice paid',
 	INVOICE_DISPUTED: 'Invoice disputed',
 	MILESTONE_POSTED: 'Milestone posted',
-	MILESTONE_OVERDUE: 'Milestone overdue'
+	MILESTONE_OVERDUE: 'Milestone overdue',
+	// Iter 109: Brand lifecycle events (ADMIN activity feed).
+	BRAND_CREATED: 'Brand created',
+	BRAND_UPDATED: 'Brand updated',
+	BRAND_DEACTIVATED: 'Brand deactivated',
+	BRAND_REACTIVATED: 'Brand reactivated',
+	BRAND_VENDOR_ASSIGNED: 'Vendor assigned to brand',
+	BRAND_VENDOR_UNASSIGNED: 'Vendor removed from brand'
 } as const satisfies Record<string, string>;
 
 // Maps ActivityLogEntry.category to the tone used by ActivityFeed dot coloring.

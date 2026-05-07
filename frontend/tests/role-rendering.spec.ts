@@ -115,7 +115,14 @@ const PENDING_PO = {
 	],
 	rejection_history: [],
 	created_at: '2026-04-01T00:00:00+00:00',
-	updated_at: '2026-04-01T00:00:00+00:00'
+	updated_at: '2026-04-01T00:00:00+00:00',
+	// Iter 109: brand fields
+	brand_id: 'brand-default',
+	brand_name: 'Default Brand',
+	brand_legal_name: 'Default Brand LLC',
+	brand_address: '1 Brand St',
+	brand_country: 'US',
+	brand_tax_id: ''
 };
 
 const REF_DATA = {
@@ -190,7 +197,7 @@ test('FREIGHT_MANAGER nav shows Dashboard and Invoices only', async ({ page }) =
 	await expect(page.getByRole('link', { name: 'Products' })).toBeHidden();
 });
 
-test('ADMIN nav shows same links as SM', async ({ page }) => {
+test('ADMIN nav shows all links including Users and Brands', async ({ page }) => {
 	await mockApiCatchAll(page);
 	await mockUser(page, 'ADMIN');
 	await mockUnreadCount(page);
@@ -201,6 +208,8 @@ test('ADMIN nav shows same links as SM', async ({ page }) => {
 	await expect(page.getByRole('link', { name: 'Invoices' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Vendors' })).toBeVisible();
 	await expect(page.getByRole('link', { name: 'Products' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Users' })).toBeVisible();
+	await expect(page.getByRole('link', { name: 'Brands' })).toBeVisible();
 });
 
 test('PROCUREMENT_MANAGER nav shows Dashboard, POs, Invoices, Products', async ({ page }) => {

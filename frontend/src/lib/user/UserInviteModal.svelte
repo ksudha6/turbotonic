@@ -3,8 +3,8 @@
 	import FormField from '$lib/ui/FormField.svelte';
 	import Input from '$lib/ui/Input.svelte';
 	import Select from '$lib/ui/Select.svelte';
-	import { listVendors, inviteUser } from '$lib/api';
-	import type { InviteUserInput, InviteUserResponse, UserRole, VendorListItem } from '$lib/types';
+	import { listVendors, listBrands, inviteUser } from '$lib/api';
+	import type { Brand, InviteUserInput, InviteUserResponse, UserRole, VendorListItem } from '$lib/types';
 
 	let {
 		onSuccess,
@@ -43,7 +43,20 @@
 	let vendors: VendorListItem[] = $state([]);
 	let vendorsFetched: boolean = $state(false);
 
+	// Iter 111: brand multi-select for buyer-side roles.
+	const BRAND_SCOPABLE_ROLES: ReadonlyArray<UserRole> = [
+		'SM',
+		'FREIGHT_MANAGER',
+		'QUALITY_LAB',
+		'PROCUREMENT_MANAGER'
+	];
+
+	let brands: Brand[] = $state([]);
+	let brandsFetched: boolean = $state(false);
+	let selectedBrandIds: string[] = $state([]);
+
 	const isVendorRole = $derived(role === 'VENDOR');
+	const isBrandScopable = $derived(BRAND_SCOPABLE_ROLES.includes(role as UserRole));
 
 	$effect(() => {
 		if (isVendorRole && !vendorsFetched) {
@@ -52,11 +65,34 @@
 		}
 	});
 
+	$effect(() => {
+		if (isBrandScopable && !brandsFetched) {
+			brandsFetched = true;
+			loadBrands();
+		}
+	});
+
 	async function loadVendors() {
 		try {
 			vendors = await listVendors({ status: 'ACTIVE' });
 		} catch {
 			// Vendor list failure leaves the dropdown empty; the form blocks submit.
+		}
+	}
+
+	async function loadBrands() {
+		try {
+			brands = await listBrands({ status: 'ACTIVE' });
+		} catch {
+			// Brand list failure leaves the multi-select empty; user can still submit unscoped.
+		}
+	}
+
+	function toggleBrand(brandId: string) {
+		if (selectedBrandIds.includes(brandId)) {
+			selectedBrandIds = selectedBrandIds.filter((id) => id !== brandId);
+		} else {
+			selectedBrandIds = [...selectedBrandIds, brandId];
 		}
 	}
 
@@ -95,7 +131,9 @@
 				display_name: display_name.trim() || username.trim(),
 				role: role as UserRole,
 				email: email.trim() ? email.trim() : null,
-				vendor_id: isVendorRole ? vendor_id : null
+				vendor_id: isVendorRole ? vendor_id : null,
+				// Iter 111: send brand_ids when role is brand-scopable; null means unscoped.
+				brand_ids: isBrandScopable ? (selectedBrandIds.length > 0 ? selectedBrandIds : null) : null
 			};
 			const response = await inviteUser(input);
 			onSuccess(response);
@@ -218,6 +256,33 @@
 					{/snippet}
 				</FormField>
 			{/if}
+
+			{#if isBrandScopable}
+				<FormField
+					label="Brands"
+					hint="Leave empty to see all brands."
+					data-testid="user-invite-brands-field"
+				>
+					{#snippet children()}
+						<div class="brand-checklist" aria-label="Brands" data-testid="user-invite-brands">
+							{#if brands.length === 0}
+								<p class="brand-checklist__empty">No active brands.</p>
+							{:else}
+								{#each brands as brand (brand.id)}
+									<label class="brand-checklist__item">
+										<input
+											type="checkbox"
+											checked={selectedBrandIds.includes(brand.id)}
+											onchange={() => toggleBrand(brand.id)}
+										/>
+										{brand.name}
+									</label>
+								{/each}
+							{/if}
+						</div>
+					{/snippet}
+				</FormField>
+			{/if}
 		</div>
 
 		<footer class="user-modal__footer">
@@ -283,5 +348,25 @@
 		gap: var(--space-3);
 		padding: var(--space-4) var(--space-6);
 		border-top: 1px solid var(--gray-100);
+	}
+	.brand-checklist {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-2);
+		max-height: 12rem;
+		overflow-y: auto;
+		padding: var(--space-2) 0;
+	}
+	.brand-checklist__item {
+		display: flex;
+		align-items: center;
+		gap: var(--space-2);
+		font-size: var(--font-size-sm);
+		cursor: pointer;
+	}
+	.brand-checklist__empty {
+		font-size: var(--font-size-sm);
+		color: var(--gray-500);
+		margin: 0;
 	}
 </style>
