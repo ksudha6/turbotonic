@@ -33,6 +33,7 @@ class Vendor:
         updated_at: datetime,
         address: str = "",
         account_details: str = "",
+        tax_id: str = "",
     ) -> None:
         self._id = id
         self.name = name
@@ -41,6 +42,7 @@ class Vendor:
         self.vendor_type = vendor_type
         self.address = address
         self.account_details = account_details
+        self.tax_id = tax_id
         self._created_at = created_at
         self.updated_at = updated_at
 
@@ -53,7 +55,7 @@ class Vendor:
         return self._created_at
 
     @classmethod
-    def create(cls, *, name: str, country: str, vendor_type: VendorType, address: str = "", account_details: str = "") -> Vendor:
+    def create(cls, *, name: str, country: str, vendor_type: VendorType, address: str = "", account_details: str = "", tax_id: str = "") -> Vendor:
         if not name or not name.strip():
             raise ValueError("name must not be empty or whitespace-only")
         if not country or not country.strip():
@@ -71,6 +73,7 @@ class Vendor:
             updated_at=now,
             address=address,
             account_details=account_details,
+            tax_id=tax_id,
         )
 
     def deactivate(self) -> None:

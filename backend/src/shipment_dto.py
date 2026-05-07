@@ -105,6 +105,9 @@ class ShipmentResponse(BaseModel):
     signatory_name: str | None = None
     signatory_title: str | None = None
     declared_at: datetime | None = None
+    # Iter 110: logistics details
+    pallet_count: int | None = None
+    export_reason: str = ""
 
 
 class ShipmentBookRequest(BaseModel):
@@ -146,6 +149,27 @@ class ShipmentDeclareRequest(BaseModel):
         if not v or not v.strip():
             raise ValueError("must not be empty or whitespace-only")
         return v.strip()
+
+
+class ShipmentLogisticsRequest(BaseModel):
+    """Iter 110: pallet count + export reason for customs paper trail."""
+
+    pallet_count: int | None = None
+    export_reason: str = ""
+
+    @field_validator("pallet_count")
+    @classmethod
+    def pallet_count_non_negative(cls, v: int | None) -> int | None:
+        if v is not None and v < 0:
+            raise ValueError("pallet_count must not be negative")
+        return v
+
+    @field_validator("export_reason", mode="before")
+    @classmethod
+    def strip_export_reason(cls, v: str) -> str:
+        if isinstance(v, str):
+            return v.strip()
+        return v
 
 
 class RemainingShipmentQuantity(BaseModel):
@@ -206,4 +230,6 @@ def shipment_to_response(
         signatory_name=shipment.signatory_name,
         signatory_title=shipment.signatory_title,
         declared_at=shipment.declared_at,
+        pallet_count=shipment.pallet_count,
+        export_reason=shipment.export_reason,
     )

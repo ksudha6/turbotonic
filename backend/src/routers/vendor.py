@@ -11,6 +11,7 @@ from src.domain.vendor import Vendor, VendorStatus, VendorType
 from src.vendor_dto import (
     VendorCreate,
     VendorListItem,
+    VendorPatch,
     VendorResponse,
     vendor_to_list_item,
     vendor_to_response,
@@ -31,7 +32,7 @@ VendorRepoDep = Annotated[VendorRepository, Depends(get_vendor_repo)]
 @router.post("/", response_model=VendorResponse, status_code=201)
 async def create_vendor(body: VendorCreate, repo: VendorRepoDep, _user: User = require_role(UserRole.SM)) -> VendorResponse:
     vendor_type = VendorType(body.vendor_type)
-    vendor = Vendor.create(name=body.name, country=body.country, vendor_type=vendor_type, address=body.address, account_details=body.account_details)
+    vendor = Vendor.create(name=body.name, country=body.country, vendor_type=vendor_type, address=body.address, account_details=body.account_details, tax_id=body.tax_id)
     await repo.save(vendor)
     return vendor_to_response(vendor)
 
@@ -64,6 +65,25 @@ async def get_vendor(vendor_id: str, repo: VendorRepoDep, _user: User = require_
     vendor = await repo.get_by_id(vendor_id)
     if vendor is None:
         raise HTTPException(status_code=404, detail="Vendor not found")
+    return vendor_to_response(vendor)
+
+
+@router.patch("/{vendor_id}", response_model=VendorResponse)
+async def patch_vendor(
+    vendor_id: str,
+    body: VendorPatch,
+    repo: VendorRepoDep,
+    _user: User = require_role(UserRole.SM),
+) -> VendorResponse:
+    """Iter 110: partial update for vendor attributes (currently tax_id)."""
+    vendor = await repo.get_by_id(vendor_id)
+    if vendor is None:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    if body.tax_id is not None:
+        vendor.tax_id = body.tax_id
+        from datetime import UTC, datetime
+        vendor.updated_at = datetime.now(UTC)
+    await repo.save(vendor)
     return vendor_to_response(vendor)
 
 

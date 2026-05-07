@@ -12,6 +12,7 @@
 		vendor_type: VendorType;
 		address: string;
 		account_details: string;
+		tax_id: string;
 	};
 
 	let {
@@ -33,6 +34,7 @@
 	let vendor_type: VendorType = $state('PROCUREMENT');
 	let address: string = $state('');
 	let account_details: string = $state('');
+	let tax_id: string = $state('');
 
 	let nameError: string = $state('');
 	let countryError: string = $state('');
@@ -76,7 +78,8 @@
 			country,
 			vendor_type,
 			address,
-			account_details
+			account_details,
+			tax_id
 		});
 	}
 </script>
@@ -118,6 +121,17 @@
 						{invalid}
 						ariaLabel="Country"
 						data-testid="vendor-form-country"
+					/>
+				{/snippet}
+			</FormField>
+
+			<FormField label="Tax ID" data-testid="vendor-form-tax-id-field">
+				{#snippet children()}
+					<Input
+						bind:value={tax_id}
+						placeholder="e.g. EIN-12-3456789"
+						ariaLabel="Tax ID"
+						data-testid="vendor-form-tax-id"
 					/>
 				{/snippet}
 			</FormField>

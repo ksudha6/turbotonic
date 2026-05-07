@@ -277,6 +277,28 @@ export function reactivateVendor(id: string): Promise<Vendor> {
 	return apiPost<Vendor>(`/api/v1/vendors/${id}/reactivate`);
 }
 
+// Iter 110: PATCH /{id} — partial update for vendor fields (currently tax_id).
+export async function patchVendor(id: string, body: { tax_id?: string }): Promise<Vendor> {
+	const res = await fetch(`/api/v1/vendors/${id}`, {
+		method: 'PATCH',
+		credentials: 'include',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(body)
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		const err = await res.json().catch(() => ({}));
+		throw new Error(err.detail ?? `PATCH /api/v1/vendors/${id} failed: ${res.status}`);
+	}
+	return res.json() as Promise<Vendor>;
+}
+
 export function fetchReferenceData(): Promise<ReferenceData> {
 	return apiGet<ReferenceData>('/api/v1/reference-data/');
 }
@@ -908,6 +930,28 @@ export async function declareShipment(id: string, payload: ShipmentDeclarePayloa
 		}
 		const body = await res.json().catch(() => ({}));
 		throw new Error(body.detail ?? `POST /api/v1/shipments/${id}/declare failed: ${res.status}`);
+	}
+	return res.json() as Promise<Shipment>;
+}
+
+// Iter 110: PATCH /{id}/logistics — record pallet_count + export_reason for customs.
+export async function setShipmentLogistics(id: string, payload: ShipmentLogisticsPayload): Promise<Shipment> {
+	const res = await fetch(`/api/v1/shipments/${id}/logistics`, {
+		method: 'PATCH',
+		credentials: 'include',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify(payload)
+	});
+	if (!res.ok) {
+		if (res.status === 401) {
+			if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+				const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+				window.location.href = `/login?redirect=${redirect}`;
+			}
+			throw new Error('Not authenticated');
+		}
+		const body = await res.json().catch(() => ({}));
+		throw new Error(body.detail ?? `PATCH /api/v1/shipments/${id}/logistics failed: ${res.status}`);
 	}
 	return res.json() as Promise<Shipment>;
 }

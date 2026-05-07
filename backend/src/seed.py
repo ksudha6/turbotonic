@@ -112,20 +112,20 @@ def _make_users(vendor_ids: list[str]) -> list[dict[str, object]]:
     return rows
 
 
-_VENDOR_FIXTURES: tuple[tuple[str, str, VendorType], ...] = (
-    ("Shenzhen Precision Works", "CN", VendorType.PROCUREMENT),
-    ("Mumbai Metal Forge", "IN", VendorType.PROCUREMENT),
-    ("Hanoi Plastics Co", "VN", VendorType.PROCUREMENT),
-    ("Chicago OpEx Supplies", "US", VendorType.OPEX),
-    ("Hamburg Freight Lines", "DE", VendorType.FREIGHT),
-    ("Sao Paulo Misc Trading", "BR", VendorType.MISCELLANEOUS),
+_VENDOR_FIXTURES: tuple[tuple[str, str, VendorType, str], ...] = (
+    ("Shenzhen Precision Works", "CN", VendorType.PROCUREMENT, "CN-91440300MA5D12345X"),
+    ("Mumbai Metal Forge", "IN", VendorType.PROCUREMENT, "IN-27AABCM1234A1Z5"),
+    ("Hanoi Plastics Co", "VN", VendorType.PROCUREMENT, "VN-0123456789"),
+    ("Chicago OpEx Supplies", "US", VendorType.OPEX, "EIN-36-1234567"),
+    ("Hamburg Freight Lines", "DE", VendorType.FREIGHT, "DE123456789"),
+    ("Sao Paulo Misc Trading", "BR", VendorType.MISCELLANEOUS, "BR-12.345.678/0001-90"),
 )
 
 
 def _make_vendors() -> list[dict[str, object]]:
     created = _offset(-45)
     rows: list[dict[str, object]] = []
-    for name, country, vtype in _VENDOR_FIXTURES:
+    for name, country, vtype, tax_id in _VENDOR_FIXTURES:
         rows.append(
             {
                 "id": str(uuid4()),
@@ -135,6 +135,7 @@ def _make_vendors() -> list[dict[str, object]]:
                 "vendor_type": vtype.value,
                 "address": f"{name}, {country}",
                 "account_details": f"Bank: demo | A/C: {random.randint(10000000, 99999999)}",
+                "tax_id": tax_id,
                 "created_at": created,
                 "updated_at": created,
             }
@@ -678,11 +679,11 @@ async def seed(conn: asyncpg.Connection) -> None:
         await _insert(
             conn,
             """
-            INSERT INTO vendors (id, name, country, status, vendor_type, address, account_details, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            INSERT INTO vendors (id, name, country, status, vendor_type, address, account_details, tax_id, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             """,
             vendors,
-            ("id", "name", "country", "status", "vendor_type", "address", "account_details", "created_at", "updated_at"),
+            ("id", "name", "country", "status", "vendor_type", "address", "account_details", "tax_id", "created_at", "updated_at"),
         )
 
         await _insert(

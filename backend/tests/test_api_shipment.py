@@ -149,6 +149,8 @@ async def test_create_shipment_returns_201(authenticated_client: AsyncClient) ->
         # Iter 106: transport + declaration fields (all nullable, present in every response)
         "vessel_name", "voyage_number",
         "signatory_name", "signatory_title", "declared_at",
+        # Iter 110: logistics fields
+        "pallet_count", "export_reason",
     }
     assert expected_keys == set(body.keys())
     assert body["po_id"] == po_id
